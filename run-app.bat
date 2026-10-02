@@ -1,0 +1,3 @@
+@echo off
+echo Starting Flutter Application...
+flutter run
