@@ -454,6 +454,41 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
     );
   }
 
+  Future<void> _confirmDeleteChatTurn(
+    BuildContext context,
+    AiTutorController controller,
+    ChatMessageModel message,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this exchange?'),
+        content: const Text('The question and its AI response will be removed from this chat.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Delete'),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final deleted = await controller.deleteChatTurn(message.id);
+    if (!context.mounted) return;
+    if (deleted) {
+      CustomSnackbar.showSuccess(context, 'Question and response deleted');
+    } else {
+      CustomSnackbar.showError(context, 'Could not delete this exchange. Try again.');
+    }
+  }
+
   void _sendMessage() {
     final text = _textController.text.trim();
     final controller = context.read<AiTutorController>();
@@ -1060,6 +1095,15 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                               ),
                             ],
                           ),
+                          if (!controller.isLoading)
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Delete question and response',
+                              onPressed: () => _confirmDeleteChatTurn(context, controller, msg),
+                              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.white70),
+                            ),
                         ],
                       ),
                     ] else ...[
@@ -1085,6 +1129,15 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                                 _inputFocusNode.requestFocus();
                               },
                               icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.white70),
+                            ),
+                          if (!controller.isLoading)
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Delete question and response',
+                              onPressed: () => _confirmDeleteChatTurn(context, controller, msg),
+                              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.white70),
                             ),
                         ],
                       ),
@@ -1122,6 +1175,15 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                             child: Icon(Icons.copy_rounded, size: 13, color: Color(0xFF94A3B8)),
                           ),
                         ),
+                        if (!controller.isLoading)
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                            padding: EdgeInsets.zero,
+                            tooltip: 'Delete question and response',
+                            onPressed: () => _confirmDeleteChatTurn(context, controller, msg),
+                            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 6),

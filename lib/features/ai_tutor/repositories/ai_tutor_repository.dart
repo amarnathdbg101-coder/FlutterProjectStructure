@@ -69,6 +69,7 @@ class AiTutorRepository {
       final content = StringBuffer();
       final followUpQuestions = <String>[];
       String? returnedSessionId = effectiveSessionId;
+      String? returnedAssistantMessageId;
       String? streamError;
       var pendingSseText = '';
 
@@ -86,6 +87,7 @@ class AiTutorRepository {
             }
           case 'done':
             returnedSessionId = decoded['session_id'] as String? ?? returnedSessionId;
+            returnedAssistantMessageId = decoded['assistant_message_id'] as String?;
             if (decoded['follow_up_chips'] is List) {
               followUpQuestions.addAll((decoded['follow_up_chips'] as List).map((item) => item.toString()));
             }
@@ -110,7 +112,7 @@ class AiTutorRepository {
         if (streamError != null) throw Exception(streamError);
         if (content.isEmpty) throw Exception('AI response stream ended without an answer');
         return ChatMessageModel(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: returnedAssistantMessageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
           role: 'assistant',
           content: content.toString(),
           followUpQuestions: followUpQuestions,
@@ -169,7 +171,10 @@ class AiTutorRepository {
     final response = await _dio.post(
       ApiConstants.aiDoubt,
       data: requestData,
-      options: Options(headers: headers),
+      options: Options(
+        headers: headers,
+        receiveTimeout: const Duration(seconds: 90),
+      ),
       cancelToken: cancelToken,
     );
 
@@ -185,7 +190,7 @@ class AiTutorRepository {
       }
 
       return ChatMessageModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: data['assistant_message_id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
         role: 'assistant',
         content: solution,
         followUpQuestions: chips,
@@ -254,6 +259,15 @@ class AiTutorRepository {
   Future<bool> deleteChatSession(String sessionId) async {
     try {
       final response = await _dio.delete('${ApiConstants.aiSessions}/$sessionId');
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteChatTurn(String sessionId, String messageId) async {
+    try {
+      final response = await _dio.delete('${ApiConstants.aiSessions}/$sessionId/messages/$messageId');
       return response.statusCode == 200;
     } catch (_) {
       return false;

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -443,6 +442,58 @@ class AiTutorController extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteChatTurn(String messageId) async {
+    if (_isLoading) return false;
+
+    final targetIndex = _messages.indexWhere((message) => message.id == messageId);
+    if (targetIndex == -1) return false;
+
+    final target = _messages[targetIndex];
+    var questionIndex = target.isUser ? targetIndex : -1;
+    var answerIndex = target.isAssistant ? targetIndex : -1;
+
+    if (target.isUser) {
+      for (var index = targetIndex + 1; index < _messages.length; index++) {
+        if (_messages[index].isUser) break;
+        if (_messages[index].isAssistant) {
+          answerIndex = index;
+          break;
+        }
+      }
+    } else if (target.isAssistant) {
+      for (var index = targetIndex - 1; index >= 0; index--) {
+        if (_messages[index].isUser) {
+          questionIndex = index;
+          break;
+        }
+      }
+    }
+
+    final sessionId = _currentSession?.id ?? target.sessionId;
+    final persistedMessageId = answerIndex == -1 ? target.id : _messages[answerIndex].id;
+    if (sessionId != null && sessionId.isNotEmpty) {
+      final deleted = await _repository.deleteChatTurn(sessionId, persistedMessageId);
+      if (!deleted) return false;
+    }
+
+    final startIndex = questionIndex == -1 ? targetIndex : questionIndex;
+    final endIndex = answerIndex == -1 ? targetIndex : answerIndex;
+    _messages.removeRange(startIndex, endIndex + 1);
+
+    if (_currentSession != null) {
+      _currentSession = _currentSession!.copyWith(
+        messageCount: _messages.length,
+        lastMessage: _messages.isEmpty ? '' : _messages.last.content,
+      );
+      final sessionIndex = _sessions.indexWhere((session) => session.id == _currentSession!.id);
+      if (sessionIndex != -1) _sessions[sessionIndex] = _currentSession!;
+    }
+
+    notifyListeners();
+    if (sessionId != null && sessionId.isNotEmpty) await loadSessions();
+    return true;
+  }
+
   Future<void> loadHistory({String scopeType = 'global', String? scopeId}) async {
     _isLoading = true;
     notifyListeners();
@@ -544,7 +595,6 @@ class AiTutorController extends ChangeNotifier {
     _activeRequestCancelToken = requestCancelToken;
     _isStreaming = true;
     final userMessageId = existingUserMessageId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final assistantStreamId = '${userMessageId}_stream';
 
     final userMsg = ChatMessageModel(
       id: userMessageId,
@@ -572,38 +622,6 @@ class AiTutorController extends ChangeNotifier {
       .where((message) => (message.role == 'user' || message.role == 'assistant') && message.content.trim().isNotEmpty)
       .map((message) => {'role': message.role, 'content': message.content})
       .toList();
-    final streamedText = StringBuffer();
-    var displayedStreamText = '';
-    Timer? streamUpdateTimer;
-
-    void flushStreamedText() {
-      streamUpdateTimer?.cancel();
-      streamUpdateTimer = null;
-      final content = streamedText.toString();
-      if (content == displayedStreamText || !_messages.any((message) => message.id == userMessageId)) return;
-      displayedStreamText = content;
-
-      final assistantMessage = ChatMessageModel(
-        id: assistantStreamId,
-        role: 'assistant',
-        content: content,
-        createdAt: DateTime.now(),
-        sessionId: effectiveSessionId,
-      );
-      final assistantIndex = _messages.indexWhere((message) => message.id == assistantStreamId);
-      if (assistantIndex == -1) {
-        _messages.add(assistantMessage);
-      } else {
-        _messages[assistantIndex] = assistantMessage;
-      }
-      notifyListeners();
-    }
-
-    void queueStreamChunk(String chunk) {
-      streamedText.write(chunk);
-      streamUpdateTimer ??= Timer(const Duration(milliseconds: 40), flushStreamedText);
-    }
-
     clearImageAttachment();
     notifyListeners();
 
@@ -619,7 +637,6 @@ class AiTutorController extends ChangeNotifier {
             ? ''
             : '[ATTACHED NOTE CONTEXT]\n$_activeNoteContext',
         conversationHistory: conversationHistory,
-        onChunk: queueStreamChunk,
         provider: _selectedModel.providerId,
         regenerateLastAnswer: isRegeneratingLastAnswer,
         editLastQuestion: isEditingLastQuestion,
@@ -627,14 +644,8 @@ class AiTutorController extends ChangeNotifier {
         mode: _tutorMode.id,
       );
 
-      flushStreamedText();
-      final assistantIndex = _messages.indexWhere((message) => message.id == assistantStreamId);
       if (_messages.any((message) => message.id == userMessageId)) {
-        if (assistantIndex == -1) {
-          _messages.add(botResponse);
-        } else {
-          _messages[assistantIndex] = botResponse;
-        }
+        _messages.add(botResponse);
       }
 
       // Manage Session in UI (like ChatGPT)
@@ -669,7 +680,6 @@ class AiTutorController extends ChangeNotifier {
         }
       }
     } catch (e) {
-      flushStreamedText();
       if (existingUserMessageId != null && previousTurn.isNotEmpty) {
         final currentTurnIndex = _messages.indexWhere((message) => message.id == existingUserMessageId);
         if (currentTurnIndex != -1) {
@@ -691,7 +701,6 @@ class AiTutorController extends ChangeNotifier {
         );
       }
     } finally {
-      streamUpdateTimer?.cancel();
       if (identical(_activeRequestCancelToken, requestCancelToken)) {
         _activeRequestCancelToken = null;
       }
