@@ -30,7 +30,7 @@ class AuthRepository {
     try {
       final response = await _dio.post(
         ApiConstants.register,
-        data: {'name': name, 'email': email, 'password': password},
+        data: {'full_name': name, 'email': email, 'password': password},
       );
       return ApiResponse.fromJson(response.data, (data) => data as Map<String, dynamic>);
     } catch (e) {

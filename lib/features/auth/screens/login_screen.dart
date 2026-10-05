@@ -7,7 +7,6 @@ import '../../../core/utils/validators.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/widgets/custom_text_field.dart';
-import '../../health/widgets/backend_status_card.dart';
 import '../controllers/auth_controller.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -19,8 +18,9 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'admin@example.com');
-  final _passwordController = TextEditingController(text: 'Admin@123456');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _rememberMe = true;
 
   @override
   void dispose() {
@@ -41,10 +41,13 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     if (success) {
-      CustomSnackbar.showSuccess(context, 'Login successful!');
+      CustomSnackbar.showSuccess(context, 'Welcome to StudySilo!');
       context.go(AppRoutes.dashboard);
     } else {
-      CustomSnackbar.showError(context, auth.errorMessage ?? 'Login failed');
+      CustomSnackbar.showError(
+        context,
+        auth.errorMessage ?? 'Login failed. Please verify credentials.',
+      );
     }
   }
 
@@ -53,67 +56,270 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthController>();
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.bolt_rounded, size: 48, color: AppColors.primary),
+                  // --- StudySilo Brand Logo ---
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0x4D4F46E5),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const Icon(
+                            Icons.school_rounded,
+                            size: 38,
+                            color: Colors.white,
+                          ),
+                          Positioned(
+                            top: 10,
+                            right: 12,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome,
+                                size: 10,
+                                color: Color(0xFF0EA5E9),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Welcome Back',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+
+                  // Brand App Title
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Study',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const Text(
+                        'Silo',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFC7D2FE)),
+                        ),
+                        child: const Text(
+                          'AI-HUB',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Sign in to access your dashboard & APIs',
-                    style: TextStyle(color: AppColors.textSecondary),
+                    'Your Intelligent Academic Ecosystem',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // --- Clean Elevated Login Card ---
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0x0A0F172A),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Enter your credentials to access your workspace',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Email Field (Empty with Hint)
+                          CustomTextField(
+                            controller: _emailController,
+                            label: 'Email Address',
+                            hint: 'student@studysilo.in',
+                            prefixIcon: Icons.alternate_email_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: Validators.email,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Password Field (Empty with Hint)
+                          CustomTextField(
+                            controller: _passwordController,
+                            label: 'Password',
+                            hint: 'Enter your password',
+                            prefixIcon: Icons.lock_outline_rounded,
+                            isPassword: true,
+                            validator: Validators.password,
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Remember Me & Forgot Password Row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: Checkbox(
+                                      value: _rememberMe,
+                                      activeColor: AppColors.primary,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      onChanged: (val) {
+                                        setState(() {
+                                          _rememberMe = val ?? false;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Remember me',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  CustomSnackbar.showInfo(
+                                    context,
+                                    'Password reset instructions sent to registered email',
+                                  );
+                                },
+                                child: const Text(
+                                  'Forgot password?',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 22),
+
+                          // Submit Button
+                          CustomButton(
+                            text: 'Sign In',
+                            icon: Icons.arrow_forward_rounded,
+                            isLoading: auth.isLoading,
+                            onPressed: _submitLogin,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
-                  const BackendStatusCard(),
-                  const SizedBox(height: 24),
-                  CustomTextField(
-                    controller: _emailController,
-                    label: 'Email Address',
-                    hint: 'user@example.com',
-                    prefixIcon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                    validator: Validators.email,
-                  ),
-                  const SizedBox(height: 16),
-                  CustomTextField(
-                    controller: _passwordController,
-                    label: 'Password',
-                    hint: '••••••••',
-                    prefixIcon: Icons.lock_outline_rounded,
-                    isPassword: true,
-                    validator: Validators.password,
-                  ),
-                  const SizedBox(height: 24),
-                  CustomButton(
-                    text: 'Sign In',
-                    isLoading: auth.isLoading,
-                    onPressed: _submitLogin,
-                  ),
-                  const SizedBox(height: 20),
+
+                  // Register Link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Text(
                         "Don't have an account? ",
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                       GestureDetector(
                         onTap: () => context.push(AppRoutes.register),
                         child: const Text(
-                          'Register',
+                          'Create Account',
                           style: TextStyle(
+                            fontSize: 14,
                             color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),

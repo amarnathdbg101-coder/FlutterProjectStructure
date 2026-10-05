@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class AppColors {
   // Brand Colors
   static const Color primary = Color(0xFF4F46E5);      // Indigo
   static const Color primaryDark = Color(0xFF4338CA);
   static const Color primaryLight = Color(0xFFEEF2FF);
+
+  static const Color secondary = Color(0xFF0EA5E9);    // Sky Blue
+  static const Color accent = Color(0xFF8B5CF6);       // Purple Accent
 
   // Neutral Palette
   static const Color background = Color(0xFFF9FAFB);   // Soft Grey
