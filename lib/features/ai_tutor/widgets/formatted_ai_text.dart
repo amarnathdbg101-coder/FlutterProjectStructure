@@ -46,9 +46,23 @@ class FormattedAiText extends StatefulWidget {
 }
 
 class _FormattedAiTextState extends State<FormattedAiText> {
+  static const _initialBlockCount = 12;
+  static const _blocksPerPage = 12;
+
   // ⚡ Memoized block parse: only re-parses when text changes, not on every streaming setState
   List<_AiBlock>? _cachedBlocks;
   String? _cachedText;
+  int _visibleBlockCount = _initialBlockCount;
+
+  @override
+  void didUpdateWidget(covariant FormattedAiText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _cachedText = null;
+      _cachedBlocks = null;
+      _visibleBlockCount = _initialBlockCount;
+    }
+  }
 
   List<_AiBlock> _getBlocks() {
     if (_cachedText != widget.text || _cachedBlocks == null) {
@@ -73,6 +87,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final blocks = _getBlocks();
+    final visibleBlockCount = _visibleBlockCount < blocks.length ? _visibleBlockCount : blocks.length;
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,7 +122,19 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         ],
 
         // Render Parsed Blocks
-        ...blocks.map((b) => _renderBlock(context, b, theme)),
+        ...blocks.take(visibleBlockCount).map((b) => _renderBlock(context, b, theme)),
+
+        if (visibleBlockCount < blocks.length)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() {
+                _visibleBlockCount += _blocksPerPage;
+              }),
+              icon: const Icon(Icons.expand_more_rounded, size: 18),
+              label: Text('Load more (${blocks.length - visibleBlockCount} sections left)'),
+            ),
+          ),
 
         // In-flight streaming pulse indicator
         if (isStreaming) ...[
@@ -116,7 +143,9 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         ],
 
         // Interactive Student Action Bar (shown when streaming completed)
-        if (!isStreaming && (onSaveToFlashcards != null || onSwitchMode != null || onGeneratePracticeProblem != null)) ...[
+        if (visibleBlockCount == blocks.length &&
+          !isStreaming &&
+          (onSaveToFlashcards != null || onSwitchMode != null || onGeneratePracticeProblem != null)) ...[
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 8),
@@ -409,7 +438,10 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         return _buildTableWidget(context, block);
 
       case _BlockType.diagram:
-        return _buildDiagramWidget(context, block);
+        return _DeferredAiBlock(
+          label: 'Render interactive diagram',
+          builder: () => _buildDiagramWidget(context, block),
+        );
 
       case _BlockType.graph:
         return _buildGraphWidget(context, block);
@@ -2358,6 +2390,48 @@ class _AiBlock {
     required this.text,
     this.extra,
   });
+}
+
+class _DeferredAiBlock extends StatefulWidget {
+  final String label;
+  final Widget Function() builder;
+
+  const _DeferredAiBlock({
+    required this.label,
+    required this.builder,
+  });
+
+  @override
+  State<_DeferredAiBlock> createState() => _DeferredAiBlockState();
+}
+
+class _DeferredAiBlockState extends State<_DeferredAiBlock> {
+  bool _isRendered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isRendered) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () => setState(() => _isRendered = true),
+          icon: const Icon(Icons.account_tree_outlined, size: 18),
+          label: Text(widget.label),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        widget.builder(),
+        TextButton(
+          onPressed: () => setState(() => _isRendered = false),
+          child: const Text('Hide diagram'),
+        ),
+      ],
+    );
+  }
 }
 
 class _TableData {

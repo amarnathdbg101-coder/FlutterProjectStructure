@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import '../../../core/storage/hive_storage.dart';
 import '../../../core/network/api_client.dart';
 import '../models/chat_message_model.dart';
@@ -219,6 +221,9 @@ class AiTutorController extends ChangeNotifier {
   String get currentSessionTitle => _currentSession?.title ?? 'New Chat';
   bool get isLoadingSessions => _isLoadingSessions;
   bool _isLoading = false;
+  bool _isStreaming = false;
+  CancelToken? _activeRequestCancelToken;
+  String? _editingMessageId;
   String? _selectedImagePath;
   String? _selectedImageBase64;
   String? _errorMessage;
@@ -231,12 +236,61 @@ class AiTutorController extends ChangeNotifier {
   TutorMode get selectedTutorMode => _tutorMode;
   List<ChatMessageModel> get messages => _messages;
   bool get isLoading => _isLoading;
+  bool get isStreaming => _isStreaming;
+  String? get editingMessageId => _editingMessageId;
   bool get isSocraticMode => _tutorMode == TutorMode.socratic;
   String? get selectedImagePath => _selectedImagePath;
   String? get selectedImageBase64 => _selectedImageBase64;
   String? get errorMessage => _errorMessage;
   String? get activeNoteTitle => _activeNoteTitle;
   String? get activeNoteContext => _activeNoteContext;
+
+  bool canEditLastQuestion(String messageId) {
+    if (_isLoading) return false;
+    for (var index = _messages.length - 1; index >= 0; index--) {
+      final message = _messages[index];
+      if (!message.isUser) continue;
+      return message.id == messageId && (message.imageUrl == null || message.imageUrl!.isEmpty);
+    }
+    return false;
+  }
+
+  bool canRegenerateAnswer(String assistantMessageId) {
+    if (_isLoading || _messages.isEmpty || _messages.last.id != assistantMessageId) return false;
+    for (var index = _messages.length - 2; index >= 0; index--) {
+      final message = _messages[index];
+      if (!message.isUser) continue;
+      return message.imageUrl == null || message.imageUrl!.isEmpty;
+    }
+    return false;
+  }
+
+  void beginEditingLastQuestion(String messageId) {
+    if (canEditLastQuestion(messageId)) {
+      _editingMessageId = messageId;
+      notifyListeners();
+    }
+  }
+
+  void cancelEditingMessage() {
+    if (_editingMessageId != null) {
+      _editingMessageId = null;
+      notifyListeners();
+    }
+  }
+
+  Future<void> regenerateLastAnswer(String assistantMessageId) async {
+    if (!canRegenerateAnswer(assistantMessageId)) return;
+    final assistantIndex = _messages.length - 1;
+    var userIndex = assistantIndex - 1;
+    while (userIndex >= 0 && !_messages[userIndex].isUser) {
+      userIndex--;
+    }
+    if (userIndex < 0) return;
+
+    final question = _messages[userIndex];
+    await sendQuestion(question.content, reuseUserMessageId: question.id);
+  }
 
   AiTutorController() {
     _loadSavedModel();
@@ -333,6 +387,7 @@ class AiTutorController extends ChangeNotifier {
   }
 
   Future<void> selectSession(ChatSessionModel session) async {
+    _editingMessageId = null;
     _currentSession = session;
     _isLoading = true;
     notifyListeners();
@@ -351,6 +406,7 @@ class AiTutorController extends ChangeNotifier {
 
   void startNewChat() {
     _currentSession = null;
+    _editingMessageId = null;
     _messages.clear();
     _activeNoteTitle = null;
     _activeNoteContext = null;
@@ -468,31 +524,86 @@ class AiTutorController extends ChangeNotifier {
     String question, {
     String scopeType = 'chat',
     String? scopeId,
+    String? reuseUserMessageId,
   }) async {
     if (question.trim().isEmpty && _selectedImageBase64 == null) return;
 
-    final effectiveSessionId = _currentSession?.id ?? scopeId;
+    final editMessageId = _editingMessageId;
+    final existingUserMessageId = reuseUserMessageId ?? editMessageId;
+    final existingUserIndex = existingUserMessageId == null
+        ? -1
+        : _messages.indexWhere((message) => message.id == existingUserMessageId && message.isUser);
+    if (existingUserMessageId != null && existingUserIndex == -1) return;
+
+    final isEditingLastQuestion = editMessageId != null && existingUserMessageId == editMessageId;
+    final isRegeneratingLastAnswer = reuseUserMessageId != null && !isEditingLastQuestion;
+    final existingUserMessage = existingUserIndex == -1 ? null : _messages[existingUserIndex];
+    final previousTurn = existingUserIndex == -1 ? <ChatMessageModel>[] : _messages.sublist(existingUserIndex);
+    final effectiveSessionId = _currentSession?.id ?? existingUserMessage?.sessionId ?? scopeId;
+    final requestCancelToken = CancelToken();
+    _activeRequestCancelToken = requestCancelToken;
+    _isStreaming = true;
+    final userMessageId = existingUserMessageId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final assistantStreamId = '${userMessageId}_stream';
 
     final userMsg = ChatMessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: userMessageId,
       role: 'user',
       content: question.trim(),
-      imageUrl: _selectedImagePath,
+      imageUrl: existingUserMessage?.imageUrl ?? _selectedImagePath,
       sessionId: effectiveSessionId,
-      createdAt: DateTime.now(),
+      createdAt: existingUserMessage?.createdAt ?? DateTime.now(),
     );
 
-    _messages.add(userMsg);
+    if (existingUserIndex == -1) {
+      _messages.add(userMsg);
+    } else {
+      _messages[existingUserIndex] = userMsg;
+      _messages.removeRange(existingUserIndex + 1, _messages.length);
+    }
+    _editingMessageId = null;
     _isLoading = true;
     _errorMessage = null;
 
-    final imageBase64ToSend = _selectedImageBase64;
-    final previousMessages = _messages.length > 1 ? _messages.sublist(0, _messages.length - 1) : <ChatMessageModel>[];
+    final imageBase64ToSend = existingUserIndex == -1 ? _selectedImageBase64 : null;
+    final previousMessages = _messages.length > 1 ? _messages.sublist(0, _messages.indexWhere((message) => message.id == userMessageId)) : <ChatMessageModel>[];
     final recentMessages = previousMessages.length > 8 ? previousMessages.sublist(previousMessages.length - 8) : previousMessages;
     final conversationHistory = recentMessages
       .where((message) => (message.role == 'user' || message.role == 'assistant') && message.content.trim().isNotEmpty)
       .map((message) => {'role': message.role, 'content': message.content})
       .toList();
+    final streamedText = StringBuffer();
+    var displayedStreamText = '';
+    Timer? streamUpdateTimer;
+
+    void flushStreamedText() {
+      streamUpdateTimer?.cancel();
+      streamUpdateTimer = null;
+      final content = streamedText.toString();
+      if (content == displayedStreamText || !_messages.any((message) => message.id == userMessageId)) return;
+      displayedStreamText = content;
+
+      final assistantMessage = ChatMessageModel(
+        id: assistantStreamId,
+        role: 'assistant',
+        content: content,
+        createdAt: DateTime.now(),
+        sessionId: effectiveSessionId,
+      );
+      final assistantIndex = _messages.indexWhere((message) => message.id == assistantStreamId);
+      if (assistantIndex == -1) {
+        _messages.add(assistantMessage);
+      } else {
+        _messages[assistantIndex] = assistantMessage;
+      }
+      notifyListeners();
+    }
+
+    void queueStreamChunk(String chunk) {
+      streamedText.write(chunk);
+      streamUpdateTimer ??= Timer(const Duration(milliseconds: 40), flushStreamedText);
+    }
+
     clearImageAttachment();
     notifyListeners();
 
@@ -503,16 +614,28 @@ class AiTutorController extends ChangeNotifier {
         scopeId: effectiveSessionId,
         sessionId: effectiveSessionId,
         imageBase64: imageBase64ToSend,
+        cancelToken: requestCancelToken,
         contextNotes: _activeNoteContext == null || _activeNoteContext!.isEmpty
             ? ''
             : '[ATTACHED NOTE CONTEXT]\n$_activeNoteContext',
         conversationHistory: conversationHistory,
+        onChunk: queueStreamChunk,
         provider: _selectedModel.providerId,
+        regenerateLastAnswer: isRegeneratingLastAnswer,
+        editLastQuestion: isEditingLastQuestion,
         model: _selectedModel.modelId,
         mode: _tutorMode.id,
       );
 
-      _messages.add(botResponse);
+      flushStreamedText();
+      final assistantIndex = _messages.indexWhere((message) => message.id == assistantStreamId);
+      if (_messages.any((message) => message.id == userMessageId)) {
+        if (assistantIndex == -1) {
+          _messages.add(botResponse);
+        } else {
+          _messages[assistantIndex] = botResponse;
+        }
+      }
 
       // Manage Session in UI (like ChatGPT)
       final returnedSessionId = botResponse.sessionId ?? effectiveSessionId;
@@ -546,23 +669,47 @@ class AiTutorController extends ChangeNotifier {
         }
       }
     } catch (e) {
-      final errorMessage = ApiClient.handleError(e);
-      _errorMessage = errorMessage;
-      _messages.add(
-        ChatMessageModel(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          role: 'assistant',
-          content: 'Sorry, I could not get an AI response: $errorMessage',
-          createdAt: DateTime.now(),
-        ),
-      );
+      flushStreamedText();
+      if (existingUserMessageId != null && previousTurn.isNotEmpty) {
+        final currentTurnIndex = _messages.indexWhere((message) => message.id == existingUserMessageId);
+        if (currentTurnIndex != -1) {
+          _messages.removeRange(currentTurnIndex, _messages.length);
+          _messages.addAll(previousTurn);
+          notifyListeners();
+        }
+      }
+      if (!requestCancelToken.isCancelled) {
+        final errorMessage = ApiClient.handleError(e);
+        _errorMessage = errorMessage;
+        _messages.add(
+          ChatMessageModel(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            role: 'assistant',
+            content: 'Sorry, I could not get an AI response: $errorMessage',
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
     } finally {
+      streamUpdateTimer?.cancel();
+      if (identical(_activeRequestCancelToken, requestCancelToken)) {
+        _activeRequestCancelToken = null;
+      }
+      _isStreaming = false;
       _isLoading = false;
       notifyListeners();
     }
   }
 
+  void stopGeneration() {
+    final cancelToken = _activeRequestCancelToken;
+    if (cancelToken != null && !cancelToken.isCancelled) {
+      cancelToken.cancel('Stopped by user');
+    }
+  }
+
   void clearChat() {
+    _editingMessageId = null;
     _messages.clear();
     notifyListeners();
   }

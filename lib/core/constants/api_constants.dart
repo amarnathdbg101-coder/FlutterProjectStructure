@@ -35,6 +35,7 @@ class ApiConstants {
 
   // AI Tutor & Study Engines
   static const String aiDoubt = '/api/v1/ai/doubt';
+  static const String aiDoubtStream = '/api/v1/ai/doubt/stream';
   static const String aiHistory = '/api/v1/ai/history';
   static const String aiSessions = '/api/v1/ai/sessions';
   static const String aiAnalyzeNotes = '/api/v1/ai/analyze-notes';

@@ -37,14 +37,17 @@ class AiTutorChatScreen extends StatefulWidget {
 
 class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
   final TextEditingController _textController = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isRecording = false;
+  bool _showScrollToLatest = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_handleScrollPosition);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = context.read<AiTutorController>();
       if (widget.noteTitle != null && widget.noteContext != null) {
@@ -59,10 +62,22 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
   @override
   void dispose() {
     VoiceDoubtService().stopListening();
+    _scrollController.removeListener(_handleScrollPosition);
     _textController.dispose();
+    _inputFocusNode.dispose();
     _scrollController.dispose();
     _audioRecorder.dispose();
     super.dispose();
+  }
+
+  void _handleScrollPosition() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    final shouldShow = position.maxScrollExtent - position.pixels > 180;
+    if (shouldShow != _showScrollToLatest && mounted) {
+      setState(() => _showScrollToLatest = shouldShow);
+    }
   }
 
   void _scrollToBottom() {
@@ -454,6 +469,9 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final controller = context.watch<AiTutorController>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _handleScrollPosition();
+    });
 
     return Scaffold(
       drawer: _ChatHistoryDrawer(
@@ -702,20 +720,40 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
 
               // Main Chat Message Area
               Expanded(
-                child: controller.messages.isEmpty
-                    ? _buildEmptyState(context, controller, isDark)
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        itemCount: controller.messages.length + (controller.isLoading ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == controller.messages.length && controller.isLoading) {
-                            return _buildTypingIndicator(isDark);
-                          }
-                          final msg = controller.messages[index];
-                          return _buildMessageItem(context, msg, isDark, controller);
-                        },
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: controller.messages.isEmpty
+                          ? _buildEmptyState(context, controller, isDark)
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              itemCount: controller.messages.length + (controller.isLoading ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == controller.messages.length && controller.isLoading) {
+                                  return _buildTypingIndicator(isDark);
+                                }
+                                final msg = controller.messages[index];
+                                return _buildMessageItem(context, msg, isDark, controller);
+                              },
+                            ),
+                    ),
+                    if (_showScrollToLatest && controller.messages.isNotEmpty)
+                      Positioned(
+                        right: 16,
+                        bottom: 16,
+                        child: FloatingActionButton.small(
+                          heroTag: 'ai-chat-scroll-to-latest',
+                          tooltip: 'Jump to latest message',
+                          backgroundColor: isDark ? const Color(0xFF334155) : Colors.white,
+                          foregroundColor: AppColors.primary,
+                          elevation: 4,
+                          onPressed: _scrollToBottom,
+                          child: const Icon(Icons.keyboard_double_arrow_down_rounded),
+                        ),
                       ),
+                  ],
+                ),
               ),
 
               // Image Attachment Bar Preview
@@ -1025,9 +1063,30 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                         ],
                       ),
                     ] else ...[
-                      Text(
-                        msg.content,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              msg.content,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+                            ),
+                          ),
+                          if (controller.canEditLastQuestion(msg.id))
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Edit last question',
+                              onPressed: () {
+                                controller.beginEditingLastQuestion(msg.id);
+                                _textController.text = msg.content;
+                                _textController.selection = TextSelection.collapsed(offset: _textController.text.length);
+                                _inputFocusNode.requestFocus();
+                              },
+                              icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.white70),
+                            ),
+                        ],
                       ),
                     ],
                   ]
@@ -1095,6 +1154,12 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                         controller.sendQuestion('Give a practice question on this concept with step-by-step solution');
                         _scrollToBottom();
                       },
+                      onRegenerate: controller.canRegenerateAnswer(msg.id)
+                          ? () {
+                              controller.regenerateLastAnswer(msg.id);
+                              _scrollToBottom();
+                            }
+                          : null,
                     ),
                     if (msg.followUpQuestions.isNotEmpty) ...[
                       const SizedBox(height: 14),
@@ -1191,17 +1256,45 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
         ),
       ),
       child: SafeArea(
-        child: AiChatInputBar(
-          controller: _textController,
-          isDark: isDark,
-          isLoading: controller.isLoading,
-          isRecordingVoice: _isRecording,
-          hintText: 'Ask in ${controller.tutorMode.shortTag} mode...',
-          onSend: _sendMessage,
-          onSubmitted: (_) => _sendMessage(),
-          onAttachImage: _showAttachmentOptions,
-          onToggleVoiceRecord: _toggleVoiceRecording,
-          onLongPressVoiceRecord: _openVoiceDoubtSheet,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (controller.editingMessageId != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.edit_rounded, size: 14, color: AppColors.primary),
+                    const SizedBox(width: 6),
+                    const Expanded(child: Text('Editing last question', style: TextStyle(fontSize: 12))),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Cancel edit',
+                      onPressed: () {
+                        _textController.clear();
+                        controller.cancelEditingMessage();
+                      },
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                    ),
+                  ],
+                ),
+              ),
+            AiChatInputBar(
+              controller: _textController,
+              focusNode: _inputFocusNode,
+              isDark: isDark,
+              isLoading: controller.isLoading,
+              isStreaming: controller.isStreaming,
+              onStop: controller.stopGeneration,
+              isRecordingVoice: _isRecording,
+              hintText: 'Ask in ${controller.tutorMode.shortTag} mode...',
+              onSend: _sendMessage,
+              onSubmitted: (_) => _sendMessage(),
+              onAttachImage: _showAttachmentOptions,
+              onToggleVoiceRecord: _toggleVoiceRecording,
+              onLongPressVoiceRecord: _openVoiceDoubtSheet,
+            ),
+          ],
         ),
       ),
     );
@@ -1493,72 +1586,76 @@ class _ChatHistoryDrawerState extends State<_ChatHistoryDrawer> {
             ? Border.all(color: AppColors.primary.withValues(alpha: 0.5))
             : null,
       ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-        leading: Icon(
-          isSelected ? Icons.chat_bubble_rounded : Icons.chat_bubble_outline_rounded,
-          size: 18,
-          color: isSelected ? AppColors.primary : (isDark ? Colors.white60 : Colors.black54),
-        ),
-        title: Text(
-          session.title,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? (isDark ? Colors.white : AppColors.primary) : null,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          leading: Icon(
+            isSelected ? Icons.chat_bubble_rounded : Icons.chat_bubble_outline_rounded,
+            size: 18,
+            color: isSelected ? AppColors.primary : (isDark ? Colors.white60 : Colors.black54),
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          _formatTimestamp(session.updatedAt),
-          style: TextStyle(
-            fontSize: 10.5,
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          title: Text(
+            session.title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected ? (isDark ? Colors.white : AppColors.primary) : null,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-        trailing: PopupMenuButton<String>(
-          icon: Icon(
-            Icons.more_vert_rounded,
-            size: 16,
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          subtitle: Text(
+            _formatTimestamp(session.updatedAt),
+            style: TextStyle(
+              fontSize: 10.5,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
           ),
-          tooltip: 'Session options',
-          onSelected: (val) {
-            if (val == 'rename') {
-              widget.onRename(session);
-            } else if (val == 'delete') {
-              widget.onDelete(session);
-            }
+          trailing: PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert_rounded,
+              size: 16,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
+            tooltip: 'Session options',
+            onSelected: (val) {
+              if (val == 'rename') {
+                widget.onRename(session);
+              } else if (val == 'delete') {
+                widget.onDelete(session);
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'rename',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 16),
+                    SizedBox(width: 8),
+                    Text('Rename', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error),
+                    SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(fontSize: 13, color: AppColors.error)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          onTap: () {
+            controller.selectSession(session);
+            Navigator.pop(context);
           },
-          itemBuilder: (ctx) => [
-            const PopupMenuItem(
-              value: 'rename',
-              child: Row(
-                children: [
-                  Icon(Icons.edit_outlined, size: 16),
-                  SizedBox(width: 8),
-                  Text('Rename', style: TextStyle(fontSize: 13)),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error),
-                  SizedBox(width: 8),
-                  Text('Delete', style: TextStyle(fontSize: 13, color: AppColors.error)),
-                ],
-              ),
-            ),
-          ],
         ),
-        onTap: () {
-          controller.selectSession(session);
-          Navigator.pop(context);
-        },
       ),
     );
   }

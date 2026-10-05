@@ -1,9 +1,13 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/api_key_vault_service.dart';
 import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/storage/token_storage.dart';
 import '../models/chat_message_model.dart';
 import '../models/chat_session_model.dart';
+import '../services/ai_stream_transport.dart' as web_stream;
 
 class AiTutorRepository {
   final Dio _dio = ApiClient().dio;
@@ -19,6 +23,10 @@ class AiTutorRepository {
     String? audioMimeType,
     String? contextNotes,
     List<Map<String, String>>? conversationHistory,
+    void Function(String chunk)? onChunk,
+    CancelToken? cancelToken,
+    bool regenerateLastAnswer = false,
+    bool editLastQuestion = false,
     String? provider,
     String? model,
     String? mode,
@@ -32,38 +40,144 @@ class AiTutorRepository {
     await keyVault.loadVault();
     final customKey = keyVault.activeApiKey;
 
+    final requestData = <String, dynamic>{
+      'question': question,
+      'scope_type': scopeType,
+      'scope_id': effectiveSessionId ?? scopeId ?? '',
+      if (effectiveSessionId != null && effectiveSessionId.isNotEmpty) 'session_id': effectiveSessionId,
+      'image_base64': imageBase64 ?? '',
+      'image_mime_type': imageMimeType ?? 'image/jpeg',
+      if (audioBase64 != null && audioBase64.isNotEmpty) 'audio_base64': audioBase64,
+      if (audioMimeType != null && audioMimeType.isNotEmpty) 'audio_mime_type': audioMimeType,
+      'context_notes': contextNotes ?? '',
+      if (conversationHistory != null && conversationHistory.isNotEmpty) 'conversation_history': conversationHistory,
+      if (regenerateLastAnswer) 'regenerate_last_answer': true,
+      if (editLastQuestion) 'edit_last_question': true,
+      'provider': provider ?? 'google',
+      'model': model ?? 'gemini-3.5-flash-lite',
+      'mode': mode ?? 'academic',
+      if (targetExam != null && targetExam.isNotEmpty) 'target_exam': targetExam,
+      if (academicLevel != null && academicLevel.isNotEmpty) 'academic_level': academicLevel,
+      if (weakTopics != null && weakTopics.isNotEmpty) 'weak_topics': weakTopics,
+      if (customKey.isNotEmpty) 'api_key': customKey,
+    };
+    final headers = <String, String>{
+      if (customKey.isNotEmpty) 'X-Gemini-API-Key': customKey,
+    };
+
+    if (onChunk != null) {
+      final content = StringBuffer();
+      final followUpQuestions = <String>[];
+      String? returnedSessionId = effectiveSessionId;
+      String? streamError;
+      var pendingSseText = '';
+
+      void processSseLine(String line) {
+        if (!line.startsWith('data:')) return;
+        final decoded = jsonDecode(line.substring(5).trim());
+        if (decoded is! Map) return;
+
+        switch (decoded['type']) {
+          case 'chunk':
+            final chunk = decoded['text']?.toString() ?? '';
+            if (chunk.isNotEmpty) {
+              content.write(chunk);
+              onChunk(chunk);
+            }
+          case 'done':
+            returnedSessionId = decoded['session_id'] as String? ?? returnedSessionId;
+            if (decoded['follow_up_chips'] is List) {
+              followUpQuestions.addAll((decoded['follow_up_chips'] as List).map((item) => item.toString()));
+            }
+          case 'error':
+            streamError = decoded['message']?.toString() ?? 'AI response stream failed';
+        }
+      }
+
+      void processSseText(String text) {
+        pendingSseText += text;
+        var newlineIndex = pendingSseText.indexOf('\n');
+        while (newlineIndex != -1) {
+          var line = pendingSseText.substring(0, newlineIndex);
+          if (line.endsWith('\r')) line = line.substring(0, line.length - 1);
+          processSseLine(line);
+          pendingSseText = pendingSseText.substring(newlineIndex + 1);
+          newlineIndex = pendingSseText.indexOf('\n');
+        }
+      }
+
+      ChatMessageModel buildStreamMessage() {
+        if (streamError != null) throw Exception(streamError);
+        if (content.isEmpty) throw Exception('AI response stream ended without an answer');
+        return ChatMessageModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          role: 'assistant',
+          content: content.toString(),
+          followUpQuestions: followUpQuestions,
+          createdAt: DateTime.now(),
+          sessionId: returnedSessionId,
+        );
+      }
+
+      if (kIsWeb) {
+        await TokenStorage.init();
+        final token = TokenStorage.getToken();
+        final responseStatus = await web_stream.postSse(
+          uri: Uri.parse('${ApiConstants.baseUrl}${ApiConstants.aiDoubtStream}'),
+          body: jsonEncode(requestData),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+            if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+            ...headers,
+          },
+          onText: processSseText,
+          cancelFuture: cancelToken?.whenCancel,
+        );
+        if (responseStatus != 404 && responseStatus != 405) {
+          if (pendingSseText.isNotEmpty) processSseLine(pendingSseText);
+          if (responseStatus < 200 || responseStatus >= 300) {
+            throw Exception('AI stream request failed with status $responseStatus');
+          }
+          return buildStreamMessage();
+        }
+      } else {
+      try {
+        final streamedResponse = await _dio.post<ResponseBody>(
+          ApiConstants.aiDoubtStream,
+          data: requestData,
+          options: Options(
+            headers: headers,
+            responseType: ResponseType.stream,
+            receiveTimeout: const Duration(seconds: 90),
+          ),
+          cancelToken: cancelToken,
+        );
+        final stream = streamedResponse.data?.stream;
+        if (stream == null) throw Exception('AI stream returned no response body');
+        await for (final line in stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
+          processSseLine(line);
+        }
+        if (pendingSseText.isNotEmpty) processSseLine(pendingSseText);
+        return buildStreamMessage();
+      } on DioException catch (error) {
+        if (error.response?.statusCode != 404 && error.response?.statusCode != 405) rethrow;
+      }
+      }
+    }
+
     final response = await _dio.post(
       ApiConstants.aiDoubt,
-      data: {
-        'question': question,
-        'scope_type': scopeType,
-        'scope_id': effectiveSessionId ?? scopeId ?? '',
-        if (effectiveSessionId != null && effectiveSessionId.isNotEmpty) 'session_id': effectiveSessionId,
-        'image_base64': imageBase64 ?? '',
-        'image_mime_type': imageMimeType ?? 'image/jpeg',
-        if (audioBase64 != null && audioBase64.isNotEmpty) 'audio_base64': audioBase64,
-        if (audioMimeType != null && audioMimeType.isNotEmpty) 'audio_mime_type': audioMimeType,
-        'context_notes': contextNotes ?? '',
-        if (conversationHistory != null && conversationHistory.isNotEmpty) 'conversation_history': conversationHistory,
-        'provider': provider ?? 'google',
-        'model': model ?? 'gemini-3.5-flash-lite',
-        'mode': mode ?? 'academic',
-        if (targetExam != null && targetExam.isNotEmpty) 'target_exam': targetExam,
-        if (academicLevel != null && academicLevel.isNotEmpty) 'academic_level': academicLevel,
-        if (weakTopics != null && weakTopics.isNotEmpty) 'weak_topics': weakTopics,
-        if (customKey.isNotEmpty) 'api_key': customKey,
-      },
-      options: Options(
-        headers: {
-          if (customKey.isNotEmpty) 'X-Gemini-API-Key': customKey,
-        },
-      ),
+      data: requestData,
+      options: Options(headers: headers),
+      cancelToken: cancelToken,
     );
 
     if (response.statusCode == 200 && response.data['data'] != null) {
       final data = response.data['data'] as Map<String, dynamic>;
       final solution = data['solution_markdown'] as String? ?? '';
       final returnedSessionId = data['session_id'] as String? ?? effectiveSessionId;
+      if (onChunk != null && solution.isNotEmpty) onChunk(solution);
 
       List<String> chips = [];
       if (data['follow_up_chips'] is List) {

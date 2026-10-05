@@ -8,6 +8,7 @@ class AiResponseActionBar extends StatelessWidget {
   final String solutionContent;
   final VoidCallback onSimplify;
   final VoidCallback onPractice;
+  final VoidCallback? onRegenerate;
   final bool isDark;
 
   const AiResponseActionBar({
@@ -15,6 +16,7 @@ class AiResponseActionBar extends StatelessWidget {
     required this.solutionContent,
     required this.onSimplify,
     required this.onPractice,
+    this.onRegenerate,
     required this.isDark,
   });
 
@@ -120,6 +122,36 @@ class AiResponseActionBar extends StatelessWidget {
               ),
             ),
           ),
+          if (onRegenerate != null) ...[
+            Container(
+              height: 12,
+              width: 1,
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+            InkWell(
+              onTap: onRegenerate,
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.refresh_rounded, size: 13, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Retry',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

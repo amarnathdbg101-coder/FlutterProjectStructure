@@ -13,6 +13,8 @@ class AiChatInputBar extends StatelessWidget {
   final VoidCallback? onLongPressVoiceRecord;
   final bool isRecordingVoice;
   final bool isLoading;
+  final bool isStreaming;
+  final VoidCallback? onStop;
   final String hintText;
   final bool isDark;
   final bool showAttachment;
@@ -29,6 +31,8 @@ class AiChatInputBar extends StatelessWidget {
     this.onLongPressVoiceRecord,
     this.isRecordingVoice = false,
     this.isLoading = false,
+    this.isStreaming = false,
+    this.onStop,
     this.hintText = 'Ask any question, formula or theorem...',
     required this.isDark,
     this.showAttachment = true,
@@ -118,7 +122,9 @@ class AiChatInputBar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
             child: IconButton(
-              icon: isLoading
+              icon: isStreaming
+                  ? const Icon(Icons.stop_rounded, color: Color(0xFFEF4444), size: 22)
+                  : isLoading
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -132,8 +138,8 @@ class AiChatInputBar extends StatelessWidget {
                       color: AppColors.primary,
                       size: 22,
                     ),
-              tooltip: 'Send Doubt to AI',
-              onPressed: isLoading ? null : onSend,
+              tooltip: isStreaming ? 'Stop generating' : 'Send Doubt to AI',
+              onPressed: isStreaming ? onStop : (isLoading ? null : onSend),
             ),
           ),
         ],
