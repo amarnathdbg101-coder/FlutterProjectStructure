@@ -317,7 +317,7 @@ class PosController extends BaseController {
         Bill #: ${sale.billNumber ?? "1001"}<br>
         Date: $dateStr<br>
         Pay Mode: ${sale.paymentMethod.toUpperCase()}<br>
-        ${sale.customerPhone.isNotEmpty ? "Customer: " + sale.customerPhone + "<br>" : ""}
+        ${sale.customerPhone.isNotEmpty ? "Customer: ${sale.customerPhone}<br>" : ""}
       </div>
       <div class="line"></div>
       <table>
@@ -347,7 +347,7 @@ class PosController extends BaseController {
       <div class="line"></div>
       <table>
         <tr><td>Subtotal:</td><td class="right">₹${sale.subtotal.toStringAsFixed(2)}</td></tr>
-        ${sale.discountAmount > 0 ? "<tr><td>Discount:</td><td class=\"right\">-₹" + sale.discountAmount.toStringAsFixed(2) + "</td></tr>" : ""}
+        ${sale.discountAmount > 0 ? '<tr><td>Discount:</td><td class="right">-₹${sale.discountAmount.toStringAsFixed(2)}</td></tr>' : ''}
         <tr class="bold" style="font-size: 14px;"><td>TOTAL:</td><td class="right">₹${sale.totalAmount.toStringAsFixed(2)}</td></tr>
       </table>
       <div class="line"></div>

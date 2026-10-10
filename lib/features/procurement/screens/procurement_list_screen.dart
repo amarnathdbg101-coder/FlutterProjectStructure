@@ -43,7 +43,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
   Future<void> _sendWhatsAppOrderSheet(BuildContext context, List<ProcurementItemModel> items, String shopName) async {
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mandi procurement list khali hai')),
+        const SnackBar(content: Text('Mandi procurement list is empty')),
       );
       return;
     }
@@ -174,7 +174,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 } else if (value == 'import') {
                   if (lowStockProducts.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Sabhi items stock mein hain! Koi low stock product nahi hai.')),
+                      const SnackBar(content: Text('All items are in stock! No low-stock products found.')),
                     );
                     return;
                   }

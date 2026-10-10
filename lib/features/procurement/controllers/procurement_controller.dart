@@ -111,7 +111,7 @@ class ProcurementController extends BaseController {
   Future<void> generatePdfSheet(BuildContext context, String shopName) async {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mandi procurement list khali hai')),
+        const SnackBar(content: Text('Mandi procurement list is empty')),
       );
       return;
     }
@@ -136,6 +136,14 @@ class ProcurementController extends BaseController {
       );
 
       if (res.success && res.data != null) {
+        final b64 = res.data!['pdf_base64']?.toString();
+        if (b64 != null && b64.isNotEmpty) {
+          final uri = Uri.parse('data:application/pdf;base64,$b64');
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+            return;
+          }
+        }
         final pdfUrl = res.data!['pdf_url']?.toString() ?? res.data!['url']?.toString();
         if (pdfUrl != null && pdfUrl.isNotEmpty) {
           final uri = Uri.parse(pdfUrl);

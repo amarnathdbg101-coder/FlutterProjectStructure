@@ -20,6 +20,7 @@ class DataSyncService {
 
   bool _isSyncing = false;
   DateTime? _lastSyncTime;
+  DateTime? _lastLowStockAlertTime;
 
   bool get isSyncing => _isSyncing;
   DateTime? get lastSyncTime => _lastSyncTime;
@@ -148,8 +149,14 @@ class DataSyncService {
 
   void _checkLowStockAlerts(BuildContext context, ProductController prodCtrl) {
     try {
+      final now = DateTime.now();
+      if (_lastLowStockAlertTime != null && now.difference(_lastLowStockAlertTime!) < const Duration(minutes: 10)) {
+        return;
+      }
       final lowStockList = prodCtrl.products.where((p) => p.isLowStock || p.isOutOfStock).toList();
       if (lowStockList.isNotEmpty && context.mounted) {
+        _lastLowStockAlertTime = now;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFF1E293B),

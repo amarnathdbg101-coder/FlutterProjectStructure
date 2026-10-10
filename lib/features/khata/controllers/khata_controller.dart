@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/localization/language_controller.dart';
@@ -25,59 +26,30 @@ class KhataController extends BaseController {
   bool _isStatementLoading = false;
   bool get isStatementLoading => _isStatementLoading;
 
-  String _activeFilter = 'all'; // 'all', 'dues', 'overdue', 'settled'
-  String get activeFilter => _activeFilter;
-
   String _searchQuery = '';
   String get searchQuery => _searchQuery;
 
-  KhataController() {
-    _initFromCache();
-  }
+  String _activeFilter = 'all'; // 'all', 'dues', 'overdue', 'settled'
+  String get activeFilter => _activeFilter;
 
-  void _initFromCache() {
-    final cached = LocalCacheService.getKhataCustomers();
-    if (cached.isNotEmpty) {
-      _customers = cached;
-    }
-    _summary = LocalCacheService.getKhataSummary();
-  }
+  int get totalCount => _customers.length;
 
-  // --- KPI Computed Properties ---
-  double get totalMarketDebt =>
-      _summary?.totalReceivables ??
-      _customers.fold(0.0, (sum, c) => sum + (c.balance > 0 ? c.balance : 0.0));
-
-  int get debtorsCount =>
-      _summary?.totalDebtors ?? _customers.where((c) => c.balance > 0).length;
+  int get debtorsCount => _summary?.totalDebtors ?? _customers.where((c) => c.balance > 0).length;
 
   int get overdueCount =>
-      _summary?.overdueAccounts ??
-      _customers.where((c) => c.isOverdue && c.balance > 0).length;
+      _summary?.overdueAccounts ?? _customers.where((c) => c.isOverdue && c.balance > 0).length;
 
-  // --- Filtering & Search ---
-  void setActiveFilter(String filter) {
-    if (_activeFilter != filter) {
-      _activeFilter = filter;
-      notifyListeners();
-    }
-  }
-
-  void setSearchQuery(String query) {
-    _searchQuery = query.trim().toLowerCase();
-    notifyListeners();
-  }
+  double get totalMarketDebt =>
+      _summary?.totalReceivables ?? _customers.where((c) => c.balance > 0).fold(0.0, (sum, c) => sum + c.balance);
 
   List<KhataCustomerModel> get filteredCustomers {
     return _customers.where((c) {
-      // 1. Search Query Filter
-      if (_searchQuery.isNotEmpty) {
-        final nameMatch = c.name.toLowerCase().contains(_searchQuery);
-        final phoneMatch = c.mobile.replaceAll(RegExp(r'[^0-9]'), '').contains(_searchQuery);
-        if (!nameMatch && !phoneMatch) return false;
-      }
+      final matchesSearch = _searchQuery.isEmpty ||
+          c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          c.mobile.contains(_searchQuery);
 
-      // 2. Tab Filter
+      if (!matchesSearch) return false;
+
       switch (_activeFilter) {
         case 'dues':
           return c.balance > 0;
@@ -92,49 +64,80 @@ class KhataController extends BaseController {
     }).toList();
   }
 
-  // --- Load Customers & Ledgers ---
-  Future<void> loadCustomers({String search = '', bool silent = false}) async {
+  KhataController() {
+    _hydrateFromLocalCache();
+  }
+
+  void _hydrateFromLocalCache() {
+    final cachedCustomers = LocalCacheService.getKhataCustomers();
+    if (cachedCustomers.isNotEmpty) {
+      _customers = cachedCustomers;
+    }
+    final cachedSummary = LocalCacheService.getKhataSummary();
+    if (cachedSummary != null) {
+      _summary = cachedSummary;
+    }
+    if (_customers.isNotEmpty || _summary != null) {
+      notifyListeners();
+    }
+  }
+
+  void setSearchQuery(String query) {
+    _searchQuery = query.trim();
+    notifyListeners();
+  }
+
+  void setActiveFilter(String filter) {
+    _activeFilter = filter;
+    notifyListeners();
+  }
+
+  Future<void> loadCustomers({bool silent = false}) async {
     if (!silent && _customers.isEmpty) {
       setLoading(true);
     }
     clearError();
 
-    final response = await _repo.getCustomers(search: search);
-    setLoading(false);
+    try {
+      final response = await _repo.getCustomers();
+      if (!silent) setLoading(false);
 
-    if (response.success && response.data != null) {
-      _customers = response.data!;
-      if (search.isEmpty) {
-        LocalCacheService.saveKhataCustomers(_customers);
+      if (response.success && response.data != null) {
+        _customers = response.data!;
+        await LocalCacheService.saveKhataCustomers(_customers);
+        notifyListeners();
+      } else {
+        if (!silent && _customers.isEmpty) {
+          setError(response.error ?? 'Khata record load nahi ho sake');
+        }
+      }
+    } catch (_) {
+      if (!silent) setLoading(false);
+    }
+
+    // Concurrently update summary and aging metrics
+    _loadSummaryAndAging();
+  }
+
+  Future<void> _loadSummaryAndAging() async {
+    try {
+      final summaryRes = await _repo.getSummary();
+      if (summaryRes.success && summaryRes.data != null) {
+        _summary = KhataSummaryModel.fromJson(summaryRes.data!);
+        await LocalCacheService.saveKhataSummary(_summary!);
+      }
+
+      final agingRes = await _repo.getAgingReport();
+      if (agingRes.success && agingRes.data != null) {
+        _aging = KhataAgingModel.fromJson(agingRes.data!);
       }
       notifyListeners();
-      // Concurrently update summary and aging metrics
-      loadSummary();
-      loadAgingReport();
-    } else {
-      setError(response.error ?? 'Failed to load credit accounts');
-    }
-  }
-
-  Future<void> loadSummary() async {
-    final response = await _repo.getSummary();
-    if (response.success && response.data != null) {
-      _summary = KhataSummaryModel.fromJson(response.data!);
-      LocalCacheService.saveKhataSummary(_summary!);
-      notifyListeners();
-    }
-  }
-
-  Future<void> loadAgingReport() async {
-    final response = await _repo.getAgingReport();
-    if (response.success && response.data != null) {
-      _aging = KhataAgingModel.fromJson(response.data!);
-      notifyListeners();
-    }
+    } catch (_) {}
   }
 
   Future<void> loadStatement(String mobile) async {
     _isStatementLoading = true;
+    _currentCustomerStatement = [];
     notifyListeners();
 
     final response = await _repo.getCustomerStatement(mobile);
@@ -142,11 +145,12 @@ class KhataController extends BaseController {
 
     if (response.success && response.data != null) {
       _currentCustomerStatement = response.data!;
-      notifyListeners();
+    } else {
+      setError(response.error ?? 'Passbook statement load nahi ho saka');
     }
+    notifyListeners();
   }
 
-  // --- Add Credit / Debit Transactions ---
   Future<bool> addCredit({
     required String customerName,
     required String mobile,
@@ -392,7 +396,6 @@ class KhataController extends BaseController {
             <th>Date & Time</th>
             <th>Type</th>
             <th>Amount (₹)</th>
-            <th>Payment Mode / Ref</th>
             <th>Notes</th>
           </tr>
         </thead>
@@ -406,7 +409,6 @@ class KhataController extends BaseController {
           <td>$txDate</td>
           <td class="${tx.isCredit ? 'credit' : 'payment'}">${tx.isCredit ? 'UDHAR DIYA (-)' : 'JAMA KIYA (+)'}</td>
           <td class="${tx.isCredit ? 'credit' : 'payment'}">₹${tx.amount.toStringAsFixed(0)}</td>
-          <td>${tx.paymentMode.toUpperCase()}</td>
           <td>${tx.notes.isNotEmpty ? tx.notes : '-'}</td>
         </tr>
       ''';
@@ -430,7 +432,7 @@ class KhataController extends BaseController {
     final overdue = _customers.where((c) => c.balance > 0).toList();
     if (overdue.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Koi overdue ya bakaya udhar customer nahi mila!')),
+        const SnackBar(content: Text('No customers with pending overdue balance found!')),
       );
       return;
     }

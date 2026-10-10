@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
@@ -132,11 +133,27 @@ class KhataRepository {
   Future<ApiResponse<String>> getStatementPdfUrl(String mobile) async {
     try {
       final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
-      final res = await _dio.get(ApiConstants.khataStatementPdf(clean));
-      final data = res.data is Map ? (res.data['pdf_url'] ?? res.data['url'] ?? '') : '';
-      return ApiResponse(success: true, data: data.toString());
-    } catch (e) {
-      return ApiResponse.failure(ApiClient.handleError(e));
+      final res = await _dio.get(
+        ApiConstants.khataStatementPdf(clean),
+        options: Options(responseType: ResponseType.bytes),
+      );
+      if (res.data is List<int> && (res.data as List<int>).isNotEmpty) {
+        final b64 = base64Encode(res.data as List<int>);
+        return ApiResponse(success: true, data: 'data:application/pdf;base64,$b64');
+      }
+      return ApiResponse.failure('Statement PDF could not be generated');
+    } catch (_) {
+      try {
+        final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+        final res = await _dio.get(ApiConstants.khataStatementPdf(clean));
+        final data = res.data is Map ? (res.data['pdf_url'] ?? res.data['url'] ?? '') : '';
+        if (data.toString().isNotEmpty) {
+          return ApiResponse(success: true, data: data.toString());
+        }
+      } catch (e) {
+        return ApiResponse.failure(ApiClient.handleError(e));
+      }
+      return ApiResponse.failure('Statement PDF unavailable');
     }
   }
 
