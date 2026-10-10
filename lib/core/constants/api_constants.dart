@@ -80,6 +80,8 @@ class ApiConstants {
   static String productMarkdown(String id) => '/shops/me/products/$id/markdown';
   static const String productsBulkImport = '/shops/me/products/bulk-import';
   static const String productsImportTemplate = '/shops/me/products/import-template.csv';
+  static const String productsImportTemplateCsv = '/shops/me/products/import-template.csv';
+  static const String productsImportTemplateXlsx = '/shops/me/products/import-template.xlsx';
   static const String scanBarcode = '/products/scan';
 
   // --- 8. Inventory & Stock Restock (Shop) ---

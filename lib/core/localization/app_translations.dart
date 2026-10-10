@@ -805,6 +805,104 @@ class AppTranslations {
       'hi': 'स्टॉक समाप्त',
     },
 
+    // Bulk Import Products
+    'bulk_import_title': {
+      'en': 'Bulk Import Products',
+      'hi': 'एक साथ कई उत्पाद जोड़ें',
+    },
+    'bulk_import_subtitle': {
+      'en': 'Import hundreds of products instantly using Excel (.xlsx) or CSV',
+      'hi': 'एक्सेल (.xlsx) या सीएसवी से सैकड़ों उत्पाद एक साथ जोड़ें',
+    },
+    'bulk_import_step_template': {
+      'en': '1. Download Sample Template',
+      'hi': '१. नमूना प्रारूप (टेम्पलेट) डाउनलोड करें',
+    },
+    'bulk_import_step_template_desc': {
+      'en': 'Download our pre-formatted file with sample items, fill in your catalog details, and save.',
+      'hi': 'नमूना उत्पादों वाली हमारी तैयार फ़ाइल डाउनलोड करें, अपने उत्पाद भरें और सुरक्षित करें।',
+    },
+    'bulk_import_download_excel': {
+      'en': 'Download Excel (.xlsx)',
+      'hi': 'एक्सेल (.xlsx) डाउनलोड करें',
+    },
+    'bulk_import_download_csv': {
+      'en': 'Download CSV (.csv)',
+      'hi': 'सीएसवी (.csv) डाउनलोड करें',
+    },
+    'bulk_import_step_upload': {
+      'en': '2. Select Your File',
+      'hi': '२. अपनी फ़ाइल चुनें',
+    },
+    'bulk_import_step_upload_desc': {
+      'en': 'Choose the completed .xlsx, .xls, or .csv file from your device.',
+      'hi': 'अपने डिवाइस से भरी हुई .xlsx, .xls या .csv फ़ाइल चुनें।',
+    },
+    'bulk_import_btn_browse': {
+      'en': 'Browse File',
+      'hi': 'फ़ाइल चुनें',
+    },
+    'bulk_import_file_selected': {
+      'en': 'File selected',
+      'hi': 'फ़ाइल चुनी गई',
+    },
+    'bulk_import_update_existing_title': {
+      'en': 'Update existing products if SKU matches',
+      'hi': 'यदि बारकोड/SKU पहले से मौजूद है तो अपडेट करें',
+    },
+    'bulk_import_update_existing_subtitle': {
+      'en': 'Updates price, cost, and stock without creating duplicate items.',
+      'hi': 'नया उत्पाद बनाने के बजाय मूल्य और स्टॉक अपडेट करेगा।',
+    },
+    'bulk_import_btn_start': {
+      'en': 'Start Bulk Import',
+      'hi': 'उत्पाद जोड़ना शुरू करें',
+    },
+    'bulk_import_processing': {
+      'en': 'Importing products in background...',
+      'hi': 'उत्पाद जोड़े जा रहे हैं...',
+    },
+    'bulk_import_validating': {
+      'en': 'Validating rows, barcodes, and prices...',
+      'hi': 'विवरण, बारकोड एवं मूल्यों की जांच हो रही है...',
+    },
+    'bulk_import_success_title': {
+      'en': 'Bulk Import Completed!',
+      'hi': 'उत्पाद सफलतापूर्वक जुड़ गए!',
+    },
+    'bulk_import_stat_total': {
+      'en': 'Total Rows',
+      'hi': 'कुल पंक्तियाँ',
+    },
+    'bulk_import_stat_imported': {
+      'en': 'New Added',
+      'hi': 'नए जुड़े',
+    },
+    'bulk_import_stat_updated': {
+      'en': 'Updated',
+      'hi': 'अपडेट हुए',
+    },
+    'bulk_import_stat_skipped': {
+      'en': 'Skipped',
+      'hi': 'छोड़े गए',
+    },
+    'bulk_import_errors_heading': {
+      'en': 'Row Issues / Skipped Details',
+      'hi': 'छोड़े गए उत्पादों का विवरण',
+    },
+    'bulk_import_close_btn': {
+      'en': 'Done',
+      'hi': 'पूर्ण',
+    },
+    'bulk_import_choose_file_hint': {
+      'en': 'Please select an Excel or CSV file first',
+      'hi': 'कृपया पहले एक्सेल या सीएसवी फ़ाइल चुनें',
+    },
+    'bulk_import_open_dialog_btn': {
+      'en': 'Bulk Import (Excel / CSV)',
+      'hi': 'एक्सेल/सीएसवी से जोड़ें',
+    },
+
     // Store Expenses
     'exp_title': {
       'en': 'Daily Store Expenses',

@@ -246,6 +246,20 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - Dynamic Action Bar: 1-tap "Add to Cart • ₹Total", 1-tap "Reserve for Store Pickup" with status toast, and direct WhatsApp Shopkeeper Inquiry with pre-filled product details.
   - Key Specifications Grid & Verified Local Seller card with direct call and storefront navigation.
   - Fixed UTF-8 Indian Rupee (`₹`) symbol formatting across `ProductCard.jsx` and `ProductDetailModal.jsx`.
-
-
-
+- **[2026-10-10]**: Integrated 1-Tap "Share Cart Order on WhatsApp" (`handleShareCartOnWhatsApp`) in `CartDrawer.jsx`, allowing customers to share their complete shopping cart order summary directly with local shopkeepers on WhatsApp.
+- **[2026-10-10]**: Implemented Sequential Next-Gen Engine Features (100% Working, 0 Bugs):
+  - **Feature 1 (Mandi Procurement PDF Engine)**: Added 1-tap "Generate Mandi PDF Sheet" (`generatePdfSheet`) in `ProcurementController` & `ProcurementListScreen`, converting procurement items to print-ready HTML/PDF reorder sheets.
+  - **Feature 2 (Thermal Receipt PDF Engine)**: Built 58mm/80mm thermal receipt PDF printer (`generateThermalReceiptPdf`) in `PosController` & `PosScreen` with full bill itemization, payment modes, and instant print capability.
+  - **Feature 3 (Khata Passbook PDF Engine)**: Enhanced `openStatementPdf` in `KhataController` & `KhataScreen` with print-ready customer passbook statement layout.
+  - **Feature 4 (Customer Store Reviews & Ratings)**: Verified 100% functional shop rating and customer review system in `CustomerFrontend` (`ShopReviewsSection.jsx` & `AddReviewModal.jsx`).
+  - **Feature 5 (Automated Low Stock Push Alerts)**: Integrated `_checkLowStockAlerts` worker in `DataSyncService` to notify merchants when inventory items hit reorder thresholds.
+- **[2026-10-10]**: Enterprise Product Bulk Import Engine & Multi-Format Ingestion Architecture (GoBackend & Flutter Frontend):
+  - **Backend Engine (GoBackend)**: Installed `github.com/xuri/excelize/v2` to support native Excel spreadsheets (`.xlsx`, `.xlsm`, `.xls`) alongside delimited CSV (`.csv`).
+    - Smart Format Auto-Detection (`BulkImportProductsFromFile`): Detects Excel via magic byte headers (`PK\x03\x04`) and file extensions, falling back gracefully to robust CSV parsing with delimiter detection (`,`, `;`, `\t`) and UTF-8 BOM stripping.
+    - Pre-flight Validation & Normalization (`parseRecordsToImportItems`): Handles fuzzy column matching (`name`, `sku`, `price`, `cost`, `mrp`, `stock`, `category`, `unit`, `description`), scientific notation barcode sanitization (e.g. `8.90103E+12` -> `8901030000000`), currency stripping (`₹`, `Rs.`, `INR`, `,`), auto category resolution/creation, and positive price enforcement.
+    - Conflict Resolution & Inventory Transaction (`BulkImportProducts`): Transactional batch insert/upsert (`BEGIN ... COMMIT`) supporting `update_existing` toggle. Synchronizes `products` and `inventory` tables atomically, returning structured counts (`total_rows`, `imported_count`, `updated_count`, `skipped_count`) and row-by-row error logs without aborting valid rows.
+    - Sample Template Generator: Provides download routes for both professional Excel workbook (`/shops/me/products/import-template.xlsx`) and CSV (`/shops/me/products/import-template.csv`).
+  - **Frontend Architecture (Flutter)**: Integrated `file_picker` for cross-platform file selection (`.xlsx`, `.xls`, `.csv`).
+    - Added `BulkImportResult` model, `ProductRepository.bulkImportProducts`, and `ProductController.bulkImportProducts`.
+    - Responsive Bulk Import Dialog (`_showBulkImportDialog`) on `InventoryScreen`: clamped width (580px), zero overflow, sample template downloads, file picker preview card with size, "Update existing products by SKU" toggle, live upload progress indicator, 4-metric stat cards, expandable row-by-row error log, and auto-catalog reload upon completion.
+    - Pure English and Hindi localization added to `AppTranslations` with zero Hinglish.

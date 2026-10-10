@@ -1019,7 +1019,7 @@ class _KhataScreenState extends State<KhataScreen> {
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                       ),
-                      onPressed: () => khata.openStatementPdf(context, customer.mobile),
+                      onPressed: () => khata.openStatementPdf(context, customer.mobile, customer: customer),
                     ),
                   ],
                 ),

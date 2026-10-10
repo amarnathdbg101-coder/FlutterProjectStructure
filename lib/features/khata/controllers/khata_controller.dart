@@ -337,26 +337,91 @@ class KhataController extends BaseController {
   }
 
   // --- Download / Open Statement PDF ---
-  Future<void> openStatementPdf(BuildContext context, String mobile) async {
+  Future<void> openStatementPdf(BuildContext context, String mobile, {KhataCustomerModel? customer}) async {
     clearError();
     final res = await _repo.getStatementPdfUrl(mobile);
     if (res.success && res.data != null && res.data!.isNotEmpty) {
       final uri = Uri.parse(res.data!);
       try {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unable to open statement PDF')),
-          );
-        }
-      }
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Statement PDF generation in progress')),
-        );
-      }
+        return;
+      } catch (_) {}
+    }
+
+    // Clean HTML Print-Ready Passbook Statement Engine
+    final shop = LocalCacheService.getShop();
+    final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
+    final custName = customer?.name ?? 'Customer';
+    final balance = customer?.balance ?? 0.0;
+    final dateStr = '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}';
+
+    String htmlContent = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Khata Passbook Statement - $custName</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; color: #0f172a; }
+        .header { text-align: center; border-bottom: 2px solid #dc2626; padding-bottom: 12px; margin-bottom: 20px; }
+        .header h1 { margin: 0; color: #dc2626; font-size: 22px; }
+        .header p { margin: 4px 0 0 0; color: #64748b; font-size: 13px; }
+        .summary-box { background: #fef2f2; border: 1px solid #fca5a5; padding: 14px; border-radius: 8px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 13px; }
+        th { background-color: #f1f5f9; font-weight: bold; }
+        .credit { color: #dc2626; font-weight: bold; }
+        .payment { color: #16a34a; font-weight: bold; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="margin-bottom: 16px;">
+        <button onclick="window.print()" style="background:#dc2626;color:white;border:none;padding:10px 18px;border-radius:6px;font-weight:bold;cursor:pointer;">🖨️ Print / Save Statement PDF</button>
+      </div>
+      <div class="header">
+        <h1>📖 $shopName - Customer Khata Passbook Statement</h1>
+        <p>Date: $dateStr • Customer: $custName ($mobile)</p>
+      </div>
+      <div class="summary-box">
+        <strong>TOTAL PENDING CREDIT BALANCE: ₹${balance.abs().toStringAsFixed(0)}</strong>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date & Time</th>
+            <th>Type</th>
+            <th>Amount (₹)</th>
+            <th>Payment Mode / Ref</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+    ''';
+
+    for (final tx in _currentCustomerStatement) {
+      final txDate = '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}';
+      htmlContent += '''
+        <tr>
+          <td>$txDate</td>
+          <td class="${tx.isCredit ? 'credit' : 'payment'}">${tx.isCredit ? 'UDHAR DIYA (-)' : 'JAMA KIYA (+)'}</td>
+          <td class="${tx.isCredit ? 'credit' : 'payment'}">₹${tx.amount.toStringAsFixed(0)}</td>
+          <td>${tx.paymentMode.toUpperCase()}</td>
+          <td>${tx.notes.isNotEmpty ? tx.notes : '-'}</td>
+        </tr>
+      ''';
+    }
+
+    htmlContent += '''
+        </tbody>
+      </table>
+    </body>
+    </html>
+    ''';
+
+    final uri = Uri.dataFromString(htmlContent, mimeType: 'text/html', encoding: Encoding.getByName('utf-8'));
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
     }
   }
 

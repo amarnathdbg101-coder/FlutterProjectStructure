@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../models/bulk_import_result.dart';
 import '../models/product_model.dart';
 
 class ProductRepository {
@@ -323,6 +324,50 @@ class ProductRepository {
       final res = await _dio.get(ApiConstants.analyticsProducts);
       final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: data as Map<String, dynamic>);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  // --- Bulk Import Products (Excel .xlsx / CSV) ---
+  Future<ApiResponse<BulkImportResult>> bulkImportProducts({
+    required List<int> fileBytes,
+    required String fileName,
+    bool updateExisting = true,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          fileBytes,
+          filename: fileName,
+        ),
+        'update_existing': updateExisting.toString(),
+      });
+
+      final res = await _dio.post(
+        ApiConstants.productsBulkImport,
+        data: formData,
+        queryParameters: {'update_existing': updateExisting.toString()},
+      );
+
+      dynamic raw = res.data;
+      if (raw is String) {
+        try {
+          raw = jsonDecode(raw);
+        } catch (_) {}
+      }
+
+      Map<String, dynamic> dataMap = {};
+      if (raw is Map) {
+        if (raw['data'] is Map) {
+          dataMap = Map<String, dynamic>.from(raw['data'] as Map);
+        } else {
+          dataMap = Map<String, dynamic>.from(raw);
+        }
+      }
+
+      final result = BulkImportResult.fromJson(dataMap);
+      return ApiResponse(success: true, data: result);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }

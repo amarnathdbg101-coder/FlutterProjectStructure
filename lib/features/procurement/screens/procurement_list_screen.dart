@@ -169,6 +169,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
               onSelected: (value) {
                 if (value == 'whatsapp') {
                   _sendWhatsAppOrderSheet(context, items, shopName);
+                } else if (value == 'pdf') {
+                  controller.generatePdfSheet(context, shopName);
                 } else if (value == 'import') {
                   if (lowStockProducts.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -199,6 +201,19 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                       SizedBox(width: 8),
                       Text(
                         'WhatsApp Mandi Order',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'pdf',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
+                      SizedBox(width: 8),
+                      Text(
+                        'Generate Mandi PDF Sheet',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ],

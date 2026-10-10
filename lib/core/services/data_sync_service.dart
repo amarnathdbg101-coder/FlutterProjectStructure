@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/dashboard/controllers/dashboard_controller.dart';
@@ -64,6 +65,7 @@ class DataSyncService {
       // Warm up Image Disk & Memory Caches for 0ms visual rendering
       if (context.mounted) {
         _warmupImageCaches(context, authCtrl, prodCtrl);
+        _checkLowStockAlerts(context, prodCtrl);
       }
 
       debugPrint('[DataSyncService] Background data sync worker completed successfully.');
@@ -142,5 +144,36 @@ class DataSyncService {
     } catch (e) {
       debugPrint('[DataSyncService] Image precache exception: $e');
     }
+  }
+
+  void _checkLowStockAlerts(BuildContext context, ProductController prodCtrl) {
+    try {
+      final lowStockList = prodCtrl.products.where((p) => p.isLowStock || p.isOutOfStock).toList();
+      if (lowStockList.isNotEmpty && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF1E293B),
+            content: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '${lowStockList.length} items need restock! Tap to view Mandi Reorder list.',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'View List',
+              textColor: Colors.amber,
+              onPressed: () => GoRouter.of(context).go('/merchant/procurement'),
+            ),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 }

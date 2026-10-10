@@ -1,3 +1,9 @@
+import 'dart:io' show File;
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/constants/api_constants.dart';
+import '../models/bulk_import_result.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1330,6 +1336,533 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
+  void _showBulkImportDialog(BuildContext context) {
+    PlatformFile? selectedFile;
+    Uint8List? fileBytes;
+    bool updateExisting = true;
+    bool isUploading = false;
+    BulkImportResult? importResult;
+    String? uploadError;
+
+    showDialog(
+      context: context,
+      barrierDismissible: !isUploading,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Dialog(
+              backgroundColor: ctx.colorSurface,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 580, maxHeight: 720),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // HEADER
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: ctx.colorPrimaryLight,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.table_view_rounded,
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    ctx.tr('bulk_import_title'),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: ctx.colorTextPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    ctx.tr('bulk_import_subtitle'),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: ctx.colorTextSecondary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!isUploading)
+                              IconButton(
+                                icon: Icon(Icons.close_rounded, color: ctx.colorTextSecondary),
+                                onPressed: () => Navigator.pop(dialogCtx),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Divider(height: 1, color: ctx.colorBorder),
+                        const SizedBox(height: 16),
+
+                        // RESULT SUCCESS VIEW
+                        if (importResult != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                            ),
+                            child: Column(
+                              children: [
+                                const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 44),
+                                const SizedBox(height: 8),
+                                Text(
+                                  ctx.tr('bulk_import_success_title'),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: AppColors.success,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 4 STAT METRICS CARDS
+                          Row(
+                            children: [
+                              Expanded(
+                                child: AppStatCard(
+                                  title: ctx.tr('bulk_import_stat_total'),
+                                  value: importResult!.totalRows.toString(),
+                                  subtitle: 'Rows in file',
+                                  icon: Icons.format_list_numbered_rounded,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: AppStatCard(
+                                  title: ctx.tr('bulk_import_stat_imported'),
+                                  value: importResult!.importedCount.toString(),
+                                  subtitle: 'Added to catalog',
+                                  icon: Icons.add_circle_outline_rounded,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: AppStatCard(
+                                  title: ctx.tr('bulk_import_stat_updated'),
+                                  value: importResult!.updatedCount.toString(),
+                                  subtitle: 'Stock / price updated',
+                                  icon: Icons.sync_rounded,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: AppStatCard(
+                                  title: ctx.tr('bulk_import_stat_skipped'),
+                                  value: importResult!.skippedCount.toString(),
+                                  subtitle: 'Duplicates / errors',
+                                  icon: Icons.error_outline_rounded,
+                                  isAlert: importResult!.skippedCount > 0,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // ROW ERRORS ACCORDION
+                          if (importResult!.errors.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: ctx.colorSurfaceSubtle,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: ctx.colorBorder),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.warning),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '${ctx.tr('bulk_import_errors_heading')} (${importResult!.errors.length})',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12.5,
+                                            color: ctx.colorTextPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxHeight: 140),
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: importResult!.errors.map((err) {
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 2),
+                                            child: Text(
+                                              '• $err',
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                color: ctx.colorTextSecondary,
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () => Navigator.pop(dialogCtx),
+                            child: Text(ctx.tr('bulk_import_close_btn'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ] else if (isUploading) ...[
+                          // PROCESSING & BACKGROUND PROGRESS
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                            child: Column(
+                              children: [
+                                const CircularProgressIndicator(color: AppColors.primary),
+                                const SizedBox(height: 20),
+                                Text(
+                                  ctx.tr('bulk_import_processing'),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: ctx.colorTextPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  ctx.tr('bulk_import_validating'),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: ctx.colorTextSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          // STEP 1: DOWNLOAD TEMPLATES
+                          AppSectionHeader(
+                            title: ctx.tr('bulk_import_step_template'),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            ctx.tr('bulk_import_step_template_desc'),
+                            style: TextStyle(fontSize: 12, color: ctx.colorTextSecondary),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: const Color(0xFF107C41).withValues(alpha: 0.5)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                icon: const Icon(Icons.table_chart_rounded, size: 18, color: Color(0xFF107C41)),
+                                label: Text(
+                                  ctx.tr('bulk_import_download_excel'),
+                                  style: const TextStyle(color: Color(0xFF107C41), fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () async {
+                                  final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.productsImportTemplateXlsx}');
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                },
+                              ),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                icon: const Icon(Icons.description_outlined, size: 18, color: AppColors.primary),
+                                label: Text(
+                                  ctx.tr('bulk_import_download_csv'),
+                                  style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () async {
+                                  final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.productsImportTemplateCsv}');
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+
+                          // STEP 2: SELECT FILE
+                          AppSectionHeader(
+                            title: ctx.tr('bulk_import_step_upload'),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            ctx.tr('bulk_import_step_upload_desc'),
+                            style: TextStyle(fontSize: 12, color: ctx.colorTextSecondary),
+                          ),
+                          const SizedBox(height: 10),
+
+                          if (selectedFile == null) ...[
+                            InkWell(
+                              onTap: () async {
+                                final result = await FilePicker.platform.pickFiles(
+                                  type: FileType.custom,
+                                  allowedExtensions: ['xlsx', 'xls', 'csv'],
+                                  withData: true,
+                                );
+                                if (result != null && result.files.isNotEmpty) {
+                                  final file = result.files.first;
+                                  Uint8List? bytes = file.bytes;
+                                  if (bytes == null && !kIsWeb && file.path != null) {
+                                    bytes = await File(file.path!).readAsBytes();
+                                  }
+                                  if (bytes != null) {
+                                    setModalState(() {
+                                      selectedFile = file;
+                                      fileBytes = bytes;
+                                      uploadError = null;
+                                    });
+                                  }
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: ctx.colorSurfaceSubtle,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppColors.primary.withValues(alpha: 0.4),
+                                    style: BorderStyle.solid,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: ctx.colorPrimaryLight,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.cloud_upload_outlined,
+                                        size: 28,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      ctx.tr('bulk_import_btn_browse'),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Supports Excel (.xlsx, .xls) and CSV (.csv)',
+                                      style: TextStyle(fontSize: 11, color: ctx.colorTextSecondary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ] else ...[
+                            AppCard(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: selectedFile!.name.toLowerCase().endsWith('.xlsx')
+                                          ? const Color(0xFF107C41).withValues(alpha: 0.1)
+                                          : AppColors.primary.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      selectedFile!.name.toLowerCase().endsWith('.xlsx')
+                                          ? Icons.table_chart_rounded
+                                          : Icons.description_rounded,
+                                      color: selectedFile!.name.toLowerCase().endsWith('.xlsx')
+                                          ? const Color(0xFF107C41)
+                                          : AppColors.primary,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          selectedFile!.name,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: ctx.colorTextPrimary,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${(selectedFile!.size / 1024).toStringAsFixed(1)} KB • ${ctx.tr('bulk_import_file_selected')}',
+                                          style: TextStyle(fontSize: 11, color: ctx.colorTextSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close_rounded, size: 20),
+                                    color: ctx.colorTextMuted,
+                                    tooltip: 'Remove',
+                                    onPressed: () {
+                                      setModalState(() {
+                                        selectedFile = null;
+                                        fileBytes = null;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+
+                          // STEP 3: OPTIONS
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              ctx.tr('bulk_import_update_existing_title'),
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
+                            ),
+                            subtitle: Text(
+                              ctx.tr('bulk_import_update_existing_subtitle'),
+                              style: TextStyle(fontSize: 11, color: ctx.colorTextSecondary),
+                            ),
+                            value: updateExisting,
+                            activeThumbColor: AppColors.primary,
+                            onChanged: (val) {
+                              setModalState(() => updateExisting = val);
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ERROR DISPLAY IF ANY
+                          if (uploadError != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: AppColors.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      uploadError!,
+                                      style: const TextStyle(color: AppColors.error, fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          // SUBMIT BUTTON
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: selectedFile == null || fileBytes == null
+                                ? null
+                                : () async {
+                                    setModalState(() {
+                                      isUploading = true;
+                                      uploadError = null;
+                                    });
+
+                                    final prodController = context.read<ProductController>();
+                                    final res = await prodController.bulkImportProducts(
+                                      fileBytes: fileBytes!,
+                                      fileName: selectedFile!.name,
+                                      updateExisting: updateExisting,
+                                    );
+
+                                    setModalState(() {
+                                      isUploading = false;
+                                      if (res != null) {
+                                        importResult = res;
+                                      } else {
+                                        uploadError = prodController.errorMessage ??
+                                            'Failed to import file. Please verify columns and file format.';
+                                      }
+                                    });
+                                  },
+                            child: Text(
+                              ctx.tr('bulk_import_btn_start'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final prodController = context.watch<ProductController>();
@@ -1393,6 +1926,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                 );
               },
+            ),
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined),
+              tooltip: context.tr('bulk_import_open_dialog_btn'),
+              onPressed: () => _showBulkImportDialog(context),
             ),
             IconButton(
               icon: Icon(Icons.refresh_rounded, color: context.colorTextSecondary),
@@ -1471,10 +2009,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 12),
-                                ElevatedButton.icon(
-                                  icon: const Icon(Icons.add, color: Colors.white),
-                                  label: Text(context.tr('inv_add_btn')),
-                                  onPressed: () => _showAddProductDialog(context),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  alignment: WrapAlignment.center,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      icon: const Icon(Icons.add, color: Colors.white),
+                                      label: Text(context.tr('inv_add_btn')),
+                                      onPressed: () => _showAddProductDialog(context),
+                                    ),
+                                    OutlinedButton.icon(
+                                      icon: const Icon(Icons.file_upload_outlined),
+                                      label: Text(context.tr('bulk_import_open_dialog_btn')),
+                                      onPressed: () => _showBulkImportDialog(context),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../products/models/product_model.dart';
@@ -9,17 +12,6 @@ class PosController extends BaseController {
 
   List<ProductModel> _products = [];
   List<ProductModel> get products => _products;
-
-  PosController() {
-    _initFromCache();
-  }
-
-  void _initFromCache() {
-    final cached = LocalCacheService.getProducts();
-    if (cached.isNotEmpty) {
-      _products = cached;
-    }
-  }
 
   final List<PosCartItem> _cart = [];
   List<PosCartItem> get cart => List.unmodifiable(_cart);
@@ -91,6 +83,17 @@ class PosController extends BaseController {
     final list = aggregated.values.toList();
     list.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
     return list;
+  }
+
+  PosController() {
+    _initFromCache();
+  }
+
+  void _initFromCache() {
+    final cached = LocalCacheService.getProducts();
+    if (cached.isNotEmpty) {
+      _products = cached;
+    }
   }
 
   void setCustomerPhone(String phone) {
@@ -189,7 +192,7 @@ class PosController extends BaseController {
       _products = response.data!;
       notifyListeners();
     } else {
-      setError(response.error ?? 'Failed to load products');
+      setError(response.error ?? 'Products load nahi ho sake');
     }
   }
 
@@ -221,12 +224,12 @@ class PosController extends BaseController {
 
   Future<SaleModel?> completeSale() async {
     if (_cart.isEmpty) {
-      setError('Cart is empty. Please scan or add items first.');
+      setError('Bill Cart khali hai, pehle item scan ya add karein');
       return null;
     }
 
     if (_paymentMethod == 'khata' && _customerPhone.trim().length < 10) {
-      setError('A valid 10-digit customer mobile number is required for Khata credit.');
+      setError('Khata (Udhar) ke liye 10-digit customer mobile zaroori hai');
       return null;
     }
 
@@ -264,6 +267,98 @@ class PosController extends BaseController {
       clearCart();
       notifyListeners();
       return fallbackSale;
+    }
+  }
+
+  /// 🖨️ Generate 58mm / 80mm Printable Thermal Receipt PDF Engine
+  Future<void> generateThermalReceiptPdf(BuildContext context, SaleModel sale, String shopName) async {
+    final PosRepository posRepo = PosRepository();
+    if (sale.billNumber != null && sale.billNumber!.isNotEmpty) {
+      try {
+        final res = await posRepo.getReceiptPdfUrl(sale.billNumber!);
+        if (res.success && res.data != null && res.data!.isNotEmpty) {
+          final uri = Uri.parse(res.data!);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Clean 58mm / 80mm Thermal Receipt HTML Print Engine
+    final dateStr = '${sale.createdAt.day}/${sale.createdAt.month}/${sale.createdAt.year} ${sale.createdAt.hour}:${sale.createdAt.minute.toString().padLeft(2, "0")}';
+    String htmlContent = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Thermal Receipt #${sale.billNumber ?? "1001"}</title>
+      <style>
+        body { font-family: 'Courier New', Courier, monospace; width: 280px; margin: 0 auto; padding: 10px; color: #000; }
+        .center { text-align: center; }
+        .bold { font-weight: bold; }
+        .line { border-bottom: 1px dashed #000; margin: 8px 0; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        td { padding: 3px 0; }
+        .right { text-align: right; }
+        .no-print { margin-bottom: 12px; text-align: center; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="no-print">
+        <button onclick="window.print()" style="background:#000;color:#fff;border:none;padding:8px 14px;border-radius:4px;font-weight:bold;cursor:pointer;">🖨️ Print Receipt</button>
+      </div>
+      <div class="center bold" style="font-size: 16px;">$shopName</div>
+      <div class="center" style="font-size: 11px;">RETAIL POS BILL INVOICE</div>
+      <div class="line"></div>
+      <div style="font-size: 11px;">
+        Bill #: ${sale.billNumber ?? "1001"}<br>
+        Date: $dateStr<br>
+        Pay Mode: ${sale.paymentMethod.toUpperCase()}<br>
+        ${sale.customerPhone.isNotEmpty ? "Customer: " + sale.customerPhone + "<br>" : ""}
+      </div>
+      <div class="line"></div>
+      <table>
+        <thead>
+          <tr class="bold">
+            <td style="width:50%;">ITEM</td>
+            <td class="center" style="width:20%;">QTY</td>
+            <td class="right" style="width:30%;">PRICE</td>
+          </tr>
+        </thead>
+        <tbody>
+    ''';
+
+    for (final item in sale.items) {
+      htmlContent += '''
+        <tr>
+          <td>${item.product.name}</td>
+          <td class="center">${item.quantity}</td>
+          <td class="right">₹${item.total.toStringAsFixed(0)}</td>
+        </tr>
+      ''';
+    }
+
+    htmlContent += '''
+        </tbody>
+      </table>
+      <div class="line"></div>
+      <table>
+        <tr><td>Subtotal:</td><td class="right">₹${sale.subtotal.toStringAsFixed(2)}</td></tr>
+        ${sale.discountAmount > 0 ? "<tr><td>Discount:</td><td class=\"right\">-₹" + sale.discountAmount.toStringAsFixed(2) + "</td></tr>" : ""}
+        <tr class="bold" style="font-size: 14px;"><td>TOTAL:</td><td class="right">₹${sale.totalAmount.toStringAsFixed(2)}</td></tr>
+      </table>
+      <div class="line"></div>
+      <div class="center bold" style="font-size: 12px; margin-top: 10px;">THANK YOU! VISIT AGAIN</div>
+    </body>
+    </html>
+    ''';
+
+    final uri = Uri.dataFromString(htmlContent, mimeType: 'text/html', encoding: Encoding.getByName('utf-8'));
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
     }
   }
 }

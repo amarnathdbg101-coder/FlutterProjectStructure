@@ -3,6 +3,7 @@ import '../../../core/network/base_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../../core/utils/image_utils.dart';
+import '../models/bulk_import_result.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
 
@@ -456,6 +457,45 @@ class ProductController extends BaseController {
       _products[index] = product;
       await LocalCacheService.saveProducts(_products);
       notifyListeners();
+    }
+  }
+
+  // --- Bulk Product Import (Excel / CSV) ---
+  bool _isBulkImporting = false;
+  bool get isBulkImporting => _isBulkImporting;
+
+  Future<BulkImportResult?> bulkImportProducts({
+    required List<int> fileBytes,
+    required String fileName,
+    bool updateExisting = true,
+  }) async {
+    _isBulkImporting = true;
+    clearError();
+    notifyListeners();
+
+    try {
+      final res = await _repo.bulkImportProducts(
+        fileBytes: fileBytes,
+        fileName: fileName,
+        updateExisting: updateExisting,
+      );
+
+      _isBulkImporting = false;
+      notifyListeners();
+
+      if (res.success && res.data != null) {
+        // Silently reload product catalog to reflect newly imported items instantly
+        await loadProducts(forceRefresh: true, silent: true);
+        return res.data;
+      } else {
+        setError(res.error ?? 'Failed to import products');
+        return null;
+      }
+    } catch (e) {
+      _isBulkImporting = false;
+      setError(e.toString());
+      notifyListeners();
+      return null;
     }
   }
 }

@@ -290,7 +290,7 @@ class _PosScreenState extends State<PosScreen> {
             const SizedBox(height: 16),
 
             // Share via WhatsApp Button
-            if (sale.customerPhone.trim().length >= 10)
+            if (sale.customerPhone.trim().length >= 10) ...[
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF25D366),
@@ -309,6 +309,22 @@ class _PosScreenState extends State<PosScreen> {
                   }
                 },
               ),
+              const SizedBox(height: 8),
+            ],
+
+            // Print Thermal Receipt PDF Button
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 44),
+              ),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
+              label: const Text('Print / Save Thermal Receipt PDF', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () {
+                final shop = context.read<AuthController>().currentShop;
+                final shopName = shop?.name ?? 'ShopSilo Retail Store';
+                context.read<PosController>().generateThermalReceiptPdf(context, sale, shopName);
+              },
+            ),
           ],
         ),
         actions: [
