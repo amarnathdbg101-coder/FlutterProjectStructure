@@ -1,0 +1,5 @@
+{
+  "name": "frappe",
+  "version": "1.0.0",
+  "description": "Enables remote database interaction, DocType schemas, and ERP synchronization via frappe-cli."
+}

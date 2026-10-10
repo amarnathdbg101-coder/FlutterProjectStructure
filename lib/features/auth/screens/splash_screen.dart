@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/routes/app_router.dart';
 import '../../../core/storage/token_storage.dart';
-import '../controllers/auth_controller.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -22,13 +20,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _checkInitialAuth() async {
     await TokenStorage.init();
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(const Duration(milliseconds: 500));
 
     if (!mounted) return;
 
     if (TokenStorage.hasToken()) {
-      context.read<AuthController>().fetchProfile();
-      context.go(AppRoutes.dashboard);
+      context.go(AppRoutes.merchant);
     } else {
       context.go(AppRoutes.login);
     }
@@ -36,25 +33,56 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.primary,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.bolt_rounded, size: 72, color: Colors.white),
-            SizedBox(height: 16),
-            Text(
-              'Flutter Starter App',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
                 color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.storefront_rounded,
+                size: 48,
+                color: AppColors.primary,
               ),
             ),
-            SizedBox(height: 24),
-            CircularProgressIndicator(
+            const SizedBox(height: 20),
+            const Text(
+              'ShopSilo',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Store POS & Billing OS',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.white70,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 40),
+            const CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+              strokeWidth: 2.5,
             ),
           ],
         ),

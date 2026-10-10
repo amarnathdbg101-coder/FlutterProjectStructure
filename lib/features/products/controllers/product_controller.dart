@@ -1,0 +1,461 @@
+import 'package:image_picker/image_picker.dart';
+import '../../../core/network/base_controller.dart';
+import '../../../core/storage/local_cache_service.dart';
+import '../../../core/storage/token_storage.dart';
+import '../../../core/utils/image_utils.dart';
+import '../models/product_model.dart';
+import '../repositories/product_repository.dart';
+
+/// High-performance, offline-first Product Controller with 0ms load speed.
+/// Uses Stale-While-Revalidate caching, optimistic local updates, and silent background sync.
+class ProductController extends BaseController {
+  final ProductRepository _repo = ProductRepository();
+
+  List<ProductModel> _products = [];
+  List<ProductModel> get products => _products;
+
+  String _searchQuery = '';
+  String _selectedCategory = '';
+
+  String get searchQuery => _searchQuery;
+  String get selectedCategory => _selectedCategory;
+
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+
+  bool _showProfitMargins = TokenStorage.getShowProfitMargins();
+  bool get showProfitMargins => _showProfitMargins;
+
+  Future<void> setShowProfitMargins(bool value) async {
+    _showProfitMargins = value;
+    await TokenStorage.saveShowProfitMargins(value);
+    notifyListeners();
+  }
+
+  ProductController() {
+    _hydrateFromLocalCache();
+  }
+
+  /// Instantaneous 0ms hydration from local persistent storage on startup
+  void _hydrateFromLocalCache() {
+    final cached = LocalCacheService.getProducts();
+    if (cached.isNotEmpty) {
+      _products = cached;
+      notifyListeners();
+    }
+  }
+
+  /// Load products with Stale-While-Revalidate:
+  /// Renders cached products in 0ms, then silently updates from server in background
+  Future<void> loadProducts({
+    String? search,
+    String? category,
+    bool forceRefresh = false,
+    bool silent = false,
+  }) async {
+    if (search != null) _searchQuery = search;
+    if (category != null) _selectedCategory = category;
+
+    final isDefaultView = _searchQuery.isEmpty && _selectedCategory.isEmpty;
+
+    // 1. ALWAYS FIRST LOOK LOCALLY (0ms instant display from local storage/memory)
+    if (_products.isEmpty || (isDefaultView && !forceRefresh)) {
+      final cached = LocalCacheService.getProducts();
+      if (cached.isNotEmpty) {
+        _products = cached;
+      }
+    }
+
+    // Only show a blocking spinner if there is completely NO data to display locally
+    if (_products.isEmpty && !silent) {
+      setLoading(true);
+    } else {
+      _isSyncing = true;
+      notifyListeners();
+    }
+
+    clearError();
+
+    final response = await _repo.getMyProducts(
+      search: _searchQuery,
+      category: _selectedCategory,
+    );
+
+    setLoading(false);
+    _isSyncing = false;
+
+    if (response.success && response.data != null) {
+      _products = response.data!;
+      // Only persist full default catalog to local cache
+      if (isDefaultView) {
+        await LocalCacheService.saveProducts(_products);
+      }
+      notifyListeners();
+    } else {
+      // If network fails but we have cached products, keep them visible for offline usability!
+      if (_products.isEmpty) {
+        setError(response.error ?? 'Failed to load products');
+      } else {
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<List<String>> uploadProductImages(List<XFile> xFiles) async {
+    if (xFiles.isEmpty) return [];
+    setLoading(true);
+    final response = await _repo.uploadProductXFiles(xFiles);
+    setLoading(false);
+    if (response.success && response.data != null) {
+      return response.data!;
+    }
+    setError(response.error ?? 'Failed to upload images');
+    return [];
+  }
+
+  String _slugifyCategory(String category) {
+    final clean = category.trim().toLowerCase();
+    if (clean.contains('kirana') || clean.contains('grocery') || clean.contains('staple')) return 'kirana-grocery';
+    if (clean.contains('dairy') || clean.contains('breakfast') || clean.contains('bakery')) return 'dairy-breakfast';
+    if (clean.contains('snack') || clean.contains('beverage') || clean.contains('drink') || clean.contains('munch')) return 'snacks-beverages';
+    if (clean.contains('fruit') || clean.contains('vegetable') || clean.contains('sabji')) return 'fruits-vegetables';
+    if (clean.contains('personal') || clean.contains('care')) return 'personal-care';
+    if (clean.contains('cleaning') || clean.contains('household')) return 'household-cleaning';
+    if (clean.contains('clothing') || clean.contains('apparel') || clean.contains('fashion')) return 'clothing-apparel';
+    if (clean.contains('footwear') || clean.contains('shoe')) return 'footwear';
+    if (clean.contains('electronic') || clean.contains('mobile') || clean.contains('accessory')) return 'electronics-accessories';
+    if (clean.contains('pharmacy') || clean.contains('health') || clean.contains('medicine')) return 'pharmacy-healthcare';
+    return 'kirana-grocery';
+  }
+
+  /// Add product with 0ms Optimistic UI & Local Storage update, then syncs with database
+  Future<bool> addProduct({
+    required String name,
+    required double price,
+    double costPrice = 0.0,
+    double comparePrice = 0.0,
+    double floorPrice = 0.0,
+    bool allowBargain = false,
+    required int stock,
+    String unit = 'piece',
+    String category = 'General Store',
+    String barcode = '',
+    int lowStockThreshold = 5,
+    String description = '',
+    double weight = 0.0,
+    bool isFeatured = false,
+    List<String> images = const [],
+    Map<String, dynamic> attributes = const {},
+  }) async {
+    clearError();
+
+    final generatedSku = barcode.trim().isNotEmpty
+        ? barcode.trim()
+        : 'SKU${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+
+    // Only include valid HTTP/HTTPS or relative server image URLs in backend API request
+    final validServerImages = images
+        .where((img) => isServerImageUrl(img))
+        .take(4)
+        .toList();
+
+    final catSlug = _slugifyCategory(category);
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+
+    // 1. OPTIMISTIC 0ms LOCAL CREATION
+    final optimisticProduct = ProductModel(
+      id: tempId,
+      name: name.trim(),
+      description: description.trim(),
+      sku: generatedSku,
+      barcode: barcode.trim().isNotEmpty ? barcode.trim() : generatedSku,
+      price: price,
+      costPrice: costPrice,
+      comparePrice: comparePrice,
+      floorPrice: floorPrice,
+      allowBargain: allowBargain,
+      stock: stock,
+      lowStockThreshold: lowStockThreshold,
+      unit: unit,
+      category: category,
+      weight: weight,
+      images: images.isNotEmpty ? images : validServerImages,
+      isActive: true,
+      isFeatured: isFeatured,
+      isPricePublic: true,
+      attributes: attributes,
+    );
+
+    // Immediately insert in memory & write to device storage
+    _products.insert(0, optimisticProduct);
+    await LocalCacheService.saveProducts(_products);
+    notifyListeners();
+
+    // 2. BACKGROUND SERVER SYNC
+    final payload = {
+      'name': name.trim(),
+      'description': description.trim(),
+      'sku': generatedSku,
+      'barcode': barcode.trim().isNotEmpty ? barcode.trim() : generatedSku,
+      'price': price,
+      'cost_price': costPrice,
+      'compare_price': comparePrice,
+      'mrp': comparePrice,
+      'floor_price': floorPrice,
+      'allow_bargain': allowBargain,
+      'stock_quantity': stock,
+      'min_stock': lowStockThreshold,
+      'low_stock_threshold': lowStockThreshold,
+      'unit': unit,
+      'category_id': catSlug,
+      'category': category,
+      'weight': weight,
+      'images': validServerImages,
+      'is_active': true,
+      'is_featured': isFeatured,
+      'is_price_public': true,
+      'attributes': attributes,
+    };
+
+    final response = await _repo.createProduct(payload);
+
+    if (response.success && response.data != null) {
+      // Replace optimistic temporary item with actual DB entity
+      final idx = _products.indexWhere((p) => p.id == tempId);
+      if (idx >= 0) {
+        _products[idx] = response.data!;
+      } else {
+        _products.insert(0, response.data!);
+      }
+      await LocalCacheService.saveProducts(_products);
+      notifyListeners();
+      return true;
+    } else {
+      // Revert optimistic item if backend rejected
+      _products.removeWhere((p) => p.id == tempId);
+      await LocalCacheService.saveProducts(_products);
+      setError(response.error ?? 'Failed to save product. Please check details.');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Edit product with 0ms Optimistic UI & Local Storage update, then syncs with database
+  Future<bool> editProduct(dynamic id, Map<String, dynamic> updateData) async {
+    final targetId = id.toString();
+    clearError();
+
+    // 1. Build sanitized backend payload compliant with Go dto.UpdateProductRequest
+    final payload = <String, dynamic>{};
+
+    if (updateData['name'] != null && updateData['name'].toString().trim().isNotEmpty) {
+      payload['name'] = updateData['name'].toString().trim();
+    }
+    if (updateData['description'] != null) {
+      payload['description'] = updateData['description'].toString().trim();
+    }
+
+    // SKU: Only include if >= 2 characters to satisfy Go validate:"omitempty,min=2,max=100"
+    final rawSku = (updateData['sku'] ?? updateData['barcode'])?.toString().trim() ?? '';
+    if (rawSku.length >= 2) {
+      payload['sku'] = rawSku.toUpperCase();
+    }
+
+    if (updateData['price'] != null) {
+      payload['price'] = (updateData['price'] as num).toDouble();
+    }
+    if (updateData['cost_price'] != null) {
+      payload['cost_price'] = (updateData['cost_price'] as num).toDouble();
+    }
+    if (updateData['compare_price'] != null) {
+      payload['compare_price'] = (updateData['compare_price'] as num).toDouble();
+      payload['mrp'] = (updateData['compare_price'] as num).toDouble();
+    }
+    if (updateData['floor_price'] != null) {
+      payload['floor_price'] = (updateData['floor_price'] as num).toDouble();
+    }
+    if (updateData['allow_bargain'] != null) {
+      payload['allow_bargain'] = updateData['allow_bargain'] == true;
+    }
+
+    // Stock Quantity
+    final stockVal = updateData['stock_quantity'] ?? updateData['stock'];
+    if (stockVal != null) {
+      final s = (stockVal as num).toInt();
+      payload['stock_quantity'] = s >= 0 ? s : 0;
+    }
+
+    // Min Stock / Threshold
+    final minStockVal = updateData['min_stock'] ?? updateData['low_stock_threshold'];
+    if (minStockVal != null) {
+      final m = (minStockVal as num).toInt();
+      payload['min_stock'] = m >= 1 ? m : 1;
+      payload['low_stock_threshold'] = m >= 1 ? m : 1;
+    }
+
+    if (updateData['weight'] != null) {
+      payload['weight'] = (updateData['weight'] as num).toDouble();
+    }
+    if (updateData['is_active'] != null) {
+      payload['is_active'] = updateData['is_active'] == true;
+    }
+    if (updateData['is_featured'] != null) {
+      payload['is_featured'] = updateData['is_featured'] == true;
+    }
+    if (updateData['is_price_public'] != null) {
+      payload['is_price_public'] = updateData['is_price_public'] == true;
+    }
+    if (updateData['attributes'] != null && updateData['attributes'] is Map) {
+      payload['attributes'] = Map<String, dynamic>.from(updateData['attributes'] as Map);
+    }
+
+    // Category
+    if (updateData['category'] != null && updateData['category'].toString().trim().isNotEmpty) {
+      payload['category_id'] = _slugifyCategory(updateData['category'].toString());
+    } else if (updateData['category_id'] != null && updateData['category_id'].toString().trim().isNotEmpty) {
+      payload['category_id'] = updateData['category_id'].toString().trim();
+    }
+
+    // Images: extract clean server URLs (up to 4)
+    if (updateData['images'] != null && updateData['images'] is List) {
+      final rawImages = updateData['images'] as List;
+      final serverUrls = rawImages
+          .map((e) => e.toString().trim())
+          .where((img) => isServerImageUrl(img))
+          .take(4)
+          .toList();
+      payload['images'] = serverUrls;
+    }
+
+    // 2. OPTIMISTIC LOCAL UPDATE (0ms)
+    final index = _products.indexWhere((p) => p.id == id || p.id.toString() == targetId);
+    ProductModel? original;
+    if (index >= 0) {
+      original = _products[index];
+      final newImages = (payload['images'] as List<String>?) ??
+          (updateData['images'] != null ? List<String>.from(updateData['images']) : original.images);
+
+      _products[index] = original.copyWith(
+        name: updateData['name'] ?? original.name,
+        price: updateData['price'] != null ? (updateData['price'] as num).toDouble() : original.price,
+        costPrice: updateData['cost_price'] != null ? (updateData['cost_price'] as num).toDouble() : original.costPrice,
+        comparePrice: updateData['compare_price'] != null ? (updateData['compare_price'] as num).toDouble() : original.comparePrice,
+        floorPrice: updateData['floor_price'] != null ? (updateData['floor_price'] as num).toDouble() : original.floorPrice,
+        allowBargain: updateData['allow_bargain'] ?? original.allowBargain,
+        stock: stockVal != null ? (stockVal as num).toInt() : original.stock,
+        lowStockThreshold: minStockVal != null ? (minStockVal as num).toInt() : original.lowStockThreshold,
+        unit: updateData['unit'] ?? original.unit,
+        category: updateData['category'] ?? original.category,
+        description: updateData['description'] ?? original.description,
+        barcode: updateData['barcode'] ?? original.barcode,
+        sku: rawSku.isNotEmpty ? rawSku.toUpperCase() : original.sku,
+        images: newImages,
+        weight: updateData['weight'] != null ? (updateData['weight'] as num).toDouble() : original.weight,
+        attributes: updateData['attributes'] ?? original.attributes,
+        isActive: updateData['is_active'] ?? original.isActive,
+        isFeatured: updateData['is_featured'] ?? original.isFeatured,
+      );
+      await LocalCacheService.saveProducts(_products);
+      notifyListeners();
+    }
+
+    // 3. BACKGROUND SERVER SYNC
+    final response = await _repo.updateProduct(targetId, payload);
+    if (response.success && response.data != null) {
+      final currentIdx = _products.indexWhere((p) => p.id == id || p.id.toString() == targetId);
+      if (currentIdx >= 0) {
+        _products[currentIdx] = response.data!;
+        await LocalCacheService.saveProducts(_products);
+        notifyListeners();
+      }
+      return true;
+    } else {
+      // Revert if API failed and original existed
+      if (original != null && index >= 0) {
+        _products[index] = original;
+        await LocalCacheService.saveProducts(_products);
+        setError(response.error ?? 'Failed to update product on server');
+        notifyListeners();
+      }
+      return false;
+    }
+  }
+
+  /// Quick stock update with 0ms Optimistic UI & Local Storage update, then syncs with database
+  Future<bool> quickUpdateStock(dynamic id, int newStock) async {
+    if (newStock < 0) return false;
+    final index = _products.indexWhere((p) => p.id == id || p.id.toString() == id.toString());
+    if (index < 0) return false;
+
+    final original = _products[index];
+    final adjustment = newStock - original.stock;
+    if (adjustment == 0) return true;
+
+    // 1. 0ms Optimistic Local Update
+    _products[index] = original.copyWith(stock: newStock);
+    await LocalCacheService.saveProducts(_products);
+    notifyListeners();
+
+    // 2. Sync to Server via inventory adjust
+    final response = await _repo.adjustStock(productId: id, adjustment: adjustment);
+    if (response.success) {
+      return true;
+    } else {
+      // Revert on failure
+      _products[index] = original;
+      await LocalCacheService.saveProducts(_products);
+      setError(response.error ?? 'Failed to update stock on server');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Delete product with 0ms Optimistic UI & Local Storage update, then syncs with database
+  Future<bool> deleteProduct(dynamic id) async {
+    final index = _products.indexWhere((p) => p.id == id);
+    ProductModel? removedItem;
+    if (index >= 0) {
+      removedItem = _products[index];
+      _products.removeAt(index);
+      await LocalCacheService.saveProducts(_products);
+      notifyListeners();
+    }
+
+    final response = await _repo.deleteProduct(id);
+    if (response.success) {
+      return true;
+    } else {
+      // Revert deletion if failed
+      if (removedItem != null && index >= 0) {
+        _products.insert(index, removedItem);
+        await LocalCacheService.saveProducts(_products);
+        notifyListeners();
+      }
+      setError(response.error ?? 'Failed to delete product');
+      return false;
+    }
+  }
+
+  /// Adjust stock with 0ms Optimistic UI & Local Storage update, then syncs with database
+  Future<void> adjustStock(ProductModel product, int adjustment) async {
+    final newStock = product.stock + adjustment;
+    if (newStock < 0) return;
+
+    // 1. OPTIMISTIC 0ms LOCAL UPDATE
+    final index = _products.indexWhere((p) => p.id == product.id);
+    if (index >= 0) {
+      _products[index] = product.copyWith(stock: newStock);
+      await LocalCacheService.saveProducts(_products);
+      notifyListeners();
+    }
+
+    // 2. SERVER SYNC
+    final response = await _repo.adjustStock(productId: product.id, adjustment: adjustment);
+    if (!response.success && index >= 0) {
+      // Revert if API failed
+      _products[index] = product;
+      await LocalCacheService.saveProducts(_products);
+      notifyListeners();
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "architecture-registry",
+  "version": "1.0.0",
+  "description": "Strictly-typed registry for interfaces, dependencies, and contracts to prevent design-to-implementation drift in large projects."
+}

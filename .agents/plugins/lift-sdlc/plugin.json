@@ -1,0 +1,5 @@
+{
+  "name": "lift-sdlc",
+  "version": "1.0.0",
+  "description": "Automates plan → commit → PR → release pipeline directly from Antigravity IDE for DevOps & CI/CD workflows."
+}

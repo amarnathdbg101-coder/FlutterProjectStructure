@@ -1,0 +1,5 @@
+{
+  "name": "agy-hud",
+  "version": "1.0.0",
+  "description": "Displays context usage, token budget, quota, and agent status inside Antigravity IDE to monitor AI performance."
+}

@@ -5,7 +5,6 @@ import '../../features/auth/controllers/auth_controller.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
 import 'app_ui_components.dart';
-import 'language_selector_dialog.dart';
 
 class MerchantDrawer extends StatelessWidget {
   final Function(String shopSlug, String shopName)? onShowQr;
@@ -15,23 +14,9 @@ class MerchantDrawer extends StatelessWidget {
     this.onShowQr,
   });
 
-  void _showLanguageBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => const Padding(
-        padding: EdgeInsets.all(20),
-        child: LanguageSelectorCard(),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authController = context.watch<AuthController>();
-    final langController = context.watch<LanguageController>();
     final user = authController.currentUser;
     final shop = authController.currentShop;
 
@@ -39,12 +24,10 @@ class MerchantDrawer extends StatelessWidget {
     final userEmailPhone = (user?.email.isNotEmpty == true)
         ? user!.email
         : ((user?.phone.isNotEmpty == true) ? user!.phone : 'merchant@shopsilo.in');
-    final shopName = shop?.name ?? 'ShopSilo Store';
-    final shopCategory = shop?.category ?? 'General Retail';
-    final shopSlug = shop?.slug ?? 'store';
-    final isOpen = shop?.isOpen ?? true;
+    final shopName = (shop?.name.isNotEmpty == true) ? shop!.name : 'ShopSilo Store';
 
     return Drawer(
+      backgroundColor: context.colorSurface,
       child: SafeArea(
         child: Column(
           children: [
@@ -52,129 +35,43 @@ class MerchantDrawer extends StatelessWidget {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceSubtle,
+              decoration: BoxDecoration(
+                color: context.colorSurfaceSubtle,
                 border: Border(
-                  bottom: BorderSide(color: AppColors.border, width: 1),
+                  bottom: BorderSide(color: context.colorBorder, width: 1),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: AppColors.primaryLight,
-                        child: Text(
-                          userName.isNotEmpty ? userName[0].toUpperCase() : 'M',
-                          style: const TextStyle(
-                            fontSize: 20,
+                  AppAvatar(
+                    imageUrl: user?.avatarUrl ?? shop?.logoUrl,
+                    name: userName,
+                    radius: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
+                            color: context.colorTextPrimary,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              userName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              userEmailPhone,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.storefront_rounded, size: 16, color: AppColors.primary),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                shopName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                            AppBadge(
-                              label: shopCategory,
-                              type: AppBadgeType.neutral,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Divider(height: 1),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isOpen ? AppColors.success : AppColors.error,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  isOpen ? context.tr('dash_status_open') : context.tr('dash_status_closed'),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: isOpen ? AppColors.success : AppColors.error,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Transform.scale(
-                              scale: 0.75,
-                              child: Switch(
-                                value: isOpen,
-                                activeThumbColor: AppColors.success,
-                                onChanged: (val) {
-                                  authController.toggleShopStatus(val);
-                                },
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 2),
+                        Text(
+                          '$shopName • $userEmailPhone',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colorTextSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -193,10 +90,10 @@ class MerchantDrawer extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
                       child: Text(
                         context.tr('dash_section_actions'),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textMuted,
+                          color: context.colorTextMuted,
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -215,6 +112,14 @@ class MerchantDrawer extends StatelessWidget {
                       onTap: () {
                         Navigator.pop(context);
                         context.go('/merchant/pos');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.history_toggle_off_rounded,
+                      title: context.tr('today_sales_title'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.go('/merchant/today-sales');
                       },
                     ),
                     _DrawerTile(
@@ -241,27 +146,33 @@ class MerchantDrawer extends StatelessWidget {
                         context.go('/merchant/expenses');
                       },
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Divider(height: 16),
-                    ),
                     _DrawerTile(
-                      icon: Icons.qr_code_2_rounded,
-                      title: context.tr('dash_dialog_qr_title'),
+                      icon: Icons.local_offer_rounded,
+                      title: 'Offers & Promotions',
                       onTap: () {
                         Navigator.pop(context);
-                        if (onShowQr != null) {
-                          onShowQr!(shopSlug, shopName);
-                        }
+                        context.go('/merchant/offers');
                       },
                     ),
                     _DrawerTile(
-                      icon: Icons.language_rounded,
-                      title: '${context.tr('settings_language_title')} (${langController.currentLanguage == AppLanguage.hindi ? 'हिन्दी' : 'EN'})',
+                      icon: Icons.insights_rounded,
+                      title: 'Munafa & Analytics',
                       onTap: () {
                         Navigator.pop(context);
-                        _showLanguageBottomSheet(context);
+                        context.go('/merchant/analytics');
                       },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.assignment_rounded,
+                      title: 'Mandi Procurement List',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.go('/merchant/procurement');
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Divider(height: 16, color: context.colorBorder),
                     ),
                     _DrawerTile(
                       icon: Icons.settings_outlined,
@@ -277,12 +188,12 @@ class MerchantDrawer extends StatelessWidget {
             ),
 
             // Logout Button at Bottom
-            const Divider(height: 1),
+            Divider(height: 1, color: context.colorBorder),
             Padding(
               padding: const EdgeInsets.all(12),
               child: ListTile(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                tileColor: AppColors.surfaceSubtle,
+                tileColor: context.colorSurfaceSubtle,
                 leading: const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
                 title: Text(
                   context.tr('btn_logout'),
@@ -325,10 +236,10 @@ class _DrawerTile extends StatelessWidget {
       leading: Icon(icon, color: AppColors.primary, size: 22),
       title: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: context.colorTextPrimary,
         ),
       ),
       dense: true,

@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "path": "plugins/lift-sdlc"
+    },
+    {
+      "path": "plugins/gravity-boots"
+    },
+    {
+      "path": "plugins/agy-hud"
+    },
+    {
+      "path": "plugins/architecture-registry"
+    },
+    {
+      "path": "plugins/vibes-plug"
+    },
+    {
+      "path": "plugins/wakatime"
+    },
+    {
+      "path": "plugins/endor-labs"
+    },
+    {
+      "path": "plugins/frappe"
+    }
+  ]
+}

@@ -1,10 +1,14 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TokenStorage {
-  static const String _keyToken = 'auth_jwt_token';
-  static const String _keyUserId = 'auth_user_id';
-  static const String _keyUserEmail = 'auth_user_email';
-  static const String _keyUserName = 'auth_user_name';
+  static const String _keyToken = 'shopsilo_token';
+  static const String _keyUserJson = 'shopsilo_user';
+  static const String _keyShopJson = 'shopsilo_shop';
+  static const String _keyStaffJson = 'shopsilo_staff';
+  static const String _keyLanguage = 'shopsilo_language';
+  static const String _keyThemeMode = 'shopsilo_theme_mode';
+  static const String _keyShowProfitMargins = 'shopsilo_show_profit_margins';
 
   static SharedPreferences? _prefs;
 
@@ -12,17 +16,61 @@ class TokenStorage {
     _prefs ??= await SharedPreferences.getInstance();
   }
 
+  static Future<void> saveLanguage(String languageCode) async {
+    await init();
+    await _prefs!.setString(_keyLanguage, languageCode);
+  }
+
+  static String getLanguage() {
+    return _prefs?.getString(_keyLanguage) ?? 'en';
+  }
+
+  static Future<void> saveThemeMode(String mode) async {
+    await init();
+    await _prefs!.setString(_keyThemeMode, mode);
+  }
+
+  static String getThemeMode() {
+    return _prefs?.getString(_keyThemeMode) ?? 'system';
+  }
+
+  static Future<void> saveShowProfitMargins(bool show) async {
+    await init();
+    await _prefs!.setBool(_keyShowProfitMargins, show);
+  }
+
+  static bool getShowProfitMargins() {
+    return _prefs?.getBool(_keyShowProfitMargins) ?? true;
+  }
+
   static Future<void> saveSession({
     required String token,
-    String? userId,
-    String? email,
-    String? name,
+    Map<String, dynamic>? user,
+    Map<String, dynamic>? shop,
   }) async {
     await init();
     await _prefs!.setString(_keyToken, token);
-    if (userId != null) await _prefs!.setString(_keyUserId, userId);
-    if (email != null) await _prefs!.setString(_keyUserEmail, email);
-    if (name != null) await _prefs!.setString(_keyUserName, name);
+    if (user != null) {
+      await _prefs!.setString(_keyUserJson, jsonEncode(user));
+    }
+    if (shop != null) {
+      await _prefs!.setString(_keyShopJson, jsonEncode(shop));
+    }
+  }
+
+  static Future<void> saveUser(Map<String, dynamic> user) async {
+    await init();
+    await _prefs!.setString(_keyUserJson, jsonEncode(user));
+  }
+
+  static Future<void> saveShop(Map<String, dynamic> shop) async {
+    await init();
+    await _prefs!.setString(_keyShopJson, jsonEncode(shop));
+  }
+
+  static Future<void> saveStaff(Map<String, dynamic> staff) async {
+    await init();
+    await _prefs!.setString(_keyStaffJson, jsonEncode(staff));
   }
 
   static String? getToken() {
@@ -34,19 +82,41 @@ class TokenStorage {
     return token != null && token.isNotEmpty;
   }
 
-  static String? getUserName() {
-    return _prefs?.getString(_keyUserName);
+  static Map<String, dynamic>? getUser() {
+    final jsonStr = _prefs?.getString(_keyUserJson);
+    if (jsonStr == null) return null;
+    try {
+      return jsonDecode(jsonStr) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
-  static String? getUserEmail() {
-    return _prefs?.getString(_keyUserEmail);
+  static Map<String, dynamic>? getShop() {
+    final jsonStr = _prefs?.getString(_keyShopJson);
+    if (jsonStr == null) return null;
+    try {
+      return jsonDecode(jsonStr) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, dynamic>? getStaff() {
+    final jsonStr = _prefs?.getString(_keyStaffJson);
+    if (jsonStr == null) return null;
+    try {
+      return jsonDecode(jsonStr) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<void> clearSession() async {
     await init();
     await _prefs!.remove(_keyToken);
-    await _prefs!.remove(_keyUserId);
-    await _prefs!.remove(_keyUserEmail);
-    await _prefs!.remove(_keyUserName);
+    await _prefs!.remove(_keyUserJson);
+    await _prefs!.remove(_keyShopJson);
+    await _prefs!.remove(_keyStaffJson);
   }
 }
