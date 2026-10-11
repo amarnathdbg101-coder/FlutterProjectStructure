@@ -99,6 +99,7 @@ class ApiConstants {
 
   // --- 10. Counter POS Billing (Shop) ---
   static const String posSale = '/shops/me/pos/sale';
+  static const String posSales = '/shops/me/pos/sales';
   static String posCancelBill(String billNumber) => '/shops/me/pos/sales/$billNumber/cancel';
   static const String posDailySummary = '/shops/me/pos/daily-summary';
   static const String posSummary = '/shops/me/pos/summary';

@@ -49,21 +49,25 @@ class PosController extends BaseController {
     return diff > 0 ? diff : 0.0;
   }
 
+  List<SaleModel> _serverSales = [];
+  List<SaleModel> get serverSales => _serverSales;
+
   /// 24-Hour Sales Analytics Summary (Products Sold in last 24 hours)
   double get today24hRevenue {
-    final sales24h = LocalCacheService.get24HourSales();
-    return sales24h.fold(0.0, (sum, s) => sum + s.totalAmount);
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
+    return sales.fold(0.0, (sum, s) => sum + s.totalAmount);
   }
 
   int get today24hBillCount {
-    return LocalCacheService.get24HourSales().length;
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
+    return sales.length;
   }
 
   List<Map<String, dynamic>> get24HourSoldProductsSummary() {
-    final sales24h = LocalCacheService.get24HourSales();
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
     final Map<String, Map<String, dynamic>> aggregated = {};
 
-    for (final sale in sales24h) {
+    for (final sale in sales) {
       for (final item in sale.items) {
         final name = item.product.name.trim().isNotEmpty ? item.product.name.trim() : 'Product';
         if (aggregated.containsKey(name)) {
@@ -87,6 +91,8 @@ class PosController extends BaseController {
 
   PosController() {
     _initFromCache();
+    loadCatalog();
+    fetchBackendSales();
   }
 
   void _initFromCache() {
@@ -94,6 +100,35 @@ class PosController extends BaseController {
     if (cached.isNotEmpty) {
       _products = cached;
     }
+    final cachedSales = LocalCacheService.get24HourSales();
+    if (cachedSales.isNotEmpty) {
+      _serverSales = cachedSales;
+    }
+  }
+
+  /// Proactively loads catalog products for zero-lag POS search & barcode lookup
+  Future<void> loadCatalog({bool forceRefresh = false}) async {
+    if (_products.isNotEmpty && !forceRefresh) return;
+    try {
+      final res = await _repo.searchProducts('');
+      if (res.success && res.data != null && res.data!.isNotEmpty) {
+        _products = res.data!;
+        await LocalCacheService.saveProducts(_products);
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  /// Fetches confirmed PostgreSQL sales for live reports and Today's Sales Screen
+  Future<void> fetchBackendSales({String date = 'today'}) async {
+    try {
+      final res = await _repo.getSales(date: date);
+      if (res.success && res.data != null) {
+        _serverSales = res.data!;
+        await LocalCacheService.saveSalesList(_serverSales);
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   void setCustomerPhone(String phone) {
@@ -224,12 +259,12 @@ class PosController extends BaseController {
 
   Future<SaleModel?> completeSale() async {
     if (_cart.isEmpty) {
-      setError('Bill Cart khali hai, pehle item scan ya add karein');
+      setError('Bill Cart is empty, please scan or add items first');
       return null;
     }
 
     if (_paymentMethod == 'khata' && _customerPhone.trim().length < 10) {
-      setError('Khata (Udhar) ke liye 10-digit customer mobile zaroori hai');
+      setError('10-digit customer mobile required for credit (khata) billing');
       return null;
     }
 
@@ -247,26 +282,17 @@ class PosController extends BaseController {
     if (response.success && response.data != null) {
       _lastCompletedSale = response.data;
       await LocalCacheService.saveCompletedSale(_lastCompletedSale!);
+      _serverSales.insert(0, _lastCompletedSale!);
       clearCart();
+      fetchBackendSales();
       notifyListeners();
       return _lastCompletedSale;
     } else {
-      // Local optimistic sale completed fallback
-      final fallbackSale = SaleModel(
-        billNumber: '100${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-        customerPhone: _customerPhone,
-        items: List.from(_cart),
-        subtotal: subtotal,
-        discountAmount: _discount,
-        totalAmount: grandTotal,
-        paymentMethod: _paymentMethod,
-        createdAt: DateTime.now(),
-      );
-      _lastCompletedSale = fallbackSale;
-      await LocalCacheService.saveCompletedSale(fallbackSale);
-      clearCart();
+      setError((response.message != null && response.message!.isNotEmpty)
+          ? response.message!
+          : 'Failed to record bill on server');
       notifyListeners();
-      return fallbackSale;
+      return null;
     }
   }
 

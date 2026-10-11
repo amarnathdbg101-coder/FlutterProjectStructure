@@ -434,6 +434,18 @@ class LocalCacheService {
     return [];
   }
 
+  /// Save full list of sales fetched from backend
+  static Future<void> saveSalesList(List<SaleModel> sales) async {
+    try {
+      _memorySalesHistory = List<SaleModel>.from(sales);
+      await init();
+      final listJson = jsonEncode(sales.map((s) => s.toJson()).toList());
+      await _prefs!.setString(_keySalesHistory, listJson);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving sales list: $e');
+    }
+  }
+
   /// Get sales completed within the last 24 hours
   static List<SaleModel> get24HourSales() {
     final history = getSalesHistory();

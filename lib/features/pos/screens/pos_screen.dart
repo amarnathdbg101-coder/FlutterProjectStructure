@@ -1066,6 +1066,14 @@ class _PosScreenState extends State<PosScreen> {
                     if (sale != null && context.mounted) {
                       _cashController.clear();
                       _showSuccessReceipt(context, sale);
+                    } else if (context.mounted && pos.hasError) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(pos.errorMessage ?? 'Sale generation failed'),
+                          backgroundColor: AppColors.error,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
                     }
                   },
             child: pos.isLoading

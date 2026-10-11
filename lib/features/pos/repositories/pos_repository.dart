@@ -37,12 +37,38 @@ class PosRepository {
 
   Future<ApiResponse<ProductModel>> scanBarcode(String code) async {
     try {
-      final res = await _dio.get('${ApiConstants.scanBarcode}/$code');
+      final cleanCode = code.trim();
+      // 1. Query shop's own SKU/Barcode scanner endpoint
+      final res = await _dio.get(ApiConstants.posScanSku(cleanCode));
       final raw = res.data;
-      Map<String, dynamic> item = raw is Map<String, dynamic> ? (raw['product'] ?? raw['data'] ?? raw) : {};
-      return ApiResponse(success: true, data: ProductModel.fromJson(item));
-    } catch (e) {
-      return ApiResponse.failure(ApiClient.handleError(e));
+      Map<String, dynamic> item = {};
+      if (raw is Map<String, dynamic>) {
+        if (raw['data'] is Map<String, dynamic>) {
+          final d = raw['data'] as Map<String, dynamic>;
+          item = d['product'] is Map<String, dynamic> ? d['product'] as Map<String, dynamic> : d;
+        } else if (raw['product'] is Map<String, dynamic>) {
+          item = raw['product'] as Map<String, dynamic>;
+        } else {
+          item = raw;
+        }
+      }
+      if (item.isNotEmpty && item['name'] != null) {
+        return ApiResponse(success: true, data: ProductModel.fromJson(item));
+      }
+      return ApiResponse.failure('Product not found');
+    } catch (_) {
+      try {
+        // 2. Fallback to general barcode database
+        final res = await _dio.get('${ApiConstants.scanBarcode}/${code.trim()}');
+        final raw = res.data;
+        Map<String, dynamic> item = raw is Map<String, dynamic> ? (raw['product'] ?? raw['data'] ?? raw) : {};
+        if (item.isNotEmpty && item['name'] != null) {
+          return ApiResponse(success: true, data: ProductModel.fromJson(item));
+        }
+      } catch (e2) {
+        return ApiResponse.failure(ApiClient.handleError(e2));
+      }
+      return ApiResponse.failure('Product not found in inventory');
     }
   }
 
@@ -62,8 +88,53 @@ class PosRepository {
 
       final res = await _dio.post(ApiConstants.posSale, data: payload);
       final raw = res.data;
-      Map<String, dynamic> billData = raw is Map<String, dynamic> ? (raw['bill'] ?? raw['data'] ?? raw) : {};
+      Map<String, dynamic> billData = {};
+      if (raw is Map<String, dynamic>) {
+        if (raw['bill'] is Map<String, dynamic>) {
+          billData = raw['bill'] as Map<String, dynamic>;
+        } else if (raw['data'] is Map<String, dynamic>) {
+          final d = raw['data'] as Map<String, dynamic>;
+          billData = (d['bill'] is Map<String, dynamic>) ? d['bill'] as Map<String, dynamic> : d;
+        } else {
+          billData = raw;
+        }
+      }
       return ApiResponse(success: true, data: SaleModel.fromJson(billData));
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  // --- Get Sales History from PostgreSQL ---
+  Future<ApiResponse<List<SaleModel>>> getSales({int page = 1, int limit = 50, String date = ''}) async {
+    try {
+      final res = await _dio.get(
+        ApiConstants.posSales,
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+          if (date.isNotEmpty) 'date': date,
+        },
+      );
+      final raw = res.data;
+      List billsList = [];
+      if (raw is Map<String, dynamic>) {
+        if (raw['data'] is Map<String, dynamic> && (raw['data'] as Map<String, dynamic>)['bills'] is List) {
+          billsList = (raw['data'] as Map<String, dynamic>)['bills'] as List;
+        } else if (raw['bills'] is List) {
+          billsList = raw['bills'] as List;
+        } else if (raw['data'] is List) {
+          billsList = raw['data'] as List;
+        }
+      } else if (raw is List) {
+        billsList = raw;
+      }
+
+      final sales = billsList
+          .whereType<Map>()
+          .map((e) => SaleModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+      return ApiResponse(success: true, data: sales);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }

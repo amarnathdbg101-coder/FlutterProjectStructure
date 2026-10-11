@@ -19,10 +19,18 @@ class TodaySalesScreen extends StatefulWidget {
 
 class _TodaySalesScreenState extends State<TodaySalesScreen> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<PosController>().fetchBackendSales();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pos = context.watch<PosController>();
     final soldProducts = pos.get24HourSoldProductsSummary();
-    final recentSales = LocalCacheService.get24HourSales();
+    final recentSales = pos.serverSales.isNotEmpty ? pos.serverSales : LocalCacheService.get24HourSales();
     final totalRevenue = pos.today24hRevenue;
     final totalBills = pos.today24hBillCount;
 
@@ -79,7 +87,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
       child: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            setState(() {});
+            await context.read<PosController>().fetchBackendSales();
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -254,7 +262,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                         type: AppBadgeType.success,
                       ),
                     ),
-                    ...recentSales.reversed.take(15).map((sale) => _buildSaleBillTile(context, sale)),
+                    ...(List<SaleModel>.from(recentSales)..sort((a, b) => b.createdAt.compareTo(a.createdAt))).take(30).map((sale) => _buildSaleBillTile(context, sale)),
                   ],
 
                   const SizedBox(height: 32),

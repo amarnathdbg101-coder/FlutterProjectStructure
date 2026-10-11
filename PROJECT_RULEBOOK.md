@@ -268,6 +268,11 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - **React Customer Web App (`CustomerFrontend`)**: Upgraded `StorefrontScreen.jsx` & `ExploreShopsScreen.jsx` with Stale-While-Revalidate (SWR) local caching strategy (`localCache.get`). Products render IN 0 MILLISECONDS INSTANTLY from local memory without blocking loading spinners, followed by silent background revalidation.
   - **Flutter App (`ProductController.dart`)**: Smart diffing added to `ProductController.loadProducts`. Skips unnecessary `notifyListeners()` state updates and image widget re-renders if server response matches existing in-memory products list.
 - **[2026-10-11]**: Cleaned Up Customer Web App Home Layout (`ExploreShopsScreen.jsx`): Removed duplicate 2x2 Quick Feature Grid (Instant Pickup, Local Shops, Mera Khata, Live Deals) from main dashboard body (keeping them in top navigation and side menu), and removed duplicate horizontal category pills row, leaving a single clean 44+ Category Explorer Header Card.
+- **[2026-10-11]**: Cleaned Up Customer Profile Page (`CustomerProfileScreen.jsx`): Removed 4 duplicate tile cards ('Start Selling', 'My Khata', 'My Store Pickups', 'Explore Neighborhood') to eliminate duplication, leaving a clean customer user profile card, theme/language preferences bar, and sign out button.
+- **[2026-10-11]**: Ultra-Compact & Streamlined Customer Dashboard Layout (`ExploreShopsScreen.jsx`):
+  - Merged GPS Location & Distance Radius into a single 28px 1-line control bar (`Location Name` + `Radius: 3 km ▾`), saving 40px vertical height.
+  - Merged Category Filter into a sleek 36px 1-line bar (`Folder` icon + `Selected Category` + `44+ Categories ▾`), saving 30px vertical height.
+  - Scale-tuned Promo Banner cards (`padding: 12px 14px`), bringing Products & Local Shops marketplace feeds directly above the fold on mobile screens.
 - **[2026-10-11]**: Bulletproof Bulk Import Engine & Zero-Crash Flutter Architecture (GoBackend & Flutter Frontend):
   - **Zero App Restarts & Platform Stability (Flutter)**:
     - Removed `android:taskAffinity=""` from `MainActivity` in `android/app/src/main/AndroidManifest.xml`. Prevents Android OS from isolating or destroying the MainActivity task when launching the system SAF Document/File Picker, eliminating random app restarts and cold splash screen resets.
@@ -281,3 +286,21 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - Added dynamic Brand and custom Attribute detection (`Attribute X Name`, `Attribute X Value`) to automatically enrich product descriptions (`Brand: VIM | Weight: 200g x 3 | Fragrance: Lemon`).
     - Added multipart boundary recovery fallback in `ProductController.BulkImport` to seamlessly recover uploaded files even if client headers are omitted.
     - Added automated Go unit test `TestParseRecordsToImportItems_UserCSV` in `services` verifying 100% precision on multi-attribute retail CSVs.
+- **[2026-10-11]**: End-to-End POS Counter Billing Engine Overhaul, Zero Silent Crashes & Real-Time Database Synchronization (GoBackend & Flutter Frontend):
+  - **Database Schema Healing & Migration (`000014_add_pos_bills_extended_columns.up.sql`)**:
+    - Discovered missing columns in `pos_bills` (`customer_user_id`, `subtotal`, `discount_amount`, `total_cost`, `cash_amount`, `online_amount`, `khata_amount`, `cancellation_reason`, `cancelled_at`) and `pos_bill_items` (`product_sku`, `unit_cost`).
+    - Added automated schema reconciliation in `internal/migration/migration.go` (`EnsureSchemaColumns`) and created standard migrations 000014 up/down so PostgreSQL tables always match repository SQL queries.
+  - **Loose & Custom Item Billing Support (GoBackend)**:
+    - Relaxed `POSSaleItemRequest` validation (`ProductID` optional `omitempty`, added `Name` and `UnitPrice`).
+    - Updated `normalizePOSItems` and `CreateSale` in `services/pos.go` to support walk-in loose charges (e.g. "Loose Samosa", "Packing Charge", custom ₹ amounts) without requiring catalog UUIDs.
+    - Updated `repository/pos.go`: binds `nil` for custom item product ID so PostgreSQL inserts valid `NULL` into UUID column without syntax errors, and selectively queues `stockDeductQuery` only for catalog items, keeping the pgx batch network round-trip perfectly synchronized.
+    - Prevented counter cashier lockout: physical counter walk-in sales are no longer blocked when recorded inventory is 0, allowing instant checkout while inventory updates safely with `GREATEST(0, quantity - $1)`.
+  - **Live PostgreSQL Sales Listing (`GET /shops/me/pos/sales`)**:
+    - Implemented `ListBills` in `POSRepo` with single-query JSON item aggregation (`json_agg`), date filtering, and today's summary metrics.
+    - Added `ListSales` in `POSController` and mounted `/shops/me/pos/sales` in `router.go`.
+  - **Flutter POS Client Architecture & Error Transparency (`Frontend`)**:
+    - Fixed response parsing in `SaleModel.fromJson`: handles nested `{ "data": { "bill": { ... } } }` responses, preventing empty bill numbers, zero total amounts, or missing items.
+    - Eradicated fake local fallback in `PosController.completeSale`: transparently returns real server errors so cashiers get immediate actionable feedback (e.g. loss prevention warnings or missing phone for credit) instead of faking success while PostgreSQL remains untouched.
+    - Upgraded `pos_repository.dart`: `scanBarcode` now prioritizes `/shops/me/pos/scan/$sku` for instant inventory lookup before falling back to global catalog. Added `getSales` for live history.
+    - Instant Catalog Pre-Loading: `PosController.loadCatalog()` ensures autocomplete search and SKU scanning work immediately upon opening POS even before navigating to inventory.
+    - Upgraded `TodaySalesScreen`: fetches live sales from PostgreSQL on screen open (`initState`) and pull-to-refresh (`onRefresh`), sorting newest bills at the top with 100% database parity.
