@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_project_structure/core/theme/app_theme.dart';
 import 'package:flutter_project_structure/core/localization/app_translations.dart';
 import 'package:flutter_project_structure/core/localization/language_controller.dart';
 import 'package:flutter_project_structure/features/khata/models/khata_model.dart';
@@ -216,6 +218,30 @@ void main() {
       await TokenStorage.clearSession();
       expect(TokenStorage.getLastRoute(), isNull);
       expect(TokenStorage.getActiveTabIndex(), 0);
+    });
+  });
+
+  group('8. App Theme & Button Layout Integrity Tests', () {
+    testWidgets('ElevatedButton inside Row layouts with bounded width and zero assertions', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          home: Scaffold(
+            body: Row(
+              children: [
+                ElevatedButton(
+                  onPressed: () {},
+                  child: const Text('Test Button'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Test Button'), findsOneWidget);
     });
   });
 }

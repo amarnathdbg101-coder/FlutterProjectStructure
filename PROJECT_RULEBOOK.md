@@ -295,6 +295,10 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - Updated `ProductCard.jsx`, `StorefrontScreen.jsx`, and `ProductDetailModal.jsx` to remove the redundant 'Reserve for Pickup' button option completely as requested.
   - Replaced double buttons with a single, high-contrast 'Add to Cart' primary CTA button, making product interactions 100% clean and straightforward.
 - **[2026-10-11]**: Production Asset Hash Cache Invalidation (`localCache.js`): Added automatic version key migration (`v2.2_build_20261011`) in `localCache.js`. Automatically purges stale browser localStorage entries on new deployments, guaranteeing instant reflection of fresh JS/CSS bundles without manual browser cache clearing.
+- **[2026-10-11]**: End-to-End Customer Reservation Data Extraction & Status Alignment (GoBackend & Shop Operations Repository):
+  - Fixed SQL JSON Extraction in `ShopOperationsRepository.listReservations`: Updated JSON response parser to unwrap `raw['data']['reservations']`, enabling the Flutter Merchant OS App to receive reservation records from GoBackend.
+  - Enriched GoBackend `FindByShopID` Query (`repository/reservation.go`): Joined `users u` on `r.user_id = u.id` to extract real `customer_name` and `customer_phone`, and normalized status matching for `('active' OR 'pending')`.
+  - Added `resCtrl.loadReservations(silent: true)` in `DataSyncService` background pre-fetch, ensuring incoming customer pickup orders automatically load in background on app launch and sync.
 - **[2026-10-11]**: Eradicated Bottom Sheet Render Box Layout Freeze (`khata_screen.dart`):
   - Removed unconstrained `Align` container wrapper inside `showModalBottomSheet.builder`.
   - Wrapped bottom sheet container in `Material(color: Colors.transparent)` to provide explicit Material layout boundaries for text fields, choice chips, and buttons during soft keyboard animation transitions, permanently fixing layout freeze when opening Khata transaction modal.
@@ -379,6 +383,24 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - Added `AutomaticKeepAliveClientMixin` with `wantKeepAlive => true` to `PosScreen`, `InventoryScreen`, `KhataScreen`, `ExpenseScreen`, `DashboardScreen`, and `ProfileScreen`. POS cart, active billing items, search queries, customer phone numbers, stock filters, and scroll positions are permanently preserved during tab switches.
     - Active Route & Tab Persistence: Added `TokenStorage.saveLastRoute`, `TokenStorage.getLastRoute`, `TokenStorage.saveActiveTabIndex`, and `TokenStorage.getActiveTabIndex`. Navigation taps in `MerchantShell` and `MerchantDrawer` persist the active route.
     - `SplashScreen` Session Resumption: When returning to or reopening the merchant app, `SplashScreen` restores the exact screen the merchant was on (`lastRoute`) instead of unconditionally booting them back to the dashboard (`/merchant`).
+- **[2026-10-11]**: Root Resolution for `BoxConstraints forces an infinite width` Exception in Credit (Khata) & Global App Theme:
+  - **Issue Reported**: Tapping "Record Entry" (`_showAddTransactionModal`) in Khata (Credit) section crashed the Flutter rendering pipeline with `BoxConstraints forces an infinite width (BoxConstraints(w=Infinity, 50.0<=h<=Infinity))` on `ElevatedButton: .../khata_screen.dart`, leaving the screen dimmed and frozen.
+  - **Root Cause Deep Dive**:
+    1. In `lib/core/theme/app_theme.dart`, `ElevatedButtonThemeData` in both light and dark themes was defined with `minimumSize: const Size(double.infinity, 50)`.
+    2. In `khata_screen.dart`, the modal footer rendered action buttons inside an unconstrained `Row` (`Row(mainAxisAlignment: MainAxisAlignment.end, children: [TextButton(...), ElevatedButton(...)])`).
+    3. Because `ElevatedButton`'s local `styleFrom()` did not override `minimumSize`, it inherited `minimumSize.width = double.infinity` from the global theme.
+    4. When placed in an unconstrained horizontal flex (`Row`), Flutter computed `additionalConstraints: BoxConstraints(w=Infinity, 50.0<=h<=Infinity)`. Flutter strictly forbids `w=Infinity` on `RenderPhysicalShape`, triggering the fatal assertion and crashing the bottom sheet layout tree.
+  - **Comprehensive Architectural Fix**:
+    1. **Global App Theme Modernization (`lib/core/theme/app_theme.dart`)**:
+       - Updated `elevatedButtonTheme` in both light and dark themes to `minimumSize: const Size(64, 50)` (standard Material design minimum width 64).
+       - Prevented any other dialog, sheet, or widget across the entire application from inadvertently inheriting infinite width in horizontal layouts.
+    2. **Khata Screen Action Buttons & Sheet Responsiveness (`lib/features/khata/screens/khata_screen.dart`)**:
+       - Upgraded `_showAddTransactionModal` action buttons to balanced `Expanded` widgets (`OutlinedButton` + `ElevatedButton`) with explicit `minimumSize: const Size(0, 48)` and rounded 12px corners, ensuring guaranteed bounded constraints on all device form factors.
+       - Upgraded bottom sheet layout to be keyboard-reactive: wrapped in `Padding(padding: EdgeInsets.only(bottom: keyboardHeight))` with dynamic `availableHeight` clamping (`(availableHeight * 0.88).clamp(380.0, 720.0)`), keeping form fields, preset chips, and action buttons comfortably in view when the software keyboard opens.
+       - Upgraded `_showSetCreditLimitDialog` and `_showReverseTransactionDialog` button rows with explicit bounded `minimumSize: const Size(90, 42)` constraints.
+    3. **Automated Regression Suite (`test/features_test.dart`)**:
+       - Added group 8 widget test verifying `ElevatedButton` rendering inside unconstrained `Row` widgets with `AppTheme.lightTheme` and `AppTheme.darkTheme`, guaranteeing zero assertion exceptions.
+
 
 
 

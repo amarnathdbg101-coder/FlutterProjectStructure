@@ -541,88 +541,107 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
 
           // Action Buttons Footer
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.max,
             children: [
-              TextButton(
-                onPressed: isSaving ? null : () => Navigator.pop(ctx),
-                child: Text(context.tr('btn_cancel')),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.border),
+                  ),
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                  child: Text(
+                    context.tr('btn_cancel'),
+                    style: TextStyle(
+                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: currentIsCredit ? AppColors.error : AppColors.success,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        final amount = double.tryParse(amountCtrl.text) ?? 0.0;
-                        final name = nameCtrl.text.trim();
-                        final phone = phoneCtrl.text.trim();
-                        final cleanPhone = KhataRepository.normalizePhone(phone);
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    backgroundColor: currentIsCredit ? AppColors.error : AppColors.success,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final amount = double.tryParse(amountCtrl.text) ?? 0.0;
+                          final name = nameCtrl.text.trim();
+                          final phone = phoneCtrl.text.trim();
+                          final cleanPhone = KhataRepository.normalizePhone(phone);
 
-                        if (amount <= 0 || name.isEmpty || cleanPhone.length < 10) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(cleanPhone.length < 10 && phone.isNotEmpty
-                                  ? 'Please enter a valid 10-digit mobile number'
-                                  : context.tr('inv_val_required')),
-                              backgroundColor: AppColors.error,
-                            ),
-                          );
-                          return;
-                        }
-
-                        setModalState(() => isSaving = true);
-
-                        final bool success;
-                        if (currentIsCredit) {
-                          success = await khataController.addCredit(
-                            customerName: name,
-                            mobile: cleanPhone,
-                            amount: amount,
-                            notes: notesCtrl.text.trim(),
-                            billNumber: billNoCtrl.text.trim(),
-                          );
-                        } else {
-                          success = await khataController.addPayment(
-                            customerName: name,
-                            mobile: cleanPhone,
-                            amount: amount,
-                            paymentMode: paymentMode,
-                            notes: notesCtrl.text.trim(),
-                          );
-                        }
-
-                        if (ctx.mounted) {
-                          setModalState(() => isSaving = false);
-                          if (success) {
-                            Navigator.pop(ctx);
+                          if (amount <= 0 || name.isEmpty || cleanPhone.length < 10) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(context.tr('khata_toast_saved')),
-                                backgroundColor: AppColors.success,
+                                content: Text(cleanPhone.length < 10 && phone.isNotEmpty
+                                    ? 'Please enter a valid 10-digit mobile number'
+                                    : context.tr('inv_val_required')),
+                                backgroundColor: AppColors.error,
                               ),
+                            );
+                            return;
+                          }
+
+                          setModalState(() => isSaving = true);
+
+                          final bool success;
+                          if (currentIsCredit) {
+                            success = await khataController.addCredit(
+                              customerName: name,
+                              mobile: cleanPhone,
+                              amount: amount,
+                              notes: notesCtrl.text.trim(),
+                              billNumber: billNoCtrl.text.trim(),
                             );
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(khataController.errorMessage ?? 'Failed to save khata entry'),
-                                backgroundColor: AppColors.error,
-                                duration: const Duration(seconds: 4),
-                              ),
+                            success = await khataController.addPayment(
+                              customerName: name,
+                              mobile: cleanPhone,
+                              amount: amount,
+                              paymentMode: paymentMode,
+                              notes: notesCtrl.text.trim(),
                             );
                           }
-                        }
-                      },
-                child: isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text(context.tr('btn_save')),
+
+                          if (ctx.mounted) {
+                            setModalState(() => isSaving = false);
+                            if (success) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(context.tr('khata_toast_saved')),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(khataController.errorMessage ?? 'Failed to save khata entry'),
+                                  backgroundColor: AppColors.error,
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          context.tr('btn_save'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                ),
               ),
             ],
           ),
@@ -639,26 +658,25 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
           final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
           final keyboardHeight = MediaQuery.of(sheetCtx).viewInsets.bottom;
           final screenHeight = MediaQuery.of(sheetCtx).size.height;
-          final modalHeight = (screenHeight * 0.85).clamp(480.0, 720.0);
+          final availableHeight = (screenHeight - keyboardHeight).clamp(380.0, screenHeight);
+          final modalHeight = (availableHeight * 0.88).clamp(380.0, 720.0);
 
-          return Align(
-            alignment: Alignment.bottomCenter,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                height: modalHeight,
-                constraints: const BoxConstraints(maxWidth: 580),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : Colors.white,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          return Padding(
+            padding: EdgeInsets.only(bottom: keyboardHeight),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  height: modalHeight,
+                  constraints: const BoxConstraints(maxWidth: 580),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkSurface : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: buildFormContent(sheetCtx, setModalState),
                 ),
-                padding: EdgeInsets.only(
-                  bottom: keyboardHeight > 0 ? keyboardHeight + 12 : 20,
-                  top: 16,
-                  left: 20,
-                  right: 20,
-                ),
-                child: buildFormContent(sheetCtx, setModalState),
               ),
             ),
           );
@@ -757,11 +775,16 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
+                      style: TextButton.styleFrom(minimumSize: const Size(70, 42)),
                       onPressed: () => Navigator.pop(ctx),
                       child: Text(context.tr('btn_cancel')),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(90, 42),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                       onPressed: () async {
                         final newLimit = double.tryParse(limitCtrl.text) ?? 10000.0;
                         final ok = await context
@@ -845,12 +868,17 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
+                      style: TextButton.styleFrom(minimumSize: const Size(70, 42)),
                       onPressed: () => Navigator.pop(ctx),
                       child: Text(context.tr('btn_cancel')),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        minimumSize: const Size(90, 42),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                       onPressed: () async {
                         final ok = await context.read<KhataController>().reverseTransaction(
                               khataId,
