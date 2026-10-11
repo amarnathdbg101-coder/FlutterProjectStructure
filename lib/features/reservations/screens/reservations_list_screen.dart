@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/date_time_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_drawer.dart';
@@ -447,6 +448,41 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
                 ],
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+
+          // Date & Expiration Time Strip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.access_time_rounded, size: 13, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                const SizedBox(width: 5),
+                Text(
+                  'Booked: ${AppDateTimeUtils.formatDateTime(r.createdAt)}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                  ),
+                ),
+                const Spacer(),
+                if (r.expiresAt != null) ...[
+                  Text(
+                    'Pickup by: ${AppDateTimeUtils.formatTime(r.expiresAt)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: r.isPending ? AppColors.warning : (isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
           const SizedBox(height: 12),
 

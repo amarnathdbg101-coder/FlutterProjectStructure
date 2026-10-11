@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/utils/date_time_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
@@ -276,7 +277,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
   }
 
   Widget _buildSaleBillTile(BuildContext context, SaleModel sale) {
-    final timeStr = '${sale.createdAt.hour.toString().padLeft(2, '0')}:${sale.createdAt.minute.toString().padLeft(2, '0')}';
+    final timeStr = AppDateTimeUtils.formatTime(sale.createdAt);
     final isCash = sale.paymentMethod.toLowerCase() == 'cash';
     final isUpi = sale.paymentMethod.toLowerCase() == 'upi';
 

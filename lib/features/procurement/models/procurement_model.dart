@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_utils.dart';
+
 class ProcurementItemModel {
   final String id;
   final String name;
@@ -46,9 +48,7 @@ class ProcurementItemModel {
       dealerPhone: json['dealer_phone']?.toString() ?? '',
       notes: json['notes']?.toString() ?? '',
       isCompleted: json['is_completed'] ?? json['completed'] ?? false,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: AppDateTimeUtils.parseToLocal(json['created_at']),
     );
   }
 

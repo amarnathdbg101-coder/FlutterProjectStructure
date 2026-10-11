@@ -778,26 +778,65 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                 ),
                 const SizedBox(height: 8),
 
-                // Auto-Generate GPS / Default Pin Button
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                // Quick Location & Distance Presets
+                Text(
+                  'Quick GPS Location Presets:',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: ctx.colorTextSecondary),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
+                      label: const Text('Darbhanga Suburbs (7km)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        setSheetState(() {
+                          latCtrl.text = '26.1050';
+                          lngCtrl.text = '85.9200';
+                          cityCtrl.text = 'darbhanga';
+                          mapsUrlCtrl.text = 'https://maps.google.com/?q=26.1050,85.9200';
+                        });
+                      },
                     ),
-                    icon: const Icon(Icons.my_location_rounded, size: 16),
-                    label: const Text('Auto-Generate Map Link & Pin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    onPressed: () {
-                      final lat = double.tryParse(latCtrl.text) ?? 25.5941;
-                      final lng = double.tryParse(lngCtrl.text) ?? 85.1376;
-                      latCtrl.text = lat.toStringAsFixed(4);
-                      lngCtrl.text = lng.toStringAsFixed(4);
-                      mapsUrlCtrl.text = 'https://maps.google.com/?q=$lat,$lng';
-                      setSheetState(() {});
-                    },
-                  ),
+                    ActionChip(
+                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
+                      label: const Text('Darbhanga Center (0km)', style: TextStyle(fontSize: 11)),
+                      onPressed: () {
+                        setSheetState(() {
+                          latCtrl.text = '26.1542';
+                          lngCtrl.text = '85.8918';
+                          cityCtrl.text = 'darbhanga';
+                          mapsUrlCtrl.text = 'https://maps.google.com/?q=26.1542,85.8918';
+                        });
+                      },
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
+                      label: const Text('Noida Sector 15', style: TextStyle(fontSize: 11)),
+                      onPressed: () {
+                        setSheetState(() {
+                          latCtrl.text = '28.5828';
+                          lngCtrl.text = '77.3110';
+                          cityCtrl.text = 'noida';
+                          mapsUrlCtrl.text = 'https://maps.google.com/?q=28.5828,77.3110';
+                        });
+                      },
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
+                      label: const Text('Patna Center', style: TextStyle(fontSize: 11)),
+                      onPressed: () {
+                        setSheetState(() {
+                          latCtrl.text = '25.5941';
+                          lngCtrl.text = '85.1376';
+                          cityCtrl.text = 'patna';
+                          mapsUrlCtrl.text = 'https://maps.google.com/?q=25.5941,85.1376';
+                        });
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
 

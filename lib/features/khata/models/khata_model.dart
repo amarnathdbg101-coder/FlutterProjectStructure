@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_utils.dart';
+
 class KhataCustomerModel {
   final dynamic id;
   final String name;
@@ -47,19 +49,14 @@ class KhataCustomerModel {
       creditLimit: (json['credit_limit'] is num)
           ? (json['credit_limit'] as num).toDouble()
           : 10000.0,
-      lastTransactionAt: json['last_activity'] != null
-          ? DateTime.tryParse(json['last_activity'].toString())
-          : json['updated_at'] != null
-              ? DateTime.tryParse(json['updated_at'].toString())
-              : null,
+      lastTransactionAt: AppDateTimeUtils.parseToLocalNullable(
+          json['last_activity'] ?? json['updated_at'] ?? json['created_at']),
       trustScore: (json['trust_score'] is num)
           ? (json['trust_score'] as num).toInt()
           : (json['score'] is num)
               ? (json['score'] as num).toInt()
               : 80,
-      promiseDate: json['promise_date'] != null
-          ? DateTime.tryParse(json['promise_date'].toString())
-          : null,
+      promiseDate: AppDateTimeUtils.parseToLocalNullable(json['promise_date'] ?? json['promise_to_pay_date']),
       overdueDays: (json['overdue_days'] is num)
           ? (json['overdue_days'] as num).toInt()
           : 0,
@@ -118,9 +115,7 @@ class KhataTransactionModel {
       type: json['type'] ?? (json['transaction_type'] ?? 'credit'),
       notes: json['notes'] ?? json['description'] ?? '',
       billNumber: json['bill_number'],
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: AppDateTimeUtils.parseToLocal(json['created_at']),
     );
   }
 

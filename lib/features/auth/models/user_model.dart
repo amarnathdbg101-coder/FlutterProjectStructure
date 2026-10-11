@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_utils.dart';
+
 class UserModel {
   final dynamic id;
   final String name;
@@ -48,7 +50,7 @@ class UserModel {
       phone: json['phone']?.toString() ?? json['mobile']?.toString() ?? '',
       role: json['role'] ?? 'shop',
       avatarUrl: json['avatar_url']?.toString() ?? json['avatar']?.toString(),
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      createdAt: AppDateTimeUtils.parseToLocalNullable(json['created_at']),
     );
   }
 

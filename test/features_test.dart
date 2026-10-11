@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_project_structure/core/theme/app_theme.dart';
+import 'package:flutter_project_structure/core/utils/date_time_utils.dart';
 import 'package:flutter_project_structure/core/localization/app_translations.dart';
 import 'package:flutter_project_structure/core/localization/language_controller.dart';
 import 'package:flutter_project_structure/features/khata/models/khata_model.dart';
@@ -244,4 +245,27 @@ void main() {
       expect(find.text('Test Button'), findsOneWidget);
     });
   });
+
+  group('9. Date & Time Engine Integrity Tests', () {
+    test('AppDateTimeUtils converts UTC timestamps to local device time', () {
+      final local = AppDateTimeUtils.parseToLocal('2026-10-11T04:30:00Z');
+      expect(local.isUtc, isFalse);
+      expect(AppDateTimeUtils.formatTime(local), isNotEmpty);
+      expect(AppDateTimeUtils.formatDateTime(local), isNotEmpty);
+    });
+
+    test('AppDateTimeUtils handles timestamps without Z as UTC correctly', () {
+      final local = AppDateTimeUtils.parseToLocal('2026-10-11 04:30:00');
+      expect(local.isUtc, isFalse);
+    });
+
+    test('AppDateTimeUtils computes remaining hold time correctly', () {
+      final future = DateTime.now().add(const Duration(minutes: 45));
+      expect(AppDateTimeUtils.formatTimeRemaining(future), contains('mins left'));
+
+      final past = DateTime.now().subtract(const Duration(minutes: 5));
+      expect(AppDateTimeUtils.formatTimeRemaining(past), 'Expired');
+    });
+  });
 }
+

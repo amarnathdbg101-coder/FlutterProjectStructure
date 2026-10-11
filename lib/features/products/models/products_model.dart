@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_utils.dart';
+
 class ProductsModel {
   final dynamic id;
   final String title;
@@ -27,8 +29,8 @@ class ProductsModel {
       sellingPrice: json['selling_price'] ?? '',
       purchasingPrice: json['purchasing_price'] ?? '',
       image: json['image_url'],
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at']) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at']) : null,
+      createdAt: AppDateTimeUtils.parseToLocalNullable(json['created_at']),
+      updatedAt: AppDateTimeUtils.parseToLocalNullable(json['updated_at']),
     );
   }
 

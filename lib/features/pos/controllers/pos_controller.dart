@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/utils/date_time_utils.dart';
 import '../../products/models/product_model.dart';
 import '../models/pos_model.dart';
 import '../repositories/pos_repository.dart';
@@ -313,7 +314,7 @@ class PosController extends BaseController {
     }
 
     // Clean 58mm / 80mm Thermal Receipt HTML Print Engine
-    final dateStr = '${sale.createdAt.day}/${sale.createdAt.month}/${sale.createdAt.year} ${sale.createdAt.hour}:${sale.createdAt.minute.toString().padLeft(2, "0")}';
+    final dateStr = AppDateTimeUtils.formatDateTime(sale.createdAt, includeYear: true);
     String htmlContent = '''
     <!DOCTYPE html>
     <html>

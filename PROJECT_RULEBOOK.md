@@ -400,6 +400,28 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
        - Upgraded `_showSetCreditLimitDialog` and `_showReverseTransactionDialog` button rows with explicit bounded `minimumSize: const Size(90, 42)` constraints.
     3. **Automated Regression Suite (`test/features_test.dart`)**:
        - Added group 8 widget test verifying `ElevatedButton` rendering inside unconstrained `Row` widgets with `AppTheme.lightTheme` and `AppTheme.darkTheme`, guaranteeing zero assertion exceptions.
+- **[2026-10-11]**: Universal Date & Time (IST Asia/Kolkata) Synchronization Engine (GoBackend, Customer Web, & Shop Flutter App):
+  - **Issue Reported**: All dates and timestamps across the apps showed incorrect hours and time shifts (e.g., product reserved at 10:00 AM on customer web app displayed 11:00 AM or UTC hours; POS sales, Khata transactions, and daily summaries showed inconsistent hours).
+  - **Root Cause 1 - Reservation Expiry Labeled as Booking Time (`CustomerFrontend/ReservationsScreen.jsx`)**:
+    - Identified that `ReservationsScreen.jsx` previously rendered only `{t('products.hold_hours')}: {formatExpiry(r.expires_at)}`, which translated in Hindi to `आरक्षण अवधि: 11:14 AM`.
+    - Because `r.expires_at` is the 1-hour expiration deadline (11:14 AM) and no `created_at` was shown, users understandably concluded the app erroneously recorded their 10:14 AM reservation as 11:14 AM!
+    - **Fix**: Replaced the ambiguous label with clear, distinct dual timestamps:
+      - **Booked at / आरक्षित किया गया:** `formatLocalTime(r.created_at)` (e.g. `10:14 AM`).
+      - **Pickup Deadline / पिकअप अंतिम समय:** `formatLocalTime(r.expires_at)` (`valid till 11:14 AM`).
+  - **Root Cause 2 - UTC Timestamp Parsing without Local Conversion in Flutter (`Frontend`)**:
+    - PostgreSQL stores timestamps in UTC (`NOW()`), and GoBackend outputs ISO-8601 strings ending in `Z` (e.g., `2026-10-11T04:44:49Z`).
+    - Flutter models (`pos_model.dart`, `khata_model.dart`, `reservation_model.dart`, `expense_model.dart`, etc.) previously parsed these using raw `DateTime.tryParse()`, which creates a UTC `DateTime`.
+    - When screens accessed `.hour` (e.g. `today_sales_screen.dart` displaying `${sale.createdAt.hour}:${sale.createdAt.minute}`) or `DateFormat`, they displayed raw UTC hours (04:44 instead of 10:14 AM IST), shifting all displayed times by 5 hours and 30 minutes!
+    - **Fix**: Built centralized `AppDateTimeUtils` (`lib/core/utils/date_time_utils.dart`):
+      - `parseToLocal`: Safely handles raw strings, numbers, and ISO strings without 'Z', guaranteeing conversion to the user device's local timezone (IST, UTC+5:30).
+      - Standardized all models and screens (`pos_model`, `today_sales_screen`, `pos_controller`, `khata_model`, `khata_screen`, `reservation_model`, `reservations_list_screen`, `expense_model`, `offer_model`, `procurement_model`, `products_model`, `user_model`).
+      - Added Date & Expiration Time Strip to `reservations_list_screen.dart` for complete merchant counter transparency.
+  - **Root Cause 3 - UTC Midnight Day Boundary Mismatch (`GoBackend/internal/handler/repository/pos.go`)**:
+    - In GoBackend, `startOfToday` was computed using server local time without aligning Indian Standard Time midnight to UTC. On UTC cloud servers, midnight UTC is 05:30 AM IST, cutting off morning counter sales from "Today's Sales" totals.
+    - **Fix**: Created `internal/utils/time_utils.go` (`IndianLocation`, `IndianNow()`, `IndianDayBounds()`). Standardized `GetDailySummary`, `GetDailyCloseReport`, and `ListBills` queries to use `utils.IndianDayBounds()`.
+  - **Automated Regression Suite (`test/features_test.dart`)**:
+    - Added group 9 tests verifying UTC to local conversion, timestamps without Z, and hold time remaining calculations. 15/15 tests passing.
+
 
 
 

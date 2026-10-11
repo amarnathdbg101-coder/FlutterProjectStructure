@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_utils.dart';
+
 class ReservationModel {
   final dynamic id;
   final String pickupCode;
@@ -70,10 +72,8 @@ class ReservationModel {
       unitPrice: price,
       totalPrice: total,
       status: (json['status'] ?? 'pending').toString().toLowerCase(),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      expiresAt: json['expires_at'] != null ? DateTime.tryParse(json['expires_at'].toString()) : null,
+      createdAt: AppDateTimeUtils.parseToLocal(json['created_at']),
+      expiresAt: AppDateTimeUtils.parseToLocalNullable(json['expires_at']),
       notes: (json['notes'] ?? '').toString(),
     );
   }

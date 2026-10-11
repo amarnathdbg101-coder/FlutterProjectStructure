@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_utils.dart';
+
 class OfferModel {
   final String id;
   final String title;
@@ -27,8 +29,8 @@ class OfferModel {
       description: json['description']?.toString() ?? '',
       expiresInDays: json['expires_in_days'] ?? 7,
       isActive: json['is_active'] ?? true,
-      expiresAt: json['expires_at'] != null ? DateTime.tryParse(json['expires_at'].toString()) : null,
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      expiresAt: AppDateTimeUtils.parseToLocalNullable(json['expires_at']),
+      createdAt: AppDateTimeUtils.parseToLocalNullable(json['created_at']),
     );
   }
 

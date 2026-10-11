@@ -1,3 +1,4 @@
+import '../../../core/utils/date_time_utils.dart';
 import '../../products/models/product_model.dart';
 
 class PosCartItem {
@@ -98,9 +99,7 @@ class SaleModel {
           ? (target['total_amount'] as num).toDouble()
           : ((target['total'] is num) ? (target['total'] as num).toDouble() : 0.0),
       paymentMethod: target['payment_method']?.toString() ?? 'cash',
-      createdAt: target['created_at'] != null
-          ? (DateTime.tryParse(target['created_at'].toString()) ?? DateTime.now())
-          : DateTime.now(),
+      createdAt: AppDateTimeUtils.parseToLocal(target['created_at']),
     );
   }
 

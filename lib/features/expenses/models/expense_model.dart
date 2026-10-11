@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_utils.dart';
+
 class ExpenseModel {
   final dynamic id;
   final String category;
@@ -24,11 +26,8 @@ class ExpenseModel {
           : (double.tryParse(json['amount']?.toString() ?? '0') ?? 0.0),
       notes: json['notes']?.toString() ?? json['description']?.toString() ?? '',
       paymentMethod: json['payment_method']?.toString() ?? 'cash',
-      expenseDate: json['expense_date'] != null
-          ? DateTime.tryParse(json['expense_date'].toString()) ?? DateTime.now()
-          : json['created_at'] != null
-              ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-              : DateTime.now(),
+      expenseDate: AppDateTimeUtils.parseToLocal(
+          json['expense_date'] ?? json['created_at']),
     );
   }
 
