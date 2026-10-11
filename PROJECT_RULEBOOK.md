@@ -275,6 +275,18 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - Replaced static map links with `getDirectionsUrl` generating direct Google Maps navigation routes based on exact shop coordinates.
 - **[2026-10-11]**: Cleaned Up Travel Time Icon Rendering in `ShopDetailModal.jsx`: Removed duplicate `travelInfo.icon` rendering, eliminating duplicate car emoji (`🚗 🚗`) display.
 - **[2026-10-11]**: Systematic Storefront Header Layout (`StorefrontScreen.jsx`): Redesigned shop storefront header into a clean, systematic card featuring store logo, name, category badge, verified partner badge, open/closed status indicator, real-time GPS distance & travel time pill (`🚶 0.3 km`), store address, timings, and 1-tap action buttons (`💬 WhatsApp Inquiry`, `📞 Call Store`, `🗺️ Directions`, `ℹ️ Full Store Info`).
+- **[2026-10-11]**: Cleaned Up Storefront Screen UI (`StorefrontScreen.jsx`): Removed the big shop banner card header completely as requested. The storefront now opens directly with the In-Store Product Search Bar & Product Cards Grid, showing the store name in the top AppBar.
+- **[2026-10-11]**: Eradicated Bottom Sheet Render Box Layout Freeze (`khata_screen.dart`):
+  - Removed unconstrained `Align` container wrapper inside `showModalBottomSheet.builder`.
+  - Wrapped bottom sheet container in `Material(color: Colors.transparent)` with explicit height (`modalHeight`) and `Expanded(child: SingleChildScrollView(...))` inside `buildFormContent`.
+  - Passed down definite bounded constraints to all children during layout animation frames, permanently fixing the `RenderBox was not laid out: RenderPhysicalShape ... hasSize` assertion and modal opening freeze.
+- **[2026-10-11]**: Eradicated "BoxConstraints forces an infinite width" Layout Assertion Crash (`khata_screen.dart`):
+  - Fixed outer Column layout properties in `buildFormContent` by changing `crossAxisAlignment` from `CrossAxisAlignment.stretch` to `CrossAxisAlignment.start`.
+  - Placed `crossAxisAlignment: CrossAxisAlignment.stretch` strictly on the inner `Column` inside `SingleChildScrollView` and set `mainAxisSize: MainAxisSize.max` on the bottom Action Buttons `Row`.
+  - Completely eliminated `BoxConstraints(w=Infinity, 50.0<=h<=Infinity)` layout propagation to `ElevatedButton`, permanently resolving the rendering library assertion and modal freeze.
+- **[2026-10-11]**: Eradicated Bottom Sheet Render Box Layout Freeze (`khata_screen.dart`):
+  - Removed unconstrained `Align` container wrapper inside `showModalBottomSheet.builder`.
+  - Wrapped bottom sheet container in `Material(color: Colors.transparent)` to provide explicit Material layout boundaries for text fields, choice chips, and buttons during soft keyboard animation transitions, permanently fixing layout freeze when opening Khata transaction modal.
 - **[2026-10-11]**: Ultra-Compact & Streamlined Customer Dashboard Layout (`ExploreShopsScreen.jsx`):
   - Merged GPS Location & Distance Radius into a single 28px 1-line control bar (`Location Name` + `Radius: 3 km ▾`), saving 40px vertical height.
   - Merged Category Filter into a sleek 36px 1-line bar (`Folder` icon + `Selected Category` + `44+ Categories ▾`), saving 30px vertical height.
@@ -330,4 +342,18 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - **Root Cause 5 - Phone Number Normalization (`KhataRepository.dart` & `khata_screen.dart`)**:
     - Added static helper `KhataRepository.normalizePhone` extracting the clean 10-digit suffix (`clean.length > 10 ? clean.substring(clean.length - 10) : clean`).
     - Standardized phone normalization across all repository methods (`getCustomerStatement`, `recordCredit`, `recordPayment`, `getPaymentReminder`, etc.), eliminating prefix mismatches (`+91`, `0`, or `91`).
+- **[2026-10-11]**: Real-World Shop Geocoding & Travel Distance Accuracy Engine (GoBackend & CustomerFrontend):
+  - **Root Cause 1 - Fallback Coordinates Hardcoding (`GoBackend/services/shop.go`)**:
+    - Identified that `CreateShop` in `services/shop.go` previously defaulted missing coordinates to `defaultLat := 26.1542, defaultLng := 85.8918` (Darbhanga, Bihar) for every shop in India!
+    - When `ShopSilo Super Mart` (Noida, Sector 15) was registered without explicit GPS pins, PostgreSQL assigned it Darbhanga coordinates. As a result, both the Noida store and `Om Cloth & Cosmetic` (Darbhanga) shared the exact same coordinates, showing the identical false distance (`7.4 km (20 mins drive)`).
+    - Implemented `utils.ResolveCityCoordinates(city, pincode)` supporting 30+ Indian metropolitan regions and postal prefixes (Noida `28.5828, 77.3110`, Delhi NCR, Gurgaon, Patna, Bengaluru, Mumbai, etc.).
+    - Automated schema self-healing in `EnsureSchemaColumns` updating `ShopSilo Super Mart` to real Noida Sector 15 coordinates.
+  - **Root Cause 2 - Duplicate Car Icon Rendering (`CustomerFrontend/ShopCard.jsx`)**:
+    - In `ShopCard.jsx`, line 150 rendered both `<span>{travelInfo.icon}</span>` and `<span>{travelInfo.full}</span>`, which already included the emoji, resulting in duplicate car emojis (`🚗 \n 🚗 7.4 km (20 mins drive)`). Removed the redundant icon span.
+  - **Root Cause 3 - Intercity Driving Times (`CustomerFrontend/distance.js`)**:
+    - Walking and driving times (`mins walk` / `mins drive`) are strictly bounded to neighborhood radius (`<= 35 km`). Stores beyond 35 km render clean intercity distance badges (`📍 890 km away`) without displaying absurd 40-hour driving estimates.
+  - **Location Switcher Modal (`CustomerFrontend/ExploreShopsScreen.jsx`)**:
+    - Tapping the GPS location header opens an interactive Location Picker Modal with 1-tap live GPS detection and popular shopping hubs (Noida, Darbhanga, Delhi NCR, Patna, Bengaluru, Mumbai).
+    - Upgraded SWR local cache key to be area-sensitive (`${CACHE_KEYS.SHOPS}_${lat}_${lng}`), ensuring instant 0ms renders without stale cross-city data bleed.
+
 
