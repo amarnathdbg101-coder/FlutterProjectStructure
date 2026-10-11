@@ -9,6 +9,7 @@ import '../../features/products/controllers/product_controller.dart';
 import '../../features/reservations/controllers/reservation_controller.dart';
 import '../storage/token_storage.dart';
 import '../utils/image_utils.dart';
+import 'counter_websocket_service.dart';
 
 /// Real-World Enterprise Background Data Sync Worker.
 /// Performs intelligent pre-fetching, stale-while-revalidate synchronization,
@@ -82,6 +83,7 @@ class DataSyncService {
 
   /// Triggered immediately upon user authentication (Login / Register / PIN)
   static void syncOnLogin(BuildContext context) {
+    CounterWebSocketService.instance.connect();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DataSyncService().runBackgroundSync(context, force: true);
     });
@@ -89,6 +91,7 @@ class DataSyncService {
 
   /// Triggered on app launch when valid session token exists
   static void syncOnAppLaunch(BuildContext context) {
+    CounterWebSocketService.instance.connect();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DataSyncService().runBackgroundSync(context, force: false);
     });

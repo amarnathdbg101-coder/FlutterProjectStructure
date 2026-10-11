@@ -14,6 +14,7 @@ import '../../../core/services/data_sync_service.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../models/shop_model.dart';
+import '../../reservations/controllers/reservation_controller.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -39,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
     super.build(context);
     final authController = context.watch<AuthController>();
     final dashController = context.watch<DashboardController>();
+    final resController = context.watch<ReservationController>();
     final shop = authController.currentShop;
     final stats = dashController.stats;
 
@@ -102,6 +104,19 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                 if (shop != null) ...[
                   _ShopShowcaseCard(shop: shop, authController: authController),
                   const SizedBox(height: 20),
+                ],
+
+                // Real-Time Counter Pickup Orders Waiting Banner
+                if (resController.activeCount > 0) ...[
+                  AppSummaryBanner(
+                    title: 'Active Counter Pickup Orders',
+                    amount: '${resController.activeCount} Pending',
+                    subtitle: 'Customer arrived or awaiting pickup at your counter',
+                    icon: Icons.shopping_bag_rounded,
+                    actionLabel: 'View & Pack',
+                    onAction: () => context.go('/merchant/reservations'),
+                  ),
+                  const SizedBox(height: 16),
                 ],
 
                 // 2. KPI Financial & Operational Grid ("Today's Business Summary")

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/analytics/screens/analytics_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -34,7 +35,11 @@ class AppRoutes {
   static const String customerShop = '/shop/:slug';
 }
 
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final GoRouter appRouter = GoRouter(
+  navigatorKey: rootNavigatorKey,
   initialLocation: AppRoutes.splash,
   routes: [
     GoRoute(

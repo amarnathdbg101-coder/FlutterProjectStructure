@@ -25,6 +25,15 @@ class ApiConstants {
     return localUrl;
   }
 
+  static String get wsUrl {
+    final httpUrl = baseUrl;
+    if (httpUrl.startsWith('https://')) {
+      return '${httpUrl.replaceFirst('https://', 'wss://')}/shops/me/ws';
+    } else {
+      return '${httpUrl.replaceFirst('http://', 'ws://')}/shops/me/ws';
+    }
+  }
+
   // --- 1. General & System (Both) ---
   static const String health = '/health';
   static const String reports = '/reports';

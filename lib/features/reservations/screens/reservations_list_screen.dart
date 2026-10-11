@@ -211,6 +211,44 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Real-Time Incoming Order Flash Alert
+                if (resCtrl.latestAlertReservation != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary, width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.notifications_active_rounded, color: AppColors.primary, size: 24),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '🔔 New Pickup Order Received! (#${resCtrl.latestAlertReservation!.pickupCode})',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                              ),
+                              Text(
+                                '${resCtrl.latestAlertReservation!.customerName} ordered ${resCtrl.latestAlertReservation!.productName} (Qty: ${resCtrl.latestAlertReservation!.quantity})',
+                                style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () => resCtrl.clearLatestAlert(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // Summary Banner
                 AppSummaryBanner(
                   title: 'Active Counter Pickup Orders',
@@ -484,12 +522,54 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
               ],
             ),
           ),
+
+          // Customer Notes / Items Summary Strip
+          if (r.notes.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.sticky_note_2_outlined, size: 14, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      r.notes,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Action Footer
           Row(
             children: [
               if (r.customerMobile.isNotEmpty) ...[
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.phone_rounded, size: 14, color: AppColors.primary),
+                  label: const Text('Call', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  onPressed: () => resCtrl.makeCustomerCall(context, r),
+                ),
+                const SizedBox(width: 6),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF25D366),
@@ -499,7 +579,7 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   icon: const Icon(Icons.chat_rounded, size: 14, color: Colors.white),
-                  label: const Text('WhatsApp Chat', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                  label: const Text('WhatsApp', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                   onPressed: () => resCtrl.openWhatsAppChat(context, r),
                 ),
                 const SizedBox(width: 8),

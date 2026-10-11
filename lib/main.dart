@@ -1,8 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'core/constants/app_colors.dart';
 import 'core/localization/language_controller.dart';
 import 'core/routes/app_router.dart';
+import 'core/services/counter_websocket_service.dart';
 import 'core/storage/local_cache_service.dart';
 import 'core/storage/token_storage.dart';
 import 'core/theme/app_theme.dart';
@@ -22,6 +24,66 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await TokenStorage.init();
   await LocalCacheService.init();
+
+  if (TokenStorage.hasToken()) {
+    CounterWebSocketService.instance.connect();
+  }
+
+  CounterWebSocketService.instance.onNewReservationNotification = (payload) {
+    final pickupCode = payload['pickup_code']?.toString() ?? '4812';
+    final customerName = payload['customer_name']?.toString() ?? 'Customer';
+    final productName = payload['product_name']?.toString() ?? 'Pickup Item';
+    final qty = payload['quantity']?.toString() ?? '1';
+
+    rootScaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1E293B),
+        elevation: 6,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        duration: const Duration(seconds: 10),
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.notifications_active_rounded, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '🔔 New Pickup Order (#$pickupCode)',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                  ),
+                  Text(
+                    '$customerName • $productName (Qty: $qty)',
+                    style: const TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: 'VIEW',
+          textColor: AppColors.primary,
+          onPressed: () {
+            appRouter.go('/merchant/reservations');
+          },
+        ),
+      ),
+    );
+  };
 
   runApp(
     MultiProvider(
@@ -74,6 +136,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'ShopSilo',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,

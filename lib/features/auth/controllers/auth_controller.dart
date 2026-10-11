@@ -1,5 +1,6 @@
 import 'package:image_picker/image_picker.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/counter_websocket_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../dashboard/models/shop_model.dart';
 import '../models/user_model.dart';
@@ -414,6 +415,9 @@ class AuthController extends BaseController {
   }
 
   Future<void> logout() async {
+    try {
+      CounterWebSocketService.instance.disconnect();
+    } catch (_) {}
     await TokenStorage.clearSession();
     _currentUser = null;
     _currentShop = null;
