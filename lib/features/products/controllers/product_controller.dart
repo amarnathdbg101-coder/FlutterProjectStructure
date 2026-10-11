@@ -72,7 +72,7 @@ class ProductController extends BaseController {
       setLoading(true);
     } else {
       _isSyncing = true;
-      notifyListeners();
+      // Do not force UI flash if data is already visible
     }
 
     clearError();
@@ -86,12 +86,29 @@ class ProductController extends BaseController {
     _isSyncing = false;
 
     if (response.success && response.data != null) {
-      _products = response.data!;
-      // Only persist full default catalog to local cache
-      if (isDefaultView) {
-        await LocalCacheService.saveProducts(_products);
+      final newProds = response.data!;
+
+      // Check if data actually changed to avoid unnecessary UI rebuilds & image reloads
+      bool hasChanged = _products.length != newProds.length;
+      if (!hasChanged) {
+        for (int i = 0; i < _products.length; i++) {
+          if (_products[i].id != newProds[i].id ||
+              _products[i].price != newProds[i].price ||
+              _products[i].stock != newProds[i].stock ||
+              _products[i].name != newProds[i].name) {
+            hasChanged = true;
+            break;
+          }
+        }
       }
-      notifyListeners();
+
+      if (hasChanged || _products.isEmpty) {
+        _products = newProds;
+        if (isDefaultView) {
+          await LocalCacheService.saveProducts(_products);
+        }
+        notifyListeners();
+      }
     } else {
       // If network fails but we have cached products, keep them visible for offline usability!
       if (_products.isEmpty) {

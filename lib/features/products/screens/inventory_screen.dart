@@ -1642,24 +1642,37 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           if (selectedFile == null) ...[
                             InkWell(
                               onTap: () async {
-                                final result = await FilePicker.platform.pickFiles(
-                                  type: FileType.custom,
-                                  allowedExtensions: ['xlsx', 'xls', 'csv'],
-                                  withData: true,
-                                );
-                                if (result != null && result.files.isNotEmpty) {
-                                  final file = result.files.first;
-                                  Uint8List? bytes = file.bytes;
-                                  if (bytes == null && !kIsWeb && file.path != null) {
-                                    bytes = await File(file.path!).readAsBytes();
+                                try {
+                                  final result = await FilePicker.platform.pickFiles(
+                                    type: FileType.custom,
+                                    allowedExtensions: ['xlsx', 'xls', 'csv'],
+                                    withData: kIsWeb,
+                                  );
+                                  if (result != null && result.files.isNotEmpty) {
+                                    final file = result.files.first;
+                                    Uint8List? bytes = file.bytes;
+                                    if (bytes == null && !kIsWeb && file.path != null) {
+                                      final localFile = File(file.path!);
+                                      if (await localFile.exists()) {
+                                        bytes = await localFile.readAsBytes();
+                                      }
+                                    }
+                                    if (bytes != null && bytes.isNotEmpty) {
+                                      setModalState(() {
+                                        selectedFile = file;
+                                        fileBytes = bytes;
+                                        uploadError = null;
+                                      });
+                                    } else {
+                                      setModalState(() {
+                                        uploadError = 'Unable to read selected file. Please select again.';
+                                      });
+                                    }
                                   }
-                                  if (bytes != null) {
-                                    setModalState(() {
-                                      selectedFile = file;
-                                      fileBytes = bytes;
-                                      uploadError = null;
-                                    });
-                                  }
+                                } catch (e) {
+                                  setModalState(() {
+                                    uploadError = 'Error selecting file: ${e.toString()}';
+                                  });
                                 }
                               },
                               borderRadius: BorderRadius.circular(12),

@@ -336,10 +336,23 @@ class ProductRepository {
     bool updateExisting = true,
   }) async {
     try {
+      final ext = fileName.split('.').last.toLowerCase();
+      MediaType mediaType;
+      if (ext == 'csv') {
+        mediaType = MediaType('text', 'csv');
+      } else if (ext == 'xlsx') {
+        mediaType = MediaType('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else if (ext == 'xls') {
+        mediaType = MediaType('application', 'vnd.ms-excel');
+      } else {
+        mediaType = MediaType('application', 'octet-stream');
+      }
+
       final formData = FormData.fromMap({
         'file': MultipartFile.fromBytes(
           fileBytes,
           filename: fileName,
+          contentType: mediaType,
         ),
         'update_existing': updateExisting.toString(),
       });
