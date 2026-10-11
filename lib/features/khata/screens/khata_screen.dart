@@ -17,7 +17,10 @@ class KhataScreen extends StatefulWidget {
   State<KhataScreen> createState() => _KhataScreenState();
 }
 
-class _KhataScreenState extends State<KhataScreen> {
+class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final _searchController = TextEditingController();
 
   @override
@@ -1295,6 +1298,7 @@ class _KhataScreenState extends State<KhataScreen> {
   // ==========================================
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final khata = context.watch<KhataController>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 

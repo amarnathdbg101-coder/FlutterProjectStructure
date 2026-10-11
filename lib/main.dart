@@ -16,6 +16,7 @@ import 'features/offers/controllers/offer_controller.dart';
 import 'features/pos/controllers/pos_controller.dart';
 import 'features/procurement/controllers/procurement_controller.dart';
 import 'features/products/controllers/product_controller.dart';
+import 'features/reservations/controllers/reservation_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +37,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => OfferController()),
         ChangeNotifierProvider(create: (_) => AnalyticsController()),
         ChangeNotifierProvider(create: (_) => ProcurementController()),
+        ChangeNotifierProvider(create: (_) => ReservationController()),
       ],
       child: const MyApp(),
     ),

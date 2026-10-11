@@ -25,7 +25,16 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (TokenStorage.hasToken()) {
-      context.go(AppRoutes.merchant);
+      final lastRoute = TokenStorage.getLastRoute();
+      if (lastRoute != null &&
+          lastRoute.isNotEmpty &&
+          lastRoute != AppRoutes.splash &&
+          lastRoute != AppRoutes.login &&
+          lastRoute != AppRoutes.register) {
+        context.go(lastRoute);
+      } else {
+        context.go(AppRoutes.merchant);
+      }
     } else {
       context.go(AppRoutes.login);
     }

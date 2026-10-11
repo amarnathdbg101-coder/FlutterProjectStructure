@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
+import '../storage/token_storage.dart';
 import 'merchant_drawer.dart';
 import 'shopsilo_logo.dart';
 
@@ -21,23 +22,30 @@ class MerchantShell extends StatelessWidget {
 
   void _onNavigate(BuildContext context, int index) {
     if (index == currentIndex) return;
+    TokenStorage.saveActiveTabIndex(index);
     switch (index) {
       case 0:
+        TokenStorage.saveLastRoute('/merchant');
         context.go('/merchant');
         break;
       case 1:
+        TokenStorage.saveLastRoute('/merchant/pos');
         context.go('/merchant/pos');
         break;
       case 2:
+        TokenStorage.saveLastRoute('/merchant/inventory');
         context.go('/merchant/inventory');
         break;
       case 3:
+        TokenStorage.saveLastRoute('/merchant/khata');
         context.go('/merchant/khata');
         break;
       case 4:
+        TokenStorage.saveLastRoute('/merchant/expenses');
         context.go('/merchant/expenses');
         break;
       case 5:
+        TokenStorage.saveLastRoute('/merchant/profile');
         context.go('/merchant/profile');
         break;
     }

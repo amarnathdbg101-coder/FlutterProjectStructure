@@ -16,7 +16,10 @@ class ExpenseScreen extends StatefulWidget {
   State<ExpenseScreen> createState() => _ExpenseScreenState();
 }
 
-class _ExpenseScreenState extends State<ExpenseScreen> {
+class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final String _selectedFilter = 'all';
 
   @override
@@ -291,6 +294,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final expController = context.watch<ExpenseController>();
 
     final displayExpenses = _selectedFilter == 'all'

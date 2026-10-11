@@ -284,6 +284,17 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - Fixed outer Column layout properties in `buildFormContent` by changing `crossAxisAlignment` from `CrossAxisAlignment.stretch` to `CrossAxisAlignment.start`.
   - Placed `crossAxisAlignment: CrossAxisAlignment.stretch` strictly on the inner `Column` inside `SingleChildScrollView` and set `mainAxisSize: MainAxisSize.max` on the bottom Action Buttons `Row`.
   - Completely eliminated `BoxConstraints(w=Infinity, 50.0<=h<=Infinity)` layout propagation to `ElevatedButton`, permanently resolving the rendering library assertion and modal freeze.
+- **[2026-10-11]**: End-to-End Counter Pickup Orders Hub (`ReservationsListScreen.dart` & `ReservationController.dart`):
+  - Built `ReservationModel`, `ReservationController`, and `ReservationsListScreen` in Flutter Merchant OS App.
+  - Linked to GoBackend `/shops/me/reservations` and `/shops/me/reservations/verify`.
+  - Added 1-tap "Verify Pickup Code" dialog (#4812 / QR Token), status tabs (`Active / Pending`, `Completed`, `Cancelled`), customer name/phone/product details, and 1-tap WhatsApp customer chat.
+  - Added "⚡ Pickup Orders" tile on Dashboard Quick Operations Grid and "Customer Pickup Orders" item in Merchant Drawer.
+- **[2026-10-11]**: Fixed FloatingActionButton Named Parameter Compilation Error in `reservations_list_screen.dart`: Wrapped `RefreshIndicator` inside `Scaffold(floatingActionButton: ..., body: ...)` under `MerchantShell`, resolving Flutter kernel snapshot compile error.
+- **[2026-10-11]**: Fixed Undefined Method 'showStoreQrDialog' in `reservations_list_screen.dart`: Imported `store_qr_dialog.dart` into `reservations_list_screen.dart`, resolving Flutter kernel snapshot compilation error.
+- **[2026-10-11]**: Simplified Product Cards & Details to Single 'Add to Cart' Primary Action (`CustomerFrontend`):
+  - Updated `ProductCard.jsx`, `StorefrontScreen.jsx`, and `ProductDetailModal.jsx` to remove the redundant 'Reserve for Pickup' button option completely as requested.
+  - Replaced double buttons with a single, high-contrast 'Add to Cart' primary CTA button, making product interactions 100% clean and straightforward.
+- **[2026-10-11]**: Production Asset Hash Cache Invalidation (`localCache.js`): Added automatic version key migration (`v2.2_build_20261011`) in `localCache.js`. Automatically purges stale browser localStorage entries on new deployments, guaranteeing instant reflection of fresh JS/CSS bundles without manual browser cache clearing.
 - **[2026-10-11]**: Eradicated Bottom Sheet Render Box Layout Freeze (`khata_screen.dart`):
   - Removed unconstrained `Align` container wrapper inside `showModalBottomSheet.builder`.
   - Wrapped bottom sheet container in `Material(color: Colors.transparent)` to provide explicit Material layout boundaries for text fields, choice chips, and buttons during soft keyboard animation transitions, permanently fixing layout freeze when opening Khata transaction modal.
@@ -355,5 +366,19 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - **Location Switcher Modal (`CustomerFrontend/ExploreShopsScreen.jsx`)**:
     - Tapping the GPS location header opens an interactive Location Picker Modal with 1-tap live GPS detection and popular shopping hubs (Noida, Darbhanga, Delhi NCR, Patna, Bengaluru, Mumbai).
     - Upgraded SWR local cache key to be area-sensitive (`${CACHE_KEYS.SHOPS}_${lat}_${lng}`), ensuring instant 0ms renders without stale cross-city data bleed.
+- **[2026-10-11]**: Universal Session & Screen State Persistence Architecture (Customer Web App & Shop Flutter App):
+  - **Problem Solved**: Navigating to new screens or refreshing dropped users back onto the dashboard/home screen, wiping out active tab selection, search filters, forms, carts, and scroll positions across both apps.
+  - **Customer Web App (`CustomerFrontend`) Implementation**:
+    - Built `sessionState.js` & `useScreenState.js`: Universal tab session & screen state manager utilizing browser `sessionStorage`.
+    - Added `<RouteSessionKeeper />` inside `<BrowserRouter>` in `App.jsx`: Continuously tracks active screen route (`shopsilo_customer_active_route`), preserving the user's active page across reloads and tab navigations instead of resetting to `/`.
+    - Smart Auth Redirect: Protected route guard stores `shopsilo_redirect_after_login`. `LoginScreen.jsx` and `RegisterScreen.jsx` seamlessly return customers to their destination screen upon authentication rather than blindly defaulting to `/`.
+    - Resilient Back Navigation: `AppHeader.jsx` safely falls back to `sessionState.getPreviousRoute()` or `/` when history stack is shallow.
+    - Deep Screen State Preservation: In `ExploreShopsScreen.jsx`, `StorefrontScreen.jsx`, `DealsScreen.jsx`, `SavedScreen.jsx`, `ReservationsScreen.jsx`, and `CustomerKhataScreen.jsx`, active tabs, category filters, search terms, and exact vertical scroll offsets (`scrollY`) are stored in session and automatically restored with 0ms delay.
+  - **Shop Flutter App (`Frontend`) Implementation**:
+    - `StatefulShellRoute.indexedStack` in `app_router.dart`: Core merchant navigation (`/merchant`, `/merchant/pos`, `/merchant/inventory`, `/merchant/khata`, `/merchant/expenses`, `/merchant/profile`) upgraded to a stateful indexed stack shell. Tab switching preserves all screens alive in memory with 0ms transition time and zero re-renders.
+    - Added `AutomaticKeepAliveClientMixin` with `wantKeepAlive => true` to `PosScreen`, `InventoryScreen`, `KhataScreen`, `ExpenseScreen`, `DashboardScreen`, and `ProfileScreen`. POS cart, active billing items, search queries, customer phone numbers, stock filters, and scroll positions are permanently preserved during tab switches.
+    - Active Route & Tab Persistence: Added `TokenStorage.saveLastRoute`, `TokenStorage.getLastRoute`, `TokenStorage.saveActiveTabIndex`, and `TokenStorage.getActiveTabIndex`. Navigation taps in `MerchantShell` and `MerchantDrawer` persist the active route.
+    - `SplashScreen` Session Resumption: When returning to or reopening the merchant app, `SplashScreen` restores the exact screen the merchant was on (`lastRoute`) instead of unconditionally booting them back to the dashboard (`/merchant`).
+
 
 

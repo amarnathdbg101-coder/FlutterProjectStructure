@@ -123,10 +123,15 @@ class ShopOperationsRepository {
       List list = [];
       if (raw is List) {
         list = raw;
-      } else if (raw is Map && raw['reservations'] is List) {
-        list = raw['reservations'];
-      } else if (raw is Map && raw['data'] is List) {
-        list = raw['data'];
+      } else if (raw is Map) {
+        final dataObj = raw['data'] ?? raw;
+        if (dataObj is List) {
+          list = dataObj;
+        } else if (dataObj is Map && dataObj['reservations'] is List) {
+          list = dataObj['reservations'];
+        } else if (raw['reservations'] is List) {
+          list = raw['reservations'];
+        }
       }
       return ApiResponse(success: true, data: list.cast<Map<String, dynamic>>());
     } catch (e) {

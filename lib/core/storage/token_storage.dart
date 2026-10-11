@@ -112,11 +112,40 @@ class TokenStorage {
     }
   }
 
+  static const String _keyLastRoute = 'shopsilo_last_route';
+  static const String _keyActiveTabIndex = 'shopsilo_active_tab_index';
+
+  static Future<void> saveLastRoute(String route) async {
+    if (route.isEmpty ||
+        route == '/' ||
+        route == '/login' ||
+        route == '/register') {
+      return;
+    }
+    await init();
+    await _prefs!.setString(_keyLastRoute, route);
+  }
+
+  static String? getLastRoute() {
+    return _prefs?.getString(_keyLastRoute);
+  }
+
+  static Future<void> saveActiveTabIndex(int index) async {
+    await init();
+    await _prefs!.setInt(_keyActiveTabIndex, index);
+  }
+
+  static int getActiveTabIndex() {
+    return _prefs?.getInt(_keyActiveTabIndex) ?? 0;
+  }
+
   static Future<void> clearSession() async {
     await init();
     await _prefs!.remove(_keyToken);
     await _prefs!.remove(_keyUserJson);
     await _prefs!.remove(_keyShopJson);
     await _prefs!.remove(_keyStaffJson);
+    await _prefs!.remove(_keyLastRoute);
+    await _prefs!.remove(_keyActiveTabIndex);
   }
 }

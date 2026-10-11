@@ -7,6 +7,8 @@ import 'package:flutter_project_structure/features/pos/models/pos_model.dart';
 import 'package:flutter_project_structure/features/products/models/product_model.dart';
 
 import 'package:flutter_project_structure/features/khata/repositories/khata_repository.dart';
+import 'package:flutter_project_structure/core/storage/token_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('1. Localization & Language System Tests', () {
@@ -190,6 +192,30 @@ void main() {
       expect(KhataRepository.normalizePhone('98765-43210'), '9876543210');
       expect(KhataRepository.normalizePhone('9876543210'), '9876543210');
       expect(KhataRepository.normalizePhone('12345'), '12345');
+    });
+  });
+
+  group('7. Route & Screen State Persistence Tests', () {
+    test('TokenStorage correctly saves and retrieves active screen routes', () async {
+      SharedPreferences.setMockInitialValues({});
+      await TokenStorage.init();
+
+      await TokenStorage.saveLastRoute('/merchant/pos');
+      expect(TokenStorage.getLastRoute(), '/merchant/pos');
+
+      await TokenStorage.saveActiveTabIndex(1);
+      expect(TokenStorage.getActiveTabIndex(), 1);
+
+      await TokenStorage.saveLastRoute('/merchant/inventory');
+      expect(TokenStorage.getLastRoute(), '/merchant/inventory');
+
+      // Ephemeral auth/splash routes are safely ignored
+      await TokenStorage.saveLastRoute('/login');
+      expect(TokenStorage.getLastRoute(), '/merchant/inventory');
+
+      await TokenStorage.clearSession();
+      expect(TokenStorage.getLastRoute(), isNull);
+      expect(TokenStorage.getActiveTabIndex(), 0);
     });
   });
 }

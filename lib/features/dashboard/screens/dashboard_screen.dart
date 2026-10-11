@@ -22,7 +22,10 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final authController = context.watch<AuthController>();
     final dashController = context.watch<DashboardController>();
     final shop = authController.currentShop;
@@ -215,6 +219,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           subtitle: 'Offers & Coupons',
                           iconColor: const Color(0xFFEA580C),
                           onTap: () => context.go('/merchant/offers'),
+                        ),
+                        _QuickOperationTile(
+                          icon: Icons.shopping_bag_rounded,
+                          title: 'Pickup Orders',
+                          subtitle: 'Customer Reservations',
+                          iconColor: const Color(0xFFD97706),
+                          onTap: () => context.go('/merchant/reservations'),
                         ),
                         _QuickOperationTile(
                           icon: Icons.qr_code_scanner_rounded,

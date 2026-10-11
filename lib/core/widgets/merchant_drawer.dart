@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../features/auth/controllers/auth_controller.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
+import '../storage/token_storage.dart';
 import 'app_ui_components.dart';
 
 class MerchantDrawer extends StatelessWidget {
@@ -119,6 +120,7 @@ class MerchantDrawer extends StatelessWidget {
                       title: context.tr('today_sales_title'),
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveLastRoute('/merchant/today-sales');
                         context.go('/merchant/today-sales');
                       },
                     ),
@@ -127,6 +129,8 @@ class MerchantDrawer extends StatelessWidget {
                       title: context.tr('nav_inventory'),
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(2);
+                        TokenStorage.saveLastRoute('/merchant/inventory');
                         context.go('/merchant/inventory');
                       },
                     ),
@@ -135,6 +139,8 @@ class MerchantDrawer extends StatelessWidget {
                       title: context.tr('nav_khata'),
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(3);
+                        TokenStorage.saveLastRoute('/merchant/khata');
                         context.go('/merchant/khata');
                       },
                     ),
@@ -143,6 +149,8 @@ class MerchantDrawer extends StatelessWidget {
                       title: context.tr('nav_expenses'),
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(4);
+                        TokenStorage.saveLastRoute('/merchant/expenses');
                         context.go('/merchant/expenses');
                       },
                     ),
@@ -151,6 +159,7 @@ class MerchantDrawer extends StatelessWidget {
                       title: 'Offers & Promotions',
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveLastRoute('/merchant/offers');
                         context.go('/merchant/offers');
                       },
                     ),
@@ -159,6 +168,7 @@ class MerchantDrawer extends StatelessWidget {
                       title: 'Munafa & Analytics',
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveLastRoute('/merchant/analytics');
                         context.go('/merchant/analytics');
                       },
                     ),
@@ -167,7 +177,17 @@ class MerchantDrawer extends StatelessWidget {
                       title: 'Mandi Procurement List',
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveLastRoute('/merchant/procurement');
                         context.go('/merchant/procurement');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.shopping_bag_rounded,
+                      title: 'Customer Pickup Orders',
+                      onTap: () {
+                        Navigator.pop(context);
+                        TokenStorage.saveLastRoute('/merchant/reservations');
+                        context.go('/merchant/reservations');
                       },
                     ),
                     Padding(
@@ -179,6 +199,8 @@ class MerchantDrawer extends StatelessWidget {
                       title: context.tr('nav_settings'),
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(5);
+                        TokenStorage.saveLastRoute('/merchant/profile');
                         context.go('/merchant/profile');
                       },
                     ),

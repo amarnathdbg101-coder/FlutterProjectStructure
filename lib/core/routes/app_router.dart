@@ -13,6 +13,8 @@ import '../../features/pos/screens/pos_screen.dart';
 import '../../features/pos/screens/today_sales_screen.dart';
 import '../../features/procurement/screens/procurement_list_screen.dart';
 import '../../features/products/screens/inventory_screen.dart';
+import '../../features/reservations/screens/reservations_list_screen.dart';
+import '../storage/token_storage.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -27,6 +29,7 @@ class AppRoutes {
   static const String offers = '/merchant/offers';
   static const String analytics = '/merchant/analytics';
   static const String procurement = '/merchant/procurement';
+  static const String reservations = '/merchant/reservations';
   static const String profile = '/merchant/profile';
   static const String customerShop = '/shop/:slug';
 }
@@ -46,45 +49,100 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.register,
       builder: (context, state) => const RegisterScreen(),
     ),
-    GoRoute(
-      path: AppRoutes.merchant,
-      builder: (context, state) => const DashboardScreen(),
+
+    // Stateful IndexedStack Shell for the 6 Core Merchant Screens (Preserves tab state in memory!)
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) {
+        TokenStorage.saveLastRoute(state.matchedLocation);
+        return navigationShell;
+      },
+      branches: [
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: AppRoutes.merchant,
+              builder: (context, state) => const DashboardScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: AppRoutes.pos,
+              builder: (context, state) => const PosScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: AppRoutes.inventory,
+              builder: (context, state) => const InventoryScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: AppRoutes.khata,
+              builder: (context, state) => const KhataScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: AppRoutes.expenses,
+              builder: (context, state) => const ExpenseScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: AppRoutes.profile,
+              builder: (context, state) => const ProfileScreen(),
+            ),
+          ],
+        ),
+      ],
     ),
+
+    // Secondary & feature routes with route preservation
     GoRoute(
       path: AppRoutes.todaySales,
-      builder: (context, state) => const TodaySalesScreen(),
-    ),
-    GoRoute(
-      path: AppRoutes.pos,
-      builder: (context, state) => const PosScreen(),
-    ),
-    GoRoute(
-      path: AppRoutes.inventory,
-      builder: (context, state) => const InventoryScreen(),
-    ),
-    GoRoute(
-      path: AppRoutes.khata,
-      builder: (context, state) => const KhataScreen(),
-    ),
-    GoRoute(
-      path: AppRoutes.expenses,
-      builder: (context, state) => const ExpenseScreen(),
+      builder: (context, state) {
+        TokenStorage.saveLastRoute(AppRoutes.todaySales);
+        return const TodaySalesScreen();
+      },
     ),
     GoRoute(
       path: AppRoutes.offers,
-      builder: (context, state) => const OffersScreen(),
+      builder: (context, state) {
+        TokenStorage.saveLastRoute(AppRoutes.offers);
+        return const OffersScreen();
+      },
     ),
     GoRoute(
       path: AppRoutes.analytics,
-      builder: (context, state) => const AnalyticsScreen(),
+      builder: (context, state) {
+        TokenStorage.saveLastRoute(AppRoutes.analytics);
+        return const AnalyticsScreen();
+      },
     ),
     GoRoute(
       path: AppRoutes.procurement,
-      builder: (context, state) => const ProcurementListScreen(),
+      builder: (context, state) {
+        TokenStorage.saveLastRoute(AppRoutes.procurement);
+        return const ProcurementListScreen();
+      },
     ),
     GoRoute(
-      path: AppRoutes.profile,
-      builder: (context, state) => const ProfileScreen(),
+      path: AppRoutes.reservations,
+      builder: (context, state) {
+        TokenStorage.saveLastRoute(AppRoutes.reservations);
+        return const ReservationsListScreen();
+      },
     ),
     GoRoute(
       path: AppRoutes.customerShop,

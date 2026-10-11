@@ -26,7 +26,10 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> {
+class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final _searchController = TextEditingController();
   bool _showOnlyLowStock = false;
   bool _hideProfitMargin = true;
@@ -1878,6 +1881,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final prodController = context.watch<ProductController>();
 
     final displayProducts = prodController.products.where((p) {

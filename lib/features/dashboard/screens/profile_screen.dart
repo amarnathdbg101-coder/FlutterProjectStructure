@@ -24,7 +24,10 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isRefreshing = false;
   bool _isUploadingLogo = false;
   bool _isUploadingAvatar = false;
@@ -183,6 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final authController = context.watch<AuthController>();
     final langController = context.watch<LanguageController>();
     final themeController = context.watch<ThemeController>();

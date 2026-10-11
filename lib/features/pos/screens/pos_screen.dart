@@ -22,7 +22,10 @@ class PosScreen extends StatefulWidget {
   State<PosScreen> createState() => _PosScreenState();
 }
 
-class _PosScreenState extends State<PosScreen> {
+class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final _scanController = TextEditingController();
   final _phoneController = TextEditingController();
   final _cashController = TextEditingController();
@@ -343,6 +346,7 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final pos = context.watch<PosController>();
     final isWide = Responsive.isWide(context);
     final today24hRevenue = pos.today24hRevenue;

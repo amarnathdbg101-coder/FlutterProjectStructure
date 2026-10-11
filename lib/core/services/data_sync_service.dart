@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/dashboard/controllers/dashboard_controller.dart';
 import '../../features/products/controllers/product_controller.dart';
+import '../../features/reservations/controllers/reservation_controller.dart';
 import '../storage/token_storage.dart';
 import '../utils/image_utils.dart';
 
@@ -51,6 +52,7 @@ class DataSyncService {
       final authCtrl = Provider.of<AuthController>(context, listen: false);
       final prodCtrl = Provider.of<ProductController>(context, listen: false);
       final dashCtrl = Provider.of<DashboardController>(context, listen: false);
+      final resCtrl = Provider.of<ReservationController>(context, listen: false);
 
       // Execute essential API pre-fetches concurrently in background
       await Future.wait([
@@ -58,6 +60,7 @@ class DataSyncService {
         authCtrl.fetchUserProfile(silent: true),
         prodCtrl.loadProducts(silent: true),
         dashCtrl.fetchDashboardData(silent: true),
+        resCtrl.loadReservations(silent: true),
       ]).catchError((err) {
         debugPrint('[DataSyncService] Background API sync error (non-fatal): $err');
         return <void>[];
