@@ -269,6 +269,12 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - **Flutter App (`ProductController.dart`)**: Smart diffing added to `ProductController.loadProducts`. Skips unnecessary `notifyListeners()` state updates and image widget re-renders if server response matches existing in-memory products list.
 - **[2026-10-11]**: Cleaned Up Customer Web App Home Layout (`ExploreShopsScreen.jsx`): Removed duplicate 2x2 Quick Feature Grid (Instant Pickup, Local Shops, Mera Khata, Live Deals) from main dashboard body (keeping them in top navigation and side menu), and removed duplicate horizontal category pills row, leaving a single clean 44+ Category Explorer Header Card.
 - **[2026-10-11]**: Cleaned Up Customer Profile Page (`CustomerProfileScreen.jsx`): Removed 4 duplicate tile cards ('Start Selling', 'My Khata', 'My Store Pickups', 'Explore Neighborhood') to eliminate duplication, leaving a clean customer user profile card, theme/language preferences bar, and sign out button.
+- **[2026-10-11]**: Real-Time GPS Haversine Distance & Travel Time Engine (`CustomerFrontend`):
+  - Connected `ShopDetailModal.jsx` to live GPS coordinates from `LocationContext` (`coords`).
+  - Added real-time Haversine distance calculations (`calculateDistanceKm`) and travel time estimations (`formatTravelTime`: `🚶 0.3 km (4 mins walk)` vs `🚗 1.5 km (4 mins drive)`).
+  - Replaced static map links with `getDirectionsUrl` generating direct Google Maps navigation routes based on exact shop coordinates.
+- **[2026-10-11]**: Cleaned Up Travel Time Icon Rendering in `ShopDetailModal.jsx`: Removed duplicate `travelInfo.icon` rendering, eliminating duplicate car emoji (`🚗 🚗`) display.
+- **[2026-10-11]**: Systematic Storefront Header Layout (`StorefrontScreen.jsx`): Redesigned shop storefront header into a clean, systematic card featuring store logo, name, category badge, verified partner badge, open/closed status indicator, real-time GPS distance & travel time pill (`🚶 0.3 km`), store address, timings, and 1-tap action buttons (`💬 WhatsApp Inquiry`, `📞 Call Store`, `🗺️ Directions`, `ℹ️ Full Store Info`).
 - **[2026-10-11]**: Ultra-Compact & Streamlined Customer Dashboard Layout (`ExploreShopsScreen.jsx`):
   - Merged GPS Location & Distance Radius into a single 28px 1-line control bar (`Location Name` + `Radius: 3 km ▾`), saving 40px vertical height.
   - Merged Category Filter into a sleek 36px 1-line bar (`Folder` icon + `Selected Category` + `44+ Categories ▾`), saving 30px vertical height.
@@ -304,3 +310,24 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - Upgraded `pos_repository.dart`: `scanBarcode` now prioritizes `/shops/me/pos/scan/$sku` for instant inventory lookup before falling back to global catalog. Added `getSales` for live history.
     - Instant Catalog Pre-Loading: `PosController.loadCatalog()` ensures autocomplete search and SKU scanning work immediately upon opening POS even before navigating to inventory.
     - Upgraded `TodaySalesScreen`: fetches live sales from PostgreSQL on screen open (`initState`) and pull-to-refresh (`onRefresh`), sorting newest bills at the top with 100% database parity.
+- **[2026-10-11]**: End-to-End Khata (Credit) Ledger Overhaul, Zero Dimmed Freezes & Database Consistency (GoBackend & Flutter Frontend):
+  - **Root Cause 1 - UI Crash / RenderFlex Overflow Solved (`khata_screen.dart`)**:
+    - Identified that `khata_screen.dart:126` and `164` overflowed by 54px and 94px inside the Credit/Payment toggle rows when long localized tab text was displayed.
+    - Wrapped tab header Text widgets in `Flexible(child: Text(..., maxLines: 1, overflow: TextOverflow.ellipsis))`.
+  - **Root Cause 2 - PostgreSQL Not-Null Constraint Violation Solved (`GoBackend`)**:
+    - Discovered that migration 000007 created `customer_khata` with `customer_phone VARCHAR(20) NOT NULL` and unique constraint `uq_shop_customer_phone (shop_id, customer_phone)`.
+    - Subsequent repository insert queries (in `GetOrCreateCustomer` line 94 and `RecordTransactionWithTx` line 160) inserted `(shop_id, customer_id, customer_name, customer_mobile...)` completely omitting `customer_phone`, triggering PostgreSQL `23502: null value in column "customer_phone" violates not-null constraint`.
+    - Fixed in `EnsureSchemaColumns` (`migration.go`): added `ALTER TABLE customer_khata ALTER COLUMN customer_phone DROP NOT NULL;` and bidirectional synchronization between `customer_mobile` and `customer_phone`.
+    - Fixed in `repository/khata.go`: explicitly added `customer_phone` to both INSERT statements (`VALUES ($1, $2, $3, $4, $4, ...)`), binding `cleanMobile` to both columns, and updated SELECT clauses to query both `customer_mobile` and `customer_phone`.
+    - Added high-performance B-tree indexes: `idx_customer_khata_shop_mobile` and `idx_customer_khata_shop_phone`.
+  - **Root Cause 3 - Silent Error Suppression in UI Solved (`khata_screen.dart`)**:
+    - Identified that when the backend rejected an entry, `success == false` previously did nothing: the modal remained open, no error banner appeared, and no error SnackBar was shown, giving the merchant the illusion that the screen dimmed and the app froze.
+    - Added reactive error banner directly inside the modal sheet (`if (khataController.hasError)`), added strict 10-digit mobile number validation check before dispatching API requests, and added explicit error SnackBar with actionable messaging on failure.
+    - Wrapped `showModalBottomSheet` container in `Align(alignment: Alignment.bottomCenter)` with responsive maxWidth (580px) and keyboard `viewInsets.bottom` padding for cross-platform zero-overflow compliance.
+  - **Root Cause 4 - Payment Mode Validation Lockout Solved (`dto/khata.go` & `services/khata.go`)**:
+    - Expanded `RecordPaymentRequest.PaymentMode` validation tag to `validate:"required,oneof=cash upi card cheque bank_transfer online other CASH UPI CARD CHEQUE BANK_TRANSFER ONLINE OTHER"`, supporting cheque and uppercase inputs from UI without 400 Bad Request rejection.
+    - Normalized payment mode using `strings.ToLower(strings.TrimSpace(input.PaymentMode))` in `KhataService.RecordPayment`.
+  - **Root Cause 5 - Phone Number Normalization (`KhataRepository.dart` & `khata_screen.dart`)**:
+    - Added static helper `KhataRepository.normalizePhone` extracting the clean 10-digit suffix (`clean.length > 10 ? clean.substring(clean.length - 10) : clean`).
+    - Standardized phone normalization across all repository methods (`getCustomerStatement`, `recordCredit`, `recordPayment`, `getPaymentReminder`, etc.), eliminating prefix mismatches (`+91`, `0`, or `91`).
+

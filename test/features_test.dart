@@ -6,6 +6,8 @@ import 'package:flutter_project_structure/features/pos/controllers/pos_controlle
 import 'package:flutter_project_structure/features/pos/models/pos_model.dart';
 import 'package:flutter_project_structure/features/products/models/product_model.dart';
 
+import 'package:flutter_project_structure/features/khata/repositories/khata_repository.dart';
+
 void main() {
   group('1. Localization & Language System Tests', () {
     test('Translations returns valid English and Hindi strings for critical keys', () {
@@ -178,6 +180,16 @@ void main() {
       expect(sale.items.length, 1);
       expect(sale.items.first.product.name, 'Aashirvaad Atta 5kg');
       expect(sale.items.first.quantity, 2);
+    });
+  });
+
+  group('6. Khata Phone Normalization Tests', () {
+    test('normalizePhone cleans +91, 0, and non-digits to 10 digits', () {
+      expect(KhataRepository.normalizePhone('+919876543210'), '9876543210');
+      expect(KhataRepository.normalizePhone('09876543210'), '9876543210');
+      expect(KhataRepository.normalizePhone('98765-43210'), '9876543210');
+      expect(KhataRepository.normalizePhone('9876543210'), '9876543210');
+      expect(KhataRepository.normalizePhone('12345'), '12345');
     });
   });
 }

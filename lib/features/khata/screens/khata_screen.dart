@@ -8,6 +8,7 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../controllers/khata_controller.dart';
 import '../models/khata_model.dart';
+import '../repositories/khata_repository.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -134,14 +135,18 @@ class _KhataScreenState extends State<KhataScreen> {
                                 : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            context.tr('khata_dialog_give_credit'),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: currentIsCredit
-                                  ? Colors.white
-                                  : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                          Flexible(
+                            child: Text(
+                              context.tr('khata_dialog_give_credit'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: currentIsCredit
+                                    ? Colors.white
+                                    : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                              ),
                             ),
                           ),
                         ],
@@ -172,14 +177,18 @@ class _KhataScreenState extends State<KhataScreen> {
                                 : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            context.tr('khata_dialog_receive_payment'),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: !currentIsCredit
-                                  ? Colors.white
-                                  : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                          Flexible(
+                            child: Text(
+                              context.tr('khata_dialog_receive_payment'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: !currentIsCredit
+                                    ? Colors.white
+                                    : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                              ),
                             ),
                           ),
                         ],
@@ -490,6 +499,31 @@ class _KhataScreenState extends State<KhataScreen> {
           ),
           const SizedBox(height: 20),
 
+          // Error banner
+          if (khataController.hasError) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      khataController.errorMessage!,
+                      style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
           // Action Buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -510,10 +544,16 @@ class _KhataScreenState extends State<KhataScreen> {
                         final amount = double.tryParse(amountCtrl.text) ?? 0.0;
                         final name = nameCtrl.text.trim();
                         final phone = phoneCtrl.text.trim();
+                        final cleanPhone = KhataRepository.normalizePhone(phone);
 
-                        if (amount <= 0 || name.isEmpty || phone.isEmpty) {
+                        if (amount <= 0 || name.isEmpty || cleanPhone.length < 10) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(context.tr('inv_val_required'))),
+                            SnackBar(
+                              content: Text(cleanPhone.length < 10 && phone.isNotEmpty
+                                  ? 'Please enter a valid 10-digit mobile number'
+                                  : context.tr('inv_val_required')),
+                              backgroundColor: AppColors.error,
+                            ),
                           );
                           return;
                         }
@@ -524,7 +564,7 @@ class _KhataScreenState extends State<KhataScreen> {
                         if (currentIsCredit) {
                           success = await khataController.addCredit(
                             customerName: name,
-                            mobile: phone,
+                            mobile: cleanPhone,
                             amount: amount,
                             notes: notesCtrl.text.trim(),
                             billNumber: billNoCtrl.text.trim(),
@@ -532,7 +572,7 @@ class _KhataScreenState extends State<KhataScreen> {
                         } else {
                           success = await khataController.addPayment(
                             customerName: name,
-                            mobile: phone,
+                            mobile: cleanPhone,
                             amount: amount,
                             paymentMode: paymentMode,
                             notes: notesCtrl.text.trim(),
@@ -544,7 +584,18 @@ class _KhataScreenState extends State<KhataScreen> {
                           if (success) {
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(context.tr('khata_toast_saved'))),
+                              SnackBar(
+                                content: Text(context.tr('khata_toast_saved')),
+                                backgroundColor: AppColors.success,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(khataController.errorMessage ?? 'Failed to save khata entry'),
+                                backgroundColor: AppColors.error,
+                                duration: const Duration(seconds: 4),
+                              ),
                             );
                           }
                         }
@@ -570,24 +621,27 @@ class _KhataScreenState extends State<KhataScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (sheetCtx, setModalState) {
           final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
-          return Container(
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
-              top: 20,
-              left: 20,
-              right: 20,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(sheetCtx).size.height * 0.90,
-                maxWidth: 580,
+          return Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              child: SingleChildScrollView(
-                child: buildFormContent(sheetCtx, setModalState),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+                top: 20,
+                left: 20,
+                right: 20,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(sheetCtx).size.height * 0.90,
+                  maxWidth: 580,
+                ),
+                child: SingleChildScrollView(
+                  child: buildFormContent(sheetCtx, setModalState),
+                ),
               ),
             ),
           );

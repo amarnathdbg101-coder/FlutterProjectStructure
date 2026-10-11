@@ -8,6 +8,15 @@ import '../models/khata_model.dart';
 class KhataRepository {
   final Dio _dio = ApiClient().dio;
 
+  /// Normalizes any input phone number (e.g., +919876543210, 09876543210) to a clean 10-digit number.
+  static String normalizePhone(String mobile) {
+    final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.length > 10) {
+      return clean.substring(clean.length - 10);
+    }
+    return clean;
+  }
+
   Future<ApiResponse<List<KhataCustomerModel>>> getCustomers({String search = ''}) async {
     try {
       final queryParams = search.isNotEmpty ? {'search': search} : null;
@@ -30,7 +39,7 @@ class KhataRepository {
 
   Future<ApiResponse<List<KhataTransactionModel>>> getCustomerStatement(String mobile) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       final res = await _dio.get('${ApiConstants.khata}/$clean/statement');
       final raw = res.data;
       List listData = [];
@@ -56,7 +65,7 @@ class KhataRepository {
     String billNumber = '',
   }) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       await _dio.post(
         ApiConstants.khata,
         data: {
@@ -81,7 +90,7 @@ class KhataRepository {
     String notes = '',
   }) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       await _dio.post(
         ApiConstants.khataRecordPayment(clean),
         data: {
@@ -121,7 +130,7 @@ class KhataRepository {
   // --- Reminders & Statement Sharing ---
   Future<ApiResponse<Map<String, dynamic>>> getPaymentReminder(String mobile) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       final res = await _dio.get(ApiConstants.khataPaymentReminder(clean));
       final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: data as Map<String, dynamic>);
@@ -132,7 +141,7 @@ class KhataRepository {
 
   Future<ApiResponse<String>> getStatementPdfUrl(String mobile) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       final res = await _dio.get(
         ApiConstants.khataStatementPdf(clean),
         options: Options(responseType: ResponseType.bytes),
@@ -144,7 +153,7 @@ class KhataRepository {
       return ApiResponse.failure('Statement PDF could not be generated');
     } catch (_) {
       try {
-        final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+        final clean = normalizePhone(mobile);
         final res = await _dio.get(ApiConstants.khataStatementPdf(clean));
         final data = res.data is Map ? (res.data['pdf_url'] ?? res.data['url'] ?? '') : '';
         if (data.toString().isNotEmpty) {
@@ -159,7 +168,7 @@ class KhataRepository {
 
   Future<ApiResponse<Map<String, dynamic>>> getStatementShare(String mobile) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       final res = await _dio.get(ApiConstants.khataStatementShare(clean));
       final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: data as Map<String, dynamic>);
@@ -171,7 +180,7 @@ class KhataRepository {
   // --- Credit Limit Management ---
   Future<ApiResponse<bool>> updateCreditLimit(String mobile, double creditLimit) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       await _dio.put(
         ApiConstants.khataCreditLimit(clean),
         data: {'credit_limit': creditLimit},
@@ -245,7 +254,7 @@ class KhataRepository {
 
   Future<ApiResponse<Map<String, dynamic>>> getCustomerTrustScore(String mobile) async {
     try {
-      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      final clean = normalizePhone(mobile);
       final res = await _dio.get(ApiConstants.khataTrustScore(clean));
       final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: data as Map<String, dynamic>);
