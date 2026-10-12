@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/constants/app_colors.dart';
 import 'core/localization/language_controller.dart';
+import 'core/network/api_client.dart';
 import 'core/routes/app_router.dart';
 import 'core/services/counter_websocket_service.dart';
 import 'core/storage/local_cache_service.dart';
 import 'core/storage/token_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
+import 'core/widgets/custom_snackbar.dart';
 import 'features/analytics/controllers/analytics_controller.dart';
 import 'features/auth/controllers/auth_controller.dart';
 import 'features/dashboard/controllers/dashboard_controller.dart';
@@ -24,6 +26,29 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await TokenStorage.init();
   await LocalCacheService.init();
+
+  // Global Flutter framework error handling
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    final msg = details.exception.toString();
+    // Suppress non-critical render layout overflow reports (already logged to console)
+    if (!msg.contains('RenderFlex') && !msg.contains('overflowed')) {
+      final isHindi = TokenStorage.getLanguage() == 'hi';
+      CustomSnackbar.showError(
+        null,
+        isHindi
+            ? 'एक अप्रत्याशित समस्या उत्पन्न हुई। कृपया पुनः प्रयास करें।'
+            : 'An unexpected issue occurred. Please try again.',
+      );
+    }
+  };
+
+  // Global asynchronous platform and Dart exception handling
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[ShopSilo Platform Error] $error');
+    CustomSnackbar.showError(null, ApiClient.handleError(error));
+    return true;
+  };
 
   if (TokenStorage.hasToken()) {
     CounterWebSocketService.instance.connect();

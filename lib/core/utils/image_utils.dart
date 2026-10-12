@@ -5,6 +5,7 @@ bool isLocalFilePath(String? path) {
   if (path == null || path.trim().isEmpty) return false;
   final clean = path.trim();
   if (clean.startsWith('file://')) return true;
+  if (clean.startsWith('content://')) return true;
   if (clean.startsWith('/data/') ||
       clean.startsWith('/storage/') ||
       clean.startsWith('/private/') ||
@@ -34,14 +35,6 @@ bool isServerImageUrl(String? path) {
       clean.startsWith('/products/') || clean.startsWith('products/') ||
       clean.startsWith('/static/') || clean.startsWith('static/') ||
       clean.startsWith('/api/')) {
-    return true;
-  }
-
-  // Any relative path with common image extensions
-  final lower = clean.toLowerCase();
-  if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') ||
-      lower.endsWith('.webp') || lower.endsWith('.gif') || lower.endsWith('.svg') ||
-      lower.endsWith('.avif')) {
     return true;
   }
 

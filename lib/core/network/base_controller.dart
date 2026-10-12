@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/custom_snackbar.dart';
 
 abstract class BaseController extends ChangeNotifier {
   bool _isLoading = false;
@@ -15,9 +16,12 @@ abstract class BaseController extends ChangeNotifier {
     }
   }
 
-  void setError(String? error) {
+  void setError(String? error, {bool showToast = true}) {
     _errorMessage = error;
     notifyListeners();
+    if (error != null && error.trim().isNotEmpty && showToast) {
+      CustomSnackbar.showError(null, error);
+    }
   }
 
   void clearError() {

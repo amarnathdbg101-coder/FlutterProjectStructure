@@ -51,9 +51,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.refresh_rounded, color: context.colorTextSecondary),
+              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
               tooltip: 'Refresh Analytics',
-              onPressed: () => controller.fetchAnalytics(),
+              onPressed: () async {
+                await controller.fetchAnalytics();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('✓ Shop Analytics Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                  );
+                }
+              },
             ),
             const SizedBox(width: 4),
           ],

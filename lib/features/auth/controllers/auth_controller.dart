@@ -1,6 +1,8 @@
 import 'package:image_picker/image_picker.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/counter_websocket_service.dart';
+import '../../../core/services/event_bus_service.dart';
+import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../dashboard/models/shop_model.dart';
 import '../models/user_model.dart';
@@ -94,7 +96,9 @@ class AuthController extends BaseController {
           user: _currentUser?.toJson(),
         );
 
-        // Fetch Shop details and user profile in background
+        // Clear any stale shop from prior user and fetch in background
+        _currentShop = null;
+        await TokenStorage.removeShop();
         fetchShopDetails();
         fetchUserProfile();
 
@@ -151,6 +155,9 @@ class AuthController extends BaseController {
           user: _currentUser?.toJson(),
         );
 
+        _currentShop = null;
+        await TokenStorage.removeShop();
+
         fetchShopDetails();
         fetchUserProfile();
         notifyListeners();
@@ -198,14 +205,24 @@ class AuthController extends BaseController {
 
   Future<void> fetchShopDetails({bool silent = false}) async {
     final response = await _repo.getMyShop();
-    if (response.success && response.data != null) {
+    if (response.success && response.data != null && response.data!.id.toString().isNotEmpty) {
       _currentShop = response.data;
       await TokenStorage.saveShop(_currentShop!.toJson());
+      notifyListeners();
+    } else {
+      // Backend returned 404 or empty: This user has not registered a store yet
+      _currentShop = null;
+      await TokenStorage.removeShop();
       notifyListeners();
     }
   }
 
   Future<bool> updateShop(Map<String, dynamic> data) async {
+    // If shop does not exist yet in database, route directly to createShop!
+    if (_currentShop == null || _currentShop!.id.toString().isEmpty) {
+      return await createShop(data);
+    }
+
     final original = _currentShop;
     if (_currentShop != null) {
       // Optimistic 0ms local update
@@ -215,6 +232,9 @@ class AuthController extends BaseController {
         address: data['address'] ?? _currentShop!.address,
         city: data['city'] ?? _currentShop!.city,
         pincode: data['pincode'] ?? _currentShop!.pincode,
+        latitude: data['latitude'] != null ? (data['latitude'] is num ? (data['latitude'] as num).toDouble() : double.tryParse(data['latitude'].toString())) : _currentShop!.latitude,
+        longitude: data['longitude'] != null ? (data['longitude'] is num ? (data['longitude'] as num).toDouble() : double.tryParse(data['longitude'].toString())) : _currentShop!.longitude,
+        googleMapsUrl: data['google_maps_url'] ?? _currentShop!.googleMapsUrl,
         phone: data['phone'] ?? _currentShop!.phone,
         whatsappNumber: data['whatsapp_number'] ?? _currentShop!.whatsappNumber,
         category: data['category'] ?? _currentShop!.category,
@@ -238,14 +258,23 @@ class AuthController extends BaseController {
       _currentShop = response.data;
       await TokenStorage.saveShop(_currentShop!.toJson());
       notifyListeners();
+      AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
       return true;
     } else {
+      // If error indicates shop not found / not registered yet, automatically fallback to createShop!
+      final errMsg = (response.error ?? '').toLowerCase();
+      if (errMsg.contains('not found') ||
+          errMsg.contains('not registered') ||
+          errMsg.contains('नहीं मिला') ||
+          errMsg.contains('404')) {
+        return await createShop(data);
+      }
       if (original != null) {
         _currentShop = original;
         await TokenStorage.saveShop(_currentShop!.toJson());
         notifyListeners();
       }
-      setError(response.error ?? 'Failed to update store details');
+      setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'दुकान विवरण अपडेट करने में विफल' : 'Failed to update store details'));
       return false;
     }
   }
@@ -255,13 +284,18 @@ class AuthController extends BaseController {
     clearError();
     final response = await _repo.createShop(data);
     setLoading(false);
-    if (response.success && response.data != null) {
+    if (response.success && response.data != null && response.data!.id.toString().isNotEmpty) {
       _currentShop = response.data;
       await TokenStorage.saveShop(_currentShop!.toJson());
+      if (_currentUser != null) {
+        _currentUser = _currentUser!.copyWith(role: 'merchant');
+        await TokenStorage.saveUser(_currentUser!.toJson());
+      }
       notifyListeners();
+      AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
       return true;
     }
-    setError(response.error ?? 'Failed to create store');
+    setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'दुकान बनाने में विफल' : 'Failed to create store'));
     return false;
   }
 
@@ -341,6 +375,7 @@ class AuthController extends BaseController {
       }
       await fetchShopDetails();
       notifyListeners();
+      AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
       return true;
     }
     setError(response.error ?? 'Failed to upload shop logo');
@@ -354,6 +389,7 @@ class AuthController extends BaseController {
     final response = await _repo.uploadShopBanners(files);
     setLoading(false);
     if (response.success && response.data != null && response.data!.isNotEmpty) {
+      AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
       return response.data!;
     }
     setError(response.error ?? 'Failed to upload shop banner images');
@@ -373,6 +409,7 @@ class AuthController extends BaseController {
       _currentShop = response.data;
       await TokenStorage.saveShop(_currentShop!.toJson());
       notifyListeners();
+      AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
       return true;
     } else {
       // Revert if failed
@@ -418,10 +455,12 @@ class AuthController extends BaseController {
     try {
       CounterWebSocketService.instance.disconnect();
     } catch (_) {}
+    await LocalCacheService.clearCache();
     await TokenStorage.clearSession();
     _currentUser = null;
     _currentShop = null;
     _isStaff = false;
+    AppEventBus().emit(AppCacheEventType.authLogout);
     notifyListeners();
   }
 }

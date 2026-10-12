@@ -183,8 +183,16 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
             onPressed: () => _showVerifyCodeDialog(context),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => resCtrl.loadReservations(),
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+            tooltip: 'Refresh Counter Pickup Orders',
+            onPressed: () async {
+              await resCtrl.loadReservations();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('✓ Counter Pickup Orders Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                );
+              }
+            },
           ),
         ],
       ),

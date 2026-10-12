@@ -1,7 +1,9 @@
+import 'dart:async';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../dashboard/repositories/shop_operations_repository.dart';
 import '../models/offer_model.dart';
@@ -13,9 +15,30 @@ class OfferController extends BaseController {
 
   List<OfferModel> get offers => _offers;
 
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+  StreamSubscription<AppCacheEvent>? _offerSub;
+
   OfferController() {
     _hydrateFromLocalCache();
     fetchOffers();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
+      _offers = [];
+      notifyListeners();
+    });
+    _offerSub = AppEventBus().on(AppCacheEventType.offerMutated, (_) {
+      fetchOffers();
+    });
+  }
+
+  @override
+  void dispose() {
+    _logoutSub?.cancel();
+    _offerSub?.cancel();
+    super.dispose();
   }
 
   void _hydrateFromLocalCache() {
@@ -120,10 +143,12 @@ class OfferController extends BaseController {
       }
       await LocalCacheService.saveOffers(_offers);
       notifyListeners();
+      AppEventBus().emit(AppCacheEventType.offerMutated);
       return true;
     } else {
       // Keep optimistic item locally
       notifyListeners();
+      AppEventBus().emit(AppCacheEventType.offerMutated);
       return true;
     }
   }
@@ -142,6 +167,7 @@ class OfferController extends BaseController {
 
     final response = await _repo.deleteOffer(targetId);
     if (response.success) {
+      AppEventBus().emit(AppCacheEventType.offerMutated);
       return true;
     } else {
       if (removed != null && index >= 0) {
@@ -171,6 +197,7 @@ class OfferController extends BaseController {
     _offers[index] = updated;
     await LocalCacheService.saveOffers(_offers);
     notifyListeners();
+    AppEventBus().emit(AppCacheEventType.offerMutated);
 
     await _repo.updateOffer(offer.id.toString(), {'is_active': updated.isActive});
   }

@@ -262,4 +262,23 @@ class KhataRepository {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
   }
+
+  // --- Permanent Hard Deletion ---
+  Future<ApiResponse<bool>> deleteCustomerKhata(String khataId) async {
+    try {
+      await _dio.delete('${ApiConstants.khata}/$khataId');
+      return ApiResponse(success: true, data: true);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<bool>> deleteKhataTransaction(String khataId, String txId) async {
+    try {
+      await _dio.delete('${ApiConstants.khata}/$khataId/transactions/$txId');
+      return ApiResponse(success: true, data: true);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
 }

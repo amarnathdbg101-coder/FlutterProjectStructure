@@ -66,6 +66,18 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
+            tooltip: 'Refresh Sales History',
+            onPressed: () async {
+              await context.read<PosController>().fetchBackendSales();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('✓ Today Sales History Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                );
+              }
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: ElevatedButton.icon(

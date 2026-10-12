@@ -31,24 +31,25 @@ class DataSyncService {
   static const Duration _syncCooldown = Duration(minutes: 5);
 
   /// Run full background synchronization
-  Future<void> runBackgroundSync(
+  Future<bool> runBackgroundSync(
     BuildContext context, {
     bool force = false,
   }) async {
-    if (!TokenStorage.hasToken()) return;
-    if (_isSyncing) return;
-    if (!context.mounted) return;
+    if (!TokenStorage.hasToken()) return false;
+    if (_isSyncing) return false;
+    if (!context.mounted) return false;
 
     final now = DateTime.now();
     if (!force && _lastSyncTime != null && now.difference(_lastSyncTime!) < _syncCooldown) {
       debugPrint('[DataSyncService] Cache is fresh, skipping redundant sync');
-      return;
+      return true;
     }
 
     _isSyncing = true;
     _lastSyncTime = now;
     debugPrint('[DataSyncService] Starting background data sync worker...');
 
+    bool hasAnyError = false;
     try {
       final authCtrl = Provider.of<AuthController>(context, listen: false);
       final prodCtrl = Provider.of<ProductController>(context, listen: false);
@@ -64,8 +65,13 @@ class DataSyncService {
         resCtrl.loadReservations(silent: true),
       ]).catchError((err) {
         debugPrint('[DataSyncService] Background API sync error (non-fatal): $err');
+        hasAnyError = true;
         return <void>[];
       });
+
+      if (authCtrl.hasError || prodCtrl.hasError || dashCtrl.hasError || resCtrl.hasError) {
+        hasAnyError = true;
+      }
 
       // Warm up Image Disk & Memory Caches for 0ms visual rendering
       if (context.mounted) {
@@ -74,8 +80,10 @@ class DataSyncService {
       }
 
       debugPrint('[DataSyncService] Background data sync worker completed successfully.');
+      return !hasAnyError;
     } catch (e) {
       debugPrint('[DataSyncService] Sync worker encountered exception: $e');
+      return false;
     } finally {
       _isSyncing = false;
     }
@@ -180,9 +188,9 @@ class DataSyncService {
             ),
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
-              label: 'View List',
+              label: 'View Alerts',
               textColor: Colors.amber,
-              onPressed: () => GoRouter.of(context).go('/merchant/procurement'),
+              onPressed: () => GoRouter.of(context).go('/merchant/low-stock'),
             ),
           ),
         );

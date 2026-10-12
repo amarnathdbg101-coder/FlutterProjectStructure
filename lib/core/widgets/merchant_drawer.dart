@@ -25,7 +25,10 @@ class MerchantDrawer extends StatelessWidget {
     final userEmailPhone = (user?.email.isNotEmpty == true)
         ? user!.email
         : ((user?.phone.isNotEmpty == true) ? user!.phone : 'merchant@shopsilo.in');
-    final shopName = (shop?.name.isNotEmpty == true) ? shop!.name : 'ShopSilo Store';
+    final hasShop = shop != null && shop.id.toString().isNotEmpty;
+    final shopName = hasShop && shop.name != 'ShopSilo Store'
+        ? shop.name
+        : (context.isHindi ? 'दुकान सेटअप करें' : 'Setup Store');
 
     return Drawer(
       backgroundColor: context.colorSurface,
@@ -65,14 +68,38 @@ class MerchantDrawer extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          '$shopName • $userEmailPhone',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: context.colorTextSecondary,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '$shopName • $userEmailPhone',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.colorTextSecondary,
+                                ),
+                              ),
+                            ),
+                            if (!hasShop) ...[
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  context.isHindi ? 'नया' : 'Setup',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),

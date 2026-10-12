@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,8 +12,39 @@ import '../models/product_model.dart';
 class ProductRepository {
   final Dio _dio = ApiClient().dio;
 
+  /// Silently caches and synchronizes backend categories into CategoryRegistry
+  Future<void> syncCategories() async {
+    try {
+      final res = await _dio.get(ApiConstants.categories);
+      dynamic raw = res.data;
+      if (raw is String) {
+        try {
+          raw = jsonDecode(raw);
+        } catch (_) {}
+      }
+      List listData = [];
+      if (raw is List) {
+        listData = raw;
+      } else if (raw is Map && raw['data'] is List) {
+        listData = raw['data'] as List;
+      }
+      final catMaps = <Map<String, dynamic>>[];
+      for (final item in listData) {
+        if (item is Map) {
+          catMaps.add(Map<String, dynamic>.from(item));
+        }
+      }
+      if (catMaps.isNotEmpty) {
+        CategoryRegistry.registerCategories(catMaps);
+      }
+    } catch (_) {}
+  }
+
   Future<ApiResponse<List<ProductModel>>> getMyProducts({String search = '', String category = ''}) async {
     try {
+      // Warm up / sync categories asynchronously
+      syncCategories();
+
       final queryParams = <String, dynamic>{
         'limit': 100,
       };
@@ -21,7 +53,7 @@ class ProductRepository {
         queryParams['q'] = search.trim();
       }
       if (category.trim().isNotEmpty && category != 'All' && category != 'All Items') {
-        queryParams['category_id'] = category.trim();
+        queryParams['category_id'] = getCategorySlug(category.trim());
       }
 
       final res = await _dio.get(ApiConstants.products, queryParameters: queryParams);
@@ -151,8 +183,12 @@ class ProductRepository {
 
   Future<ApiResponse<List<String>>> uploadProductXFiles(List<XFile> xFiles) async {
     try {
+      if (xFiles.isEmpty) {
+        return ApiResponse(success: true, data: []);
+      }
+
       final multipartFiles = <MultipartFile>[];
-      for (final f in xFiles.take(4)) {
+      for (final f in xFiles.take(10)) {
         final bytes = await f.readAsBytes();
         var fileName = f.name.trim();
         if (fileName.isEmpty || !fileName.contains('.')) {
@@ -174,8 +210,22 @@ class ProductRepository {
         multipartFiles.add(MultipartFile.fromBytes(bytes, filename: fileName, contentType: mediaType));
       }
 
-      final formData = FormData.fromMap({'images': multipartFiles}, ListFormat.multi);
-      final res = await _dio.post(ApiConstants.productImages, data: formData);
+      final formData = FormData();
+      for (final mp in multipartFiles) {
+        formData.files.add(MapEntry('images', mp));
+      }
+
+      debugPrint('[ProductRepository] Uploading ${multipartFiles.length} product images to ${ApiConstants.productImages}...');
+      final res = await _dio.post(
+        ApiConstants.productImages,
+        data: formData,
+        options: Options(
+          sendTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 90),
+        ),
+      );
+
+      debugPrint('[ProductRepository] Upload response status: ${res.statusCode}');
 
       dynamic raw = res.data;
       if (raw is String) {
@@ -216,6 +266,7 @@ class ProductRepository {
       }
       return ApiResponse(success: true, data: parsedUrls);
     } catch (e) {
+      debugPrint('[ProductRepository] Upload product images error: $e');
       return ApiResponse.failure(ApiClient.handleError(e));
     }
   }

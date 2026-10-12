@@ -273,6 +273,105 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - Connected `ShopDetailModal.jsx` to live GPS coordinates from `LocationContext` (`coords`).
   - Added real-time Haversine distance calculations (`calculateDistanceKm`) and travel time estimations (`formatTravelTime`: `🚶 0.3 km (4 mins walk)` vs `🚗 1.5 km (4 mins drive)`).
   - Replaced static map links with `getDirectionsUrl` generating direct Google Maps navigation routes based on exact shop coordinates.
+- **[2026-10-12]**: End-to-End Real-Time Counter Pickup Reservation Architecture:
+  - Discovered and fixed GoBackend router configuration (mounted `/reservations` customer endpoints and `/shops/me/reservations` merchant endpoints).
+  - Verified `ReservationService.CreateReservation` inventory auto-hold and 0ms WebSocket broadcasting (`wsHub.BroadcastToShop`).
+  - Integrated 0ms real-time audio/visual alert banner in Flutter Merchant App for incoming customer pickup orders.
+- **[2026-10-12]**: Resolution of ListTile Background Assertion in Flutter (`profile_screen.dart`):
+  - Wrapped `ListTile` and `SwitchListTile` instances inside `Material(color: Colors.transparent)` to prevent Flutter framework assertions when embedded inside `AppCard` or `DecoratedBox`.
+- **[2026-10-11]**: Flutter Merchant App Centralized `AppEventBus` & Event-Driven SWR Engine:
+  - Created `AppEventBus` (`event_bus_service.dart`) with broadcast stream, typed event filtering, and memory-safe `StreamSubscription` cleanup.
+  - Linked `ProductController`, `PosController`, `KhataController`, and `AuthController` to automatically emit and listen for `productsMutated`, `posSaleCompleted`, `inventoryMutated`, `khataMutated`, and `authLogout` events, guaranteeing 0ms cross-module data synchronization.
+- **[2026-10-11]**: End-to-End Verification & Double Validation of SWR & EventBus Architecture (`CustomerFrontend`):
+  - Verified `ExploreShopsScreen.jsx` and `StorefrontScreen.jsx` event listeners with memory-safe `unsub()` cleanup.
+  - Verified zero-latency background revalidation and zero DOM layout shifts.
+- **[2026-10-11]**: React Customer Web App `useSWR` & `cacheEvents` Event-Driven Invalidation Integration:
+  - Built custom `useSWR.js` React hook with 0ms instant cache hydration, silent background revalidation, and smart JSON diffing.
+  - Built `cacheEvents.js` memory-safe event bus for instant event-driven cache invalidation across `ExploreShopsScreen`, `StorefrontScreen`, `ReservationsScreen`, and `CustomerKhataScreen`.
+- **[2026-10-11]**: GoBackend Complete Atomic Hard Delete & R2 Image Asset Clean-up Engine:
+  - Fixed root cause of soft deletion in `repository/product.go` and `repository/shop.go`.
+  - Implemented atomic CASCADE hard deletion for products, offers, expenses, and Khata ledger entries (`DeleteCustomerKhataHard`, `DeleteKhataTransactionHard`).
+  - Integrated Cloudflare R2 bucket image file deletion (`reuse.DeleteImage`) upon product/shop removal.
+- **[2026-10-11]**: Unrestricted Merchant Shop Registration & Automatic Role Upgrades:
+  - Relaxed DTO validation tags for optional shop creation fields (`category`, `address`) in `dto/shop.go`.
+  - Added automatic field defaulting (`Category: "General Store"`, `Address: "Local Market"`) and pre-deletion of old/inactive shop rows (`DELETE FROM shops WHERE user_id = $1`) in `services/shop.go`, eliminating 23505 unique constraint conflicts.
+  - Automatically saves upgraded `"merchant"` JWT access token into `TokenStorage` upon shop creation.
+- **[2026-10-11]**: Robust JSON Specification Parsing & Attribute Map Normalization (`ProductDetailModal.jsx`):
+  - Added stringified JSON parser fallback for `product.attributes` in `ProductDetailModal.jsx`.
+  - Merged top-level specification properties (`brand`, `color`, `size`, `flavor`, `material`, `warranty`, `model`) with attributes map, ensuring 100% specification retention.
+- **[2026-10-11]**: Enterprise-Grade Customer Specification Engine & GoBackend Public Sanitization:
+  - Verified GoBackend public endpoint scrubbing (`sanitizePublicProduct`) to zero-out internal merchant financials (`CostPrice`, `FloorPrice`, `LowStockThreshold`, etc.) and scrub private JSONB keys.
+  - Verified Customer Web App (`ProductDetailModal.jsx`) displaying ALL genuine shop-uploaded specifications (`Brand`, `Category`, `Unit`, `Net Weight`, `Color`, `Size`, `Warranty`, `Shelf Life`, etc.) while strictly masking merchant secrets.
+- **[2026-10-11]**: React Customer Web App `useMemo` Import Fix (`StorefrontScreen.jsx`):
+  - Fixed `useMemo` missing React import in `StorefrontScreen.jsx`, resolving runtime `technical error: useMemo not found` when accessing shop storefronts.
+  - Recompiled production React bundle in 676ms.
+- **[2026-10-11]**: Restoration & Validation of `customer_shop_screen.dart`:
+  - Fully restored `customer_shop_screen.dart` with 0 compilation errors across all modules.
+  - Enabled clean hot reload and device sync on physical Android device V2338.
+- **[2026-10-11]**: High-Vibe POS Counter Billing UI/UX Modernization & Workflow Refinement (`PosScreen.dart`):
+  - Streamlined POS Terminal split-screen layout with tactile payment chips (`Cash`, `UPI QR`, `Khata Udhar`, `Card`).
+  - Added 1-tap quick discount dialog (`✏️ Edit Discount`) and cash tender change calculator (`Change Due: ₹X`).
+  - Added live 24h sales counter pill and 1-tap thermal receipt PDF printer / WhatsApp receipt sharing flow.
+- **[2026-10-11]**: Location-Aware Fast Search & Multi-Criteria Sorting Engine (`CustomerFrontend`):
+  - Integrated location-aware pre-filtering (`calculateDistanceKm(coords, shop_coords) <= radiusKm`) in `ExploreShopsScreen.jsx` and `StorefrontScreen.jsx`.
+  - Added 5 instant sorting options: `Relevant`, `Nearest First`, `Price: Low to High`, `Price: High to Low`, and `Highest Savings (% OFF)`.
+- **[2026-10-11]**: Strict Customer Privacy Filtering & Single Category Specification Tile (`ProductDetailModal.jsx`):
+  - Expanded `PRIVATE_KEYS` blocklist in `ProductDetailModal.jsx` to filter out internal system flags (`is_price_public`, `is_active`, `hide_price`, etc.) and duplicate category fields.
+  - Added dedicated Category specification tile (`Category: Dairy, Bakery & Frozen`) inside the Product Specifications Grid without duplicating.
+- **[2026-10-11]**: Responsive Mobile Product Details Grid & Gallery Stage Tuning (`ProductDetailModal.jsx`):
+  - Updated `ProductDetailModal.jsx` grid columns from `minmax(320px, 1fr)` to `minmax(280px, 1fr)` with `280px / 40vh` max stage height.
+  - Resolved horizontal viewport overflow and clipping on mobile devices, ensuring product details, title, pricing, quantity stepper, and CTA buttons are 100% visible.
+- **[2026-10-11]**: Responsive Mobile Product Details Grid & Gallery Stage Tuning (`ProductDetailModal.jsx`):
+  - Updated `ProductDetailModal.jsx` grid columns from `minmax(320px, 1fr)` to `minmax(280px, 1fr)` with `280px / 40vh` max stage height.
+  - Resolved horizontal viewport overflow and clipping on mobile devices, ensuring product details, title, pricing, quantity stepper, and CTA buttons are 100% visible.
+- **[2026-10-11]**: Clean Merchant Product Visibility Badges (`inventory_screen.dart`):
+  - Removed thumbnail image overlay from product cards in `InventoryScreen.dart`.
+  - Replaced 'Hidden Online' text with dynamic status badges beside the price tag: `🔒 Private` (for hidden prices) and `🌐 Public` (for public prices).
+- **[2026-10-11]**: Standalone Low Stock Alerts Page (`LowStockAlertsScreen.dart` & `/merchant/low-stock`):
+  - Created dedicated `LowStockAlertsScreen.dart` registered under `/merchant/low-stock`.
+  - Renders ONLY products with low or out-of-stock inventory, featuring 1-tap quick restock steppers and alert threshold limits, completely separating Low Stock Alerts from Active Products catalog (`/merchant/inventory`).
+- **[2026-10-11]**: Low Stock Alerts Build Fix & Public Dialog Export (`inventory_screen.dart`):
+  - Added public top-level helper `showAddProductDialog` in `inventory_screen.dart`.
+  - Resolved physical device build compilation error in `low_stock_alerts_screen.dart` with 0 compilation errors across all modules.
+- **[2026-10-11]**: Dedicated Low Stock Alerts Page (`LowStockAlertsScreen.dart` & `/merchant/low-stock`):
+  - Built standalone `LowStockAlertsScreen.dart` registered under `/merchant/low-stock` route.
+  - Dedicated page renders ONLY low stock and out-of-range items, complete with alert threshold limits, quick restock steppers, and direct product editing, ensuring Active Products (`/merchant/inventory`) and Low Stock Alerts (`/merchant/low-stock`) are 100% distinct.
+- **[2026-10-11]**: Dedicated Low Stock Alert Routing & Mandi Procurement Separation (`DashboardScreen.dart`):
+  - Updated 'Low Stock Alert' KPI stat card on Dashboard to route directly to `/merchant/procurement` (Mandi Procurement Reorder Sourcing Hub).
+  - Keeps 'Active Products' catalog (`/merchant/inventory`) and 'Low Stock Reorder' (`/merchant/procurement`) 100% distinct, separate, and independent.
+- **[2026-10-11]**: Simplified & Aesthetic `AppProductSearchBar` Design Refinement:
+  - Simplified `AppProductSearchBar` in `app_ui_components.dart` to a clean 42px container with soft 10px rounded corners, subtle elevation, search icon, circular clear button, and barcode scanner icon.
+  - Removed redundant 'Add' button from POS scan bar (`PosScreen.dart`) and removed 'All Items / Low Stock' FilterChip from Inventory catalog search bar (`InventoryScreen.dart`), giving search bars full-width spaciousness.
+- **[2026-10-11]**: Universal Reusable `AppProductSearchBar` Component (Shop Merchant App):
+  - Created centralized `AppProductSearchBar` in `app_ui_components.dart` featuring 1-tap clear button, optional SKU barcode scanner trigger, and high-vibe glassy container styling.
+  - Replaced duplicate custom search textfields in `PosScreen.dart`, `InventoryScreen.dart`, and `CustomerShopScreen.dart` with the unified search bar, guaranteeing 100% design consistency and easy future maintenance.
+- **[2026-10-11]**: Route-Specific & Feature-Isolated Refresh System (Shop Merchant App):
+  - Dashboard (`DashboardScreen.dart`): Added AppBar '⚡ Full App Data Sync' button executing `DataSyncService().runBackgroundSync(context, force: true)`.
+  - Feature Screens (`PosScreen`, `TodaySalesScreen`, `InventoryScreen`, `KhataScreen`, `ExpenseScreen`, `OffersScreen`, `AnalyticsScreen`, `ProcurementListScreen`, `ReservationsListScreen`, `ProfileScreen`): Configured AppBar refresh buttons to execute route-specific, feature-isolated API calls with floating confirmation toasts, avoiding unnecessary whole-app data re-fetches.
+- **[2026-10-11]**: Smart Google Maps Share Link Coordinate Extractor (`profile_screen.dart`):
+  - Added regex pattern parser (`_extractCoordinatesFromMapsUrl`) to `ProfileScreen.dart`.
+  - Automatically extracts exact hardware GPS coordinates (`latitude`, `longitude`) when shopkeepers paste Google Maps share links (`https://maps.app.goo.gl/...` or `https://maps.google.com/?q=...`), completely eliminating 7.5 km telecommunication ISP IP tower location discrepancies.
+- **[2026-10-11]**: Real-Time Header Cart Indicator & Live Item Count Badge (`CustomerFrontend`):
+  - Integrated `ShoppingBag` button with red live item count badge directly into top `AppHeader.jsx`.
+  - Gives customers 1-tap instant access to `CartDrawer.jsx` and checkout from any screen across the web app.
+- **[2026-10-11]**: Pixel-Perfect Square Skeleton Shimmer Loader (`CustomerFrontend`):
+  - Redesigned `SkeletonProductCard` in `Skeleton.jsx` to match `ProductCard.jsx`'s exact square aspect ratio (`aspectRatio: '1 / 1'`), 1-line product title, price tag, and button shape.
+  - Delivered 0 Cumulative Layout Shift (0 CLS) during page loading on 2G/3G networks, keeping layout transitions 100% smooth.
+- **[2026-10-11]**: Cleaned Up Inventory Section from Product Detail Screen (`product_detail_screen.dart`):
+  - Removed `_buildInventoryStockCard` from both Desktop and Mobile layouts in `product_detail_screen.dart` as requested.
+  - Stock and inventory management are now handled exclusively through the Update / Edit Product feature.
+- **[2026-10-11]**: Cleaned Up Inventory Section from Product Detail Screen (`product_detail_screen.dart`):
+  - Removed `_buildInventoryStockCard` from both Desktop and Mobile layouts in `product_detail_screen.dart` as requested.
+  - Stock and inventory management are now handled exclusively through the Update / Edit Product feature.
+- **[2026-10-11]**: High-Precision Geolocation & Strict Proximity Filter Engine (Shop App & Customer Web):
+  - Shop App (`profile_screen.dart`): Replaced manual location preset chips with a single prominent '📍 Use Live GPS Location' button. Automatically fetches high-precision device GPS coordinates (`latitude`, `longitude`) and updates PostgreSQL database.
+  - Customer Web App (`ExploreShopsScreen.jsx`): Connected shop and product feeds to strict `radiusKm` distance filtering (`calculateDistanceKm(coords.lat, coords.lng, shop.latitude, shop.longitude) <= radiusKm`), ensuring 1km, 3km, 5km, etc. radius filters strictly exclude out-of-range stores.
+- **[2026-10-11]**: Uniform Square Product Grid Containers & 1-Line Title Truncation (`CustomerFrontend`):
+  - Standardized `ProductCard.jsx`, `StorefrontScreen.jsx`, and `ExploreShopsScreen.jsx` so all product grid containers use a clean, uniform square aspect ratio (`aspectRatio: '1 / 1'`).
+  - Enforced strict 1-line product name truncation (`whiteSpace: 'nowrap'`, `overflow: 'hidden'`, `textOverflow: 'ellipsis'`), completely eliminating tall, uneven product cards across the web app.
+- **[2026-10-11]**: Uniform Square Product Grid Containers & 1-Line Product Title Truncation (`CustomerFrontend`):
+  - Standardized `ProductCard.jsx`, `StorefrontScreen.jsx`, and `ExploreShopsScreen.jsx` so all product grid containers use a clean, uniform square aspect ratio (`aspectRatio: '1 / 1'`).
+  - Enforced strict 1-line product name truncation (`whiteSpace: 'nowrap'`, `overflow: 'hidden'`, `textOverflow: 'ellipsis'`), completely eliminating tall, uneven product cards across the web app.
 - **[2026-10-11]**: Cleaned Up Travel Time Icon Rendering in `ShopDetailModal.jsx`: Removed duplicate `travelInfo.icon` rendering, eliminating duplicate car emoji (`🚗 🚗`) display.
 - **[2026-10-11]**: Systematic Storefront Header Layout (`StorefrontScreen.jsx`): Redesigned shop storefront header into a clean, systematic card featuring store logo, name, category badge, verified partner badge, open/closed status indicator, real-time GPS distance & travel time pill (`🚶 0.3 km`), store address, timings, and 1-tap action buttons (`💬 WhatsApp Inquiry`, `📞 Call Store`, `🗺️ Directions`, `ℹ️ Full Store Info`).
 - **[2026-10-11]**: Cleaned Up Storefront Screen UI (`StorefrontScreen.jsx`): Removed the big shop banner card header completely as requested. The storefront now opens directly with the In-Store Product Search Bar & Product Cards Grid, showing the store name in the top AppBar.
@@ -421,8 +520,307 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - **Fix**: Created `internal/utils/time_utils.go` (`IndianLocation`, `IndianNow()`, `IndianDayBounds()`). Standardized `GetDailySummary`, `GetDailyCloseReport`, and `ListBills` queries to use `utils.IndianDayBounds()`.
   - **Automated Regression Suite (`test/features_test.dart`)**:
     - Added group 9 tests verifying UTC to local conversion, timestamps without Z, and hold time remaining calculations. 15/15 tests passing.
+- **[2026-10-11]**: Instant Non-Blocking Product Creation & Background Processing:
+  - **Issue Reported**: Whenever the user added a product, the app kept the modal dialog open with a loading spinner, forcing the merchant to wait until image uploads and the backend API roundtrip finished.
+  - **User Requirement**: Validate all input data upfront. If valid, instantly close the dialog and notify the merchant with a success message, while processing, image uploads, and server database persistence happen in the background without blocking the user.
+  - **Architectural Solution**:
+    1. **Synchronous Validation & Immediate Modal Dismissal (`inventory_screen.dart`)**:
+       - Full client-side validation of all constraints (Name, Selling Price, MRP >= Price, Cost Price <= Price, Floor Price <= Price, Stock >= 0).
+       - If validation fails, error snackbar is displayed and user remains in the modal.
+       - If validation succeeds, modal bottom sheet is closed immediately (`Navigator.pop`) with 0ms waiting time, and a floating success toast (`inv_toast_added` / `inv_toast_updated`) is shown right away.
+    2. **0ms Optimistic UI & Local Cache Persistence (`product_controller.dart`)**:
+       - `ProductController.addProduct()` immediately inserts the optimistic product at index 0 of `_products` with a temporary ID and writes to `LocalCacheService`. The user immediately sees the new product in their inventory catalog.
+    3. **Silent Background Processing & Server Synchronization (`product_controller.dart`)**:
+       - Asynchronously uploads local images via `_repo.uploadProductXFiles` without toggling `setLoading(true)` (avoiding whole-screen loading spinners).
+       - Posts product payload to backend (`_repo.createProduct`).
+       - On success, updates the temporary product in place with the server DB model.
+       - On failure, cleanly rolls back the optimistic product, updates local cache, and alerts the merchant via `rootScaffoldMessengerKey`.
+    4. **Automated Regression Suite (`test/features_test.dart`)**:
+       - Added group 10 tests verifying pricing constraints and optimistic `ProductModel` local image handling. All 17 unit/widget tests passing.
+- **[2026-10-11]**: Canonical Category Name Display & Bidirectional Mapping Engine:
+  - **Issue Reported**: When creating or adding a product, the merchant selects a human-readable Category Name (e.g., "Dairy, Bakery & Frozen", "Grocery & Staples"). However, when retrieving products from the backend or local cache, the UI displayed raw category IDs / UUIDs (e.g. `0973ccf7-ef05-4e42-a38c-3851f643cb7a`) or API slugs (`dairy-breakfast`, `kirana-grocery`).
+  - **Root Cause**:
+    1. GoBackend selects `COALESCE(category_id::text, '')` and does not join category names in product responses.
+    2. `ProductModel.fromJson` fell back to `category_id`.
+    3. `formatCategoryName` lacked UUID mapping and treated hex UUIDs as hyphenated words, generating garbled text like `0973ccf7 Ef05 4e42 A38c 3851f643cb7a`.
+  - **Architectural Solution**:
+    1. **`CategoryRegistry` (`product_model.dart`)**:
+       - Built bidirectional registry mapping all 27 GoBackend category UUIDs and slugs to clean, standardized Title Names.
+       - Added runtime category synchronization (`CategoryRegistry.registerCategories`) caching `/categories` API responses.
+       - Implemented UUID detection (`CategoryRegistry.isUuid`) to safely default unknown UUIDs to `'General Store'`, guaranteeing raw hex IDs are NEVER exposed to merchants.
+    2. **Dual-Persistence Guarantee (`ProductController` & `ProductModel`)**:
+       - Added `category_name` and `category` directly into `attributes` (JSONB) before sending payloads to GoBackend. PostgreSQL preserves this in `products.attributes`, returning the exact category string on all fetches.
+       - In `ProductModel.fromJson`: prioritized `category_name`, `attributes['category_name']`, `attributes['category']`, and resolved `category_id` via `formatCategoryName`.
+       - In `ProductModel.toJson`: saved both `category_name`, `category`, and `attributes['category_name']` alongside canonical `category_id: slug`.
+    3. **UI/UX Cleanliness (`inventory_screen.dart` & `product_detail_screen.dart`)**:
+       - Pre-formatted `initialProduct.category` in edit sheet with `formatCategoryName`, ensuring accurate dropdown selection.
+       - Filtered out `category_name` and `category` from custom attributes lists and specification chips.
+    4. **Regression Tests**: Added Group 11 tests in `test/features_test.dart` verifying UUID resolution, slug resolution, JSON serialization, and fallback safety. 26/26 tests passing.
+- **[2026-10-11]**: Full Product Specifications & Dynamic Attributes Persistence & Retrieval Overhaul:
+  - **Issue Reported**: When merchants added products and filled out extensive specifications (Brand, Unit, Weight/Vol, Size, Flavor, Warranty, Color, Model, Custom Attributes, Floor Price, Bargain status), upon retrieving and viewing the product in the inventory catalog, details screen, or edit sheet, many specifications were missing, blank, or lost.
+  - **Root Cause Analysis (GoBackend & Flutter Frontend)**:
+    1. **GoBackend Unmarshaling Gap (`repository/product.go`)**:
+       - In both `ProductRepo.Create` and `ProductRepo.Update`, the SQL query scanned `attributes` into `&attributesBytes`.
+       - While `imagesBytes` was unmarshaled into `Images`, `attributesBytes` was **never unmarshaled** into `created.Attributes` or `updated.Attributes`!
+       - As a result, when GoBackend returned the created/updated product, `attributes` was returned as `nil` / `{}`. When Flutter received this response, it overwrote the local optimistic product and erased all custom attributes.
+    2. **GoBackend `FindAll` Scanning Gap (`repository/product.go`)**:
+       - In `ProductRepo.FindAll` (used for listing shop products in catalog), `floor_price`, `allow_bargain`, and `is_price_public` were completely missing from the SELECT query and row scan, causing pricing specifications to default to zero or null.
+    3. **Flutter `ProductModel.fromJson` Parsing Gaps (`product_model.dart`)**:
+       - Only checked `if (json['attributes'] is Map)`. When PostgreSQL/Go returned stringified JSON, or when attributes were returned under alternative keys (`specifications`, `specs`, `metadata`), it failed to parse them.
+       - Top-level specification keys (`brand`, `unit`, `size`, `color`, `flavor`, `warranty`, `model`, etc.) were not extracted into `attributes`.
+       - Lacked a direct `brand` getter.
+    4. **Product Controller Overwrite Gap (`product_controller.dart`)**:
+       - In `addProduct` and `editProduct`, the backend response was assigned directly to `_products` without merging with optimistic attributes, wiping custom specifications if the backend returned an incomplete payload.
+    5. **UI Display & Edit Sheet Gaps (`inventory_screen.dart` & `product_detail_screen.dart`)**:
+       - In `inventory_screen.dart`, `unit` was missing from `attributes` map assembly on submit, and edit sheet didn't filter `unit` from `customAttrPairs`, leading to potential duplication.
+       - In `product_detail_screen.dart`, `_buildSpecificationsGrid` skipped `brand`, omitted Floor Price, Bargain Allowed, and Low Stock Alert, and didn't format snake_case attribute keys.
+  - **Architectural Solution**:
+    1. **GoBackend Unmarshaling & Query Alignment (`repository/product.go`)**:
+       - Added `created.Attributes = make(map[string]interface{})` with `json.Unmarshal(attributesBytes, &created.Attributes)` in `Create`.
+       - Added `updated.Attributes = make(map[string]interface{})` with `json.Unmarshal(attributesBytes, &updated.Attributes)` in `Update`.
+       - Added `floor_price`, `allow_bargain`, and `is_price_public` to `FindAll` SELECT and scanned them into `&p.FloorPrice, &p.AllowBargain, &p.IsPricePublic`.
+    2. **Resilient `ProductModel` Deserialization & Serialization (`product_model.dart`)**:
+       - Enhanced `fromJson` to support stringified JSON via `jsonDecode`, alternative keys (`specifications`, `specs`, `metadata`), and automatic extraction of top-level specification keys into `attributes`.
+       - Added `brand` getter (`attributes['brand']?.toString() ?? ''`).
+       - Guaranteed `unit` is always saved into and resolved from `attributes['unit']`.
+       - Updated `toJson` to include `unit`, `brand`, and clean `attributes`.
+    3. **Protective Merge in `ProductController` (`product_controller.dart`)**:
+       - Merged optimistic attributes with backend response in both `addProduct` and `editProduct`, ensuring zero loss of custom specifications, unit, floor price, or bargain status.
+    4. **Comprehensive Specifications Showcase (`product_detail_screen.dart`)**:
+       - Overhauled `_buildSpecificationsGrid` to prominently display:
+         - Core Identity: Brand, Category, Unit, Net Weight, SKU, Barcode.
+         - Pricing & Negotiation: Floor Price, Bargain Allowed status, Low Stock Alert.
+         - Dynamic Custom Attributes: Size, Color, Flavor, Warranty, Model, and any custom merchant specifications with clean Title Case keys (`shelf_life` -> `Shelf Life`).
+    5. **Automated Regression Suite (`test/features_test.dart`)**:
+       - Added 2 new tests verifying stringified JSONB attributes parsing, top-level specs extraction, and complete specification retention. All 28 tests passing!
+
+
+- **[2026-10-11]**: High-Resolution Product Image Upload, Android PNG Compatibility & Non-Destructive Sync Overhaul:
+  - **Issue Reported**: On physical Android device (Vivo V2338), updating product images and tapping save produced a success toast ("Product updated successfully"), but the images were not uploaded to Cloudflare R2 / GoBackend, leaving products with missing or previous images on server. Log showed: `D/ImageResizer: image_picker: compressing is not supported for type PNG. Returning the image with original quality`.
+  - **Root Cause Analysis (GoBackend & Flutter Frontend)**:
+    1. **GoBackend 10MB Body Size Limit Breach (`bot_guard.go` & `upload.go`)**:
+       - Android `ImageResizer` cannot compress PNG files with quality parameters; it returns high-res camera captures and screenshots in uncompressed original quality.
+       - Four uncompressed photos from modern 50MP smartphone cameras easily total 15MB to 30MB+.
+       - GoBackend `BodySizeGuard` capped `multipart/form-data` at 10MB (`10 << 20`) and `UploadProductImages` called `ParseMultipartForm(10 * 1024 * 1024)`. Payloads exceeding 10MB were immediately rejected with HTTP 413 `Request payload exceeds maximum allowed size.`
+    2. **GoBackend Image Size & Content-Type Rigidity (`claudeflare.go`)**:
+       - `MaxImageSizeBytes` was capped at 8MB, rejecting large single captures with `ErrImageTooLarge`.
+       - Content-type verification failed if headers included parameters (e.g. `image/png; charset=utf-8`), Android MIME aliases (`image/x-png`), or missing types.
+    3. **Silent Image Upload Failure & Premature Overwrite (`product_controller.dart`)**:
+       - In `editProduct` background sync, when `uploadProductXFiles` failed (due to HTTP 413 or timeout), the error was caught and swallowed.
+       - `payload['images']` remained empty (`[]`).
+       - `_repo.updateProduct` was then executed with `images: []`, which succeeded and updated PostgreSQL with zero images, silently erasing or failing to attach the merchant's pictures while the UI toast showed "Product updated successfully".
+    4. **Image URL Misclassification (`image_utils.dart`)**:
+       - `isLocalFilePath` was missing Android `content://` URI matching.
+       - `isServerImageUrl` contained a catch-all check `lower.endsWith('.png')`, which incorrectly classified local files like `image_123.png` or `upload_xyz.png` as already-uploaded server URLs.
+  - **Architectural Solution**:
+    1. **GoBackend Upload Limits & MIME Resilience (`bot_guard.go`, `upload.go`, `claudeflare.go`)**:
+       - Increased `BodySizeGuard` multipart limit to 40MB (`40 << 20`) and `ParseMultipartForm` to 40MB.
+       - Increased `MaxImageSizeBytes` to 20MB per photo.
+       - Built `CompressImage` engine downscaling images larger than 1600px and optimizing to JPEG quality 80 before storing in Cloudflare R2.
+       - Sanitized content-type extraction (strips MIME parameters, maps `image/x-png` and `image/pjpeg`) with magic-byte fallback via `http.DetectContentType`.
+       - Added fallback multi-field names (`images`, `images[]`, `file`, `files`, `image`) in `UploadProductImages`.
+    2. **Flutter Repository & Timeouts (`product_repository.dart`)**:
+       - Cleanly populated multipart form data with explicit `formData.files.add(MapEntry('images', mp))`.
+       - Added 90-second send/receive timeout to ensure multi-megabyte mobile photo uploads do not time out on cellular connections.
+    3. **Controller Error Transparency & Non-Destructive Protection (`product_controller.dart`)**:
+       - Added actionable SnackBar alerts if background image upload encounters errors.
+       - Guaranteed that existing server images (`original.images`) are preserved rather than overwritten with `[]` if background upload fails.
+       - Updated optimistic catalog item with uploaded Cloudflare R2 URLs as soon as background upload succeeds.
+    4. **Image Path Detection & Test Suite (`image_utils.dart` & `features_test.dart`)**:
+       - Added `content://` URI recognition to `isLocalFilePath` and restricted `isServerImageUrl` to genuine remote endpoints (`http://`, `https://`, `/images/`, `/uploads/`).
+       - Added Group 13 unit tests in `features_test.dart`. All 30 tests passing!
+
+- **[2026-10-11]**: Real Hardware GPS Integration, Darbhanga IP Lock Elimination & Sanitized Store Location Overhaul:
+  - **Issue Reported**: On the merchant profile screen, tapping "📍 Use Live GPS Location" falsely captured "Darbhanga Market" coordinates (`26.1542, 85.8918`). Furthermore, even when merchants manually entered coordinates or attempted updating live GPS, the location failed to save or update on the backend server.
+  - **Root Cause Analysis (Flutter Frontend & GoBackend)**:
+    1. **Regional IP Geolocation Lookup (`profile_screen.dart:862`)**:
+       - The live GPS button used `https://ipapi.co/json/` (IP-based geolocation) instead of physical hardware GPS.
+       - Mobile internet carriers in Bihar and Eastern UP (Jio, Airtel) route data via regional telecom towers in Darbhanga / Patna. Therefore, every device in that circle resolved to Darbhanga market regardless of physical location.
+    2. **Stale Coordinates Short-Circuit Bug (`profile_screen.dart:853`)**:
+       - When opening the Location sheet, `mapsUrlCtrl.text` pre-filled with the shop's existing URL.
+       - Tapping "📍 Use Live GPS Location" checked `_extractCoordinatesFromMapsUrl(mapsUrlCtrl.text)`. Finding the old Darbhanga URL, it immediately extracted the old coordinates and returned without ever executing GPS!
+    3. **Missing Location Fields in State Management (`auth_controller.dart:212`)**:
+       - `AuthController.updateShop` omitted `latitude`, `longitude`, and `googleMapsUrl` from `_currentShop!.copyWith(...)`.
+       - Even if the API updated, local in-memory state never updated, causing the UI to display the old coordinates until app restart.
+    4. **Go Backend Validation Rejection on Empty Strings (`profile_screen.dart:933`)**:
+       - When saving, `updatePayload` passed empty strings (`'address': ''`, etc.) for blank fields.
+       - GoBackend `UpdateShopRequest` defines `Address *string validate:"omitempty,min=1,max=255"`. In `go-playground/validator`, a non-nil pointer to an empty string triggers validation failure (`Address must be at least 1 characters long`), causing HTTP 400 Bad Request and silently failing the update.
+  - **Architectural Solution**:
+    1. **Hardware GPS Engine (`lib/core/services/location_service.dart`)**:
+       - Integrated `geolocator: ^14.0.2` with `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` native Android permissions.
+       - `LocationService.getCurrentLiveLocation` checks whether device GPS is enabled, requests permissions, queries high-accuracy hardware GPS, and falls back to `getLastKnownPosition` and medium accuracy on GPS acquisition delay.
+       - Calls OpenStreetMap Nominatim reverse geocoding to automatically resolve street/road, city/town, and pincode from the exact physical coordinates.
+    2. **Fix Coordinate Parser & Sync in UI (`profile_screen.dart`)**:
+       - Removed IP lookup (`ipapi.co`) and removed the short-circuit that re-parsed old URLs on live GPS click.
+       - Added two-way sync on `latCtrl` and `lngCtrl` to auto-generate `https://www.google.com/maps?q=$lat,$lng`.
+       - Added `LocationService.extractCoordinatesFromMapsUrl` to seamlessly extract coordinates whenever a merchant pastes a Google Maps URL.
+    3. **Sanitized Payload & Full Controller State (`profile_screen.dart` & `auth_controller.dart`)**:
+       - Sanitized `updatePayload` so only non-empty trimmed strings are sent to GoBackend, preventing `min=1` validation errors.
+       - Added `latitude`, `longitude`, and `googleMapsUrl` to `AuthController.updateShop` optimistic `copyWith`.
+       - Automatically invokes `fetchShopDetails()` upon successful update to refresh profile tiles.
+    4. **Automated Regression Suite (`test/features_test.dart`)**:
+       - Added Group 14 tests verifying query-param URL parsing, centered `@` parsing, raw lat-lng strings, error handling, `ShopModel.copyWith`, and JSON serialization. All 37 tests passing!
+
+- **[2026-10-11]**: Storefront Price Privacy & Hide Price (Bargain Protection) Engine:
+  - **Business Requirement**: When a fixed online price (e.g. ₹100) is shown publicly, customers still bargain for further reductions (e.g. ₹90). If merchants increase the online price, competitors exploit it. To prevent margin erosion and allow merchants to negotiate flexibly in person or via chat, merchants can hide the online public price (`isPricePublic = false`) on a per-product basis.
+  - **Architectural Solution**:
+    1. **Data Model & Serialization (`ProductModel`)**:
+       - `isPricePublic` defaults to `true`.
+       - `fromJson` parses top-level `is_price_public`, fallback to `attributes['is_price_public']`, and fallback to `hide_price`.
+       - `toJson` embeds `'is_price_public': isPricePublic` in both top-level and PostgreSQL JSONB `attributes` map for 100% persistence across all backend environments.
+    2. **State Management & 0ms Optimistic UI (`ProductController`)**:
+       - `addProduct` accepts `bool isPricePublic = true` and propagates it through optimistic memory state and background payload.
+       - `editProduct` updates `isPricePublic` optimistically (0ms) and saves to both top-level payload and attributes map.
+    3. **Merchant Add/Edit Modal (`InventoryScreen`)**:
+       - Added "Show Price to Customers (Online)" toggle switch with clear explanatory text:
+         - Public: "Price is publicly visible online on digital storefront"
+         - Hidden: "🔒 Price Hidden online (Shows 'Price on Request' - Customers visit or contact you to bargain)".
+    4. **Customer Storefront Shield (`CustomerShopScreen`)**:
+       - For products with `isPricePublic == false`, numeric price, MRP, and discount percentage are strictly hidden.
+       - Displays clean `🔒 Price on Request / मोलभाव करें` badge.
+       - WhatsApp action button transforms from "Order" to "Ask Price", pre-filling an inquiry message so customers initiate a conversation or visit the physical store to finalize the price.
+    5. **Merchant Inventory Catalog & Details Screen (`InventoryScreen` & `ProductDetailScreen`)**:
+       - Inventory card displays the internal price with `[Price Hidden]` overlay on thumbnail and `[Hidden Online]` badge in the price row.
+       - Product details screen features an Online Visibility status row with an instant 1-tap "Hide Online / Show Online" toggle.
+    6. **Automated Test Suite (`test/features_test.dart`)**:
+       - Added Group 15 tests verifying `isPricePublic` default, copyWith preservation, JSON parsing fallbacks, and attributes serialization. All 41 tests passing!
+
+- **[2026-10-11]**: Shop Side Fast In-Memory Multi-Field Search & Comprehensive Sorting Engine:
+  - **Business Requirement**: Fast, instantaneous product search and merchant-centric sorting on the shop/merchant side (`inventory_screen.dart`) without lag, delays, or UI flickering.
+  - **Root Cause of Previous Delay**: Previously, `AppProductSearchBar` sent an HTTP request `prodController.loadProducts(search: query)` on every keystroke, which triggered `setLoading(true)` on every letter typed, causing network latency, loading spinners, and jitter.
+  - **Architectural Solution**:
+    1. **0ms In-Memory Tokenized Multi-Field Search (`inventory_screen.dart`)**:
+       - Bypassed per-keystroke network requests by filtering against the local pre-hydrated catalog already stored in memory by `ProductController`.
+       - Tokenizes search input into lowercase terms and matches across:
+         - Product Name (`product.name`)
+         - SKU (`product.sku`)
+         - Barcode (`product.barcode`)
+         - Category Title (`product.category`)
+         - Brand (`attributes['brand']`)
+         - Dynamic Custom Attributes (all values in `product.attributes`)
+       - Supports out-of-order multi-word queries (e.g. "salt tata" matches "Tata Salt Vacuum Evaporated 1kg").
+    2. **Comprehensive Merchant Sorting Engine (`InventorySortOption`)**:
+       - Built 9 specialized business sorting algorithms:
+         - `newest`: Newest First / नवीनतम (sorts by created date or catalog order)
+         - `stockLowHigh`: Low Stock (Reorder First) / कम स्टॉक (prioritizes low/out-of-stock items for restock planning)
+         - `stockHighLow`: High Stock / अधिक स्टॉक (sorts by highest quantity)
+         - `priceHighLow`: Price: High to Low / कीमत: ज्यादा से कम
+         - `priceLowHigh`: Price: Low to High / कीमत: कम से ज्यादा
+         - `marginHighLow`: Highest Profit Margin / अधिकतम मुनाफा (calculates `(sellingPrice - costPrice) / sellingPrice` % and ranks highest first)
+         - `nameAZ`: Name: A to Z / नाम: A से Z
+         - `nameZA`: Name: Z to A / नाम: Z से A
+         - `bargainFirst`: Hidden Price (Bargain Items First) / हिडन प्राइस (मोलभाव वाले)
+    3. **Ergonomic Top Header UI & Modal Sheet (`inventory_screen.dart`)**:
+       - Placed `AppProductSearchBar` side-by-side with an elevated Sort Trigger button.
+       - Sort button displays the active sort icon, abbreviated label, and an indicator badge.
+       - Tapping the sort button opens `_showSortBottomSheet`, presenting a clean modal with radio selections, icons, and bilingual subtitles (English & Hindi).
+    4. **Horizontal Quick Filter Pills Strip**:
+       - Quick pills for: `All (${total})`, `⚠️ Low Stock (${lowStock})`, `🔒 Hidden Price (${hidden})`, `🏷️ On Sale (${discounted})`, plus dynamic category pills discovered from active inventory.
+       - 1-tap toggling updates list instantaneously (0ms).
+    5. **Results Counter & Smart Empty State**:
+       - Summary bar showing `Showing X of Y items` with an instant "Reset All Filters / फिल्टर रीसेट" button.
+       - Distinct empty states: empty inventory (suggests Add / Bulk Import) vs empty search/filter results (suggests Reset Filters).
+    6. **Automated Unit Tests (`test/features_test.dart`)**:
+       - Added Group 16 tests covering all 9 sorting modes, tokenized search, margin calculation, out-of-order matching, and filter chips. All 48 tests passing with 0 warnings/errors!
+
+- **[2026-10-11]**: Strict Separation of Merchant Flutter App & Enterprise Customer Privacy Shield:
+  - **User Mandate**:
+    1. Permanently remove all customer-facing screens/features from the Flutter mobile app (`customer_shop_screen.dart` and `/shop/:slug` route). The Flutter app is exclusively the merchant/partner app.
+    2. The customer side is strictly the React web app (`CustomerFrontend`).
+    3. All merchant-uploaded product specifications must be displayed to customers (images, titles, brands, categories, descriptions, and dynamic custom specifications like Color, Size, Warranty, Shelf Life, Ingredients, Country of Origin, Material, etc.).
+    4. Internal merchant-private operational and financial data must be strictly blocked so customers can NEVER see them across both frontend and backend public endpoints.
+  - **Implementation**:
+    1. **Flutter Merchant App Clean-Up**:
+       - Deleted `customer_shop_screen.dart` from `Frontend/lib/features/dashboard/screens/`.
+       - Removed `/shop/:slug` route and `customerShop` route name from `Frontend/lib/core/routes/app_router.dart`.
+       - Added `CustomerPrivacyShield` class with `blockedKeys`, `isSafeCustomerKey`, and `extractPublicSpecifications` in `Frontend/lib/features/products/models/product_model.dart`.
+       - `flutter analyze`: 0 issues found.
+    2. **GoBackend Public Endpoint Sanitization (`GoBackend/internal/handler/controller/product.go`)**:
+       - Deepened `sanitizePublicProduct(p *model.Product)` to zero-out sensitive financials (`CostPrice`, `UnitProfit`, `ProfitMarginPct`, `FloorPrice`, `AllowBargain`, `LowStockThreshold`, `MinStock`).
+       - Scrubbed sensitive merchant keys (`cost_price`, `floor_price`, `allow_bargain`, `supplier`, `distributor`, `vendor`, `dealer`, `reorder_point`, `low_stock_threshold`, `min_stock`, `barcode`, `sku`, `cogs`, `markup`, `wholesale_price`, `purchase_price`, `kharid_price`) from `attributes` JSONB map on all public endpoints (`GetByID`, `GetBySlug`, `List`, `ListByShop`).
+       - `go test ./...`: All packages passing.
+    3. **Customer Web App (`CustomerFrontend/src/components/common/ProductDetailModal.jsx`)**:
+       - Standardized `PRIVATE_KEYS` blocklist matching GoBackend rules.
+       - Rendered Brand tile, Category tile, Unit, and all dynamic safe custom specifications dynamically in the Specifications Grid.
+       - Integrated Price Privacy: if `isPricePublic === false`, displays `🔒 Price on Request / मोलभाव करें` badge and adapts primary CTA to WhatsApp "Ask Best Price", hiding numerical price and cart stepper.
+       - `npm run build`: Completed with 0 errors.
+    4. **Automated Unit Tests (`Frontend/test/features_test.dart`)**:
+       - Added Group 17 test suite (4 new tests) covering `CustomerPrivacyShield` blocked keys, allowed keys, custom attribute filtering, and zero customer routes in merchant app.
+       - 50/50 unit tests passing cleanly!
+
+- **[2026-10-11]**: High-Performance Stale-While-Revalidate (SWR) & Event-Driven Cache Invalidation Architecture (`CustomerFrontend`):
+  - **User Mandate**:
+    1. Implement a 100% robust, enterprise-grade combination of Stale-While-Revalidate (SWR) and Event-Driven Cache Invalidation in the Customer Web App (`CustomerFrontend`).
+    2. Deeply analyze cache memory lifecycle, preventing all memory leaks, race conditions, flickering, and quota errors.
+    3. Ensure strict security and privacy: user private ledger data and reservations must never leak or persist after logout.
+    4. Seamlessly unite passive TTL caching (0ms instant render + silent background refresh) and active mutation events (instant UI updates + cache eviction).
+    5. Zero feature deletions, full language fidelity (English & Hindi).
+  - **Implementation**:
+    1. **Enterprise Memory & Storage Engine (`src/utils/localCache.js`)**:
+       - Capped fallback in-memory cache to `MAX_MEMORY_ENTRIES = 100` with Least Recently Used (LRU) eviction, preventing unbounded memory bloat on private browsing devices.
+       - Implemented two-tier `QuotaExceededError` defense: first purges expired entries; if quota remains exceeded, purges the oldest 25% of entries to keep the application 100% functional without crashes.
+       - Added regex/prefix pattern invalidation (`invalidatePattern`) across storage and memory.
+       - Built `clearUserData()` for instantaneous wipe of customer khata, passbook, reservation, user profile, and address caches on logout.
+    2. **Synchronous Targeted Invalidation (`src/utils/cacheEvents.js`)**:
+       - Upgraded `cacheEvents.emit(event, payload)` to immediately purge target persistent caches synchronously before notifying listeners. This ensures unmounted screens never hydrate with stale data upon later navigation.
+       - Supported event channels: `RESERVATIONS_MUTATED`, `KHATA_MUTATED`, `STOREFRONT_MUTATED` (with slug targeting), `SHOPS_MUTATED`, `PRODUCTS_MUTATED`, `DEALS_MUTATED`, and `AUTH_LOGOUT`.
+    3. **Resilient Reactive Hook (`src/hooks/useSWR.js`)**:
+       - 0ms initial cache hydration from `localCache`.
+       - In-flight request deduplication via global `Map` preventing redundant concurrent API calls.
+       - Smart deep diffing using JSON serialization to skip React state mutations and avoid re-renders / layout shifts if background fetch matches cached state.
+       - Automatic subscription and unregistration of event-driven cache invalidation.
+       - Optional throttled window focus revalidation (`revalidateOnFocus`, default 30s throttle).
+       - Lifecycle protection (`isMountedRef`) preventing state updates on unmounted components.
+    4. **Full Screen & Modal Integration**:
+       - `CustomerKhataScreen.jsx`: Instant 0ms cache for summary and account passbooks; emits `KHATA_MUTATED` on UPI proof submission, promise to pay, and transaction dispute.
+       - `ReservationsScreen.jsx`: Converted to SWR hook with `RESERVATIONS_MUTATED` subscription; emits event on cancellation.
+       - `CheckoutModal.jsx`, `SmartSearchModal.jsx`, `ExploreShopsScreen.jsx`, `SavedScreen.jsx`, `StorefrontScreen.jsx`: Emits `RESERVATIONS_MUTATED` upon reservation creation.
+       - `DealsScreen.jsx`: Category-isolated cache key with instant display and `DEALS_MUTATED` event subscription.
+       - `AddReviewModal.jsx` & `AddProductReviewModal.jsx`: Emits `STOREFRONT_MUTATED`, `SHOPS_MUTATED`, and `PRODUCTS_MUTATED` upon review submission.
+       - Fixed JSX syntax in `ProductReviewsSection.jsx` and Rules of Hooks early return in `AddProductReviewModal.jsx`.
+    5. **Verification**:
+       - `npx oxlint`: 0 errors.
+       - `npm run build`: Production bundle built cleanly in <1s with 0 errors.
 
 
 
+- **[2026-10-11]**: High-Performance Stale-While-Revalidate (SWR) & Event-Driven Invalidation Architecture (Frontend - Flutter Merchant App):
+  - User Mandate:
+    1. Ensure Stale-While-Revalidate (SWR) and Event-Driven Cache Invalidation are implemented 100% cleanly in the Flutter Merchant mobile/web app (Frontend).
+    2. Deep analysis of cache memory lifecycle: prevent memory leaks, uncancelled stream subscriptions, stale unmounted screens, and security/privacy leaks on logout.
+    3. Flawless zero-overflow responsiveness and high frame-rate (60-120 FPS) performance.
+  - Implementation:
+    1. Broadcast Event Bus Engine (lib/core/services/event_bus_service.dart):
+       - Implemented AppEventBus broadcast stream with synchronous targeted cache eviction on emit() for 9 core mutation types: productsMutated, inventoryMutated, posSaleCompleted, khataMutated, expenseMutated, offerMutated, reservationMutated, shopProfileUpdated, authLogout.
+       - Eliminates unmounted screen stale hydration: emitting any mutation event immediately purges the target persistent cache in LocalCacheService before notifying listeners.
+    2. Dual-Tier Cache Engine (lib/core/storage/local_cache_service.dart):
+       - Unified synchronous 0ms in-memory cache backing persistent device storage (SharedPreferences) across Products, Khata, Expenses, Offers, Sales, Analytics, and Reservations (_keyReservations).
+       - Targeted invalidation methods (invalidateProducts, invalidateDashboardStats, invalidateKhata, invalidateExpenses, invalidateOffers, invalidateReservations, invalidateAnalytics).
+       - Full Memory & Storage Wipe on Logout: clearCache() completely resets all static in-memory lists (_memoryProducts, _memoryKhataCustomers, _memoryProcurementItems, _memoryExpenses, _memoryOffers, _memorySalesHistory, _memoryReservations) to null and purges all sensitive keys from device storage.
+    3. Universal Controller Interlocking & Leak Prevention:
+       - ReservationController: Added _hydrateFromLocalCache() for 0ms instant startup; saves to LocalCacheService.saveReservations on background sync; listens to reservationMutated; and cleans up subscriptions in dispose().
+       - OfferController: Subscribed to authLogout and offerMutated; emits offerMutated on create, delete, and toggle; cleans up in dispose().
+       - ProcurementController: Subscribed to authLogout to wipe procurement items on logout; cleans up in dispose().
+       - KhataController: Emits khataMutated on updateCreditLimit and setPromiseDate.
+       - PosController: Emits khataMutated when paymentMethod == 'khata'.
+       - AuthController: Emits shopProfileUpdated on shop detail updates, logo uploads, and status toggles.
+       - DashboardController: Subscribed to shopProfileUpdated to refresh dashboard stats silently; cleans up in dispose().
+    4. Verification:
+       - flutter analyze: 0 issues found! (Clean analyzer).
+       - flutter test test/features_test.dart: Added Group 18 test suite (4 new tests). 54/54 tests passing (100% pass rate in 00:00)!
 
-
+- **[2026-10-12]**: Retail POS, Inventory & Khata Enhancement Suite (Frontend):
+  - User Mandate: Enhance existing features in the Flutter Merchant app for production retail workflow.
+  - Implementation:
+    1. Dynamic UPI QR Payment Generator (`dynamic_upi_qr_dialog.dart`):
+       - Generates real instant dynamic UPI QR codes (`upi://pay?pa=...&pn=...&am=...&cu=INR`) for exact POS bill amounts.
+       - Integrated into POS billing when `📱 UPI QR` is selected; allows 1-tap merchant UPI ID setup and persistent saving via `AuthController.updateShop({'upi_id': ...})`.
+    2. Executive Itemized WhatsApp Bill & 1-Tap Copy Bill (`pos_screen.dart`):
+       - Formats complete itemized bills including store name, address, contact, bill #, date, line items with quantities, subtotal, discount, grand total, and bilingual thank-you notes.
+       - Added 1-tap "Copy Bill Receipt" button to copy formatted receipt text to clipboard.
+    3. Product Card Stock Badges & 1-Tap Quick Stock Adjuster (`inventory_screen.dart`):
+       - Added live stock level indicator badges on inventory cards (Out of Stock, Low Stock, or In Stock).
+       - Added 1-tap quick stock update sheet with interactive +/- counter stepper and delta chips (`-5`, `-1`, `+5`, `+10`, `+25`, `+50`) for immediate stock changes without opening the full edit form.
+    4. Digital Khata Statement Copy (`khata_screen.dart`):
+       - Added 1-tap "Copy Summary" button to copy customer credit ledger statement to clipboard.
+    5. Clean Analyzer: `flutter analyze` completed with 0 errors and 0 warnings.

@@ -4,7 +4,6 @@ import '../../features/analytics/screens/analytics_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/splash_screen.dart';
-import '../../features/dashboard/screens/customer_shop_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/dashboard/screens/profile_screen.dart';
 import '../../features/expenses/screens/expense_screen.dart';
@@ -14,6 +13,7 @@ import '../../features/pos/screens/pos_screen.dart';
 import '../../features/pos/screens/today_sales_screen.dart';
 import '../../features/procurement/screens/procurement_list_screen.dart';
 import '../../features/products/screens/inventory_screen.dart';
+import '../../features/products/screens/low_stock_alerts_screen.dart';
 import '../../features/reservations/screens/reservations_list_screen.dart';
 import '../storage/token_storage.dart';
 
@@ -30,9 +30,9 @@ class AppRoutes {
   static const String offers = '/merchant/offers';
   static const String analytics = '/merchant/analytics';
   static const String procurement = '/merchant/procurement';
+  static const String lowStock = '/merchant/low-stock';
   static const String reservations = '/merchant/reservations';
   static const String profile = '/merchant/profile';
-  static const String customerShop = '/shop/:slug';
 }
 
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -143,17 +143,18 @@ final GoRouter appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: AppRoutes.lowStock,
+      builder: (context, state) {
+        TokenStorage.saveLastRoute(AppRoutes.lowStock);
+        return const LowStockAlertsScreen();
+      },
+    ),
+    GoRoute(
       path: AppRoutes.reservations,
       builder: (context, state) {
         TokenStorage.saveLastRoute(AppRoutes.reservations);
         return const ReservationsListScreen();
       },
-    ),
-    GoRoute(
-      path: AppRoutes.customerShop,
-      builder: (context, state) => CustomerShopScreen(
-        slug: state.pathParameters['slug'] ?? '',
-      ),
     ),
   ],
 );

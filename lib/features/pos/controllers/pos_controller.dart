@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/storage/token_storage.dart';
 import '../../../core/utils/date_time_utils.dart';
 import '../../products/models/product_model.dart';
 import '../models/pos_model.dart';
@@ -90,10 +93,33 @@ class PosController extends BaseController {
     return list;
   }
 
+  StreamSubscription<AppCacheEvent>? _productsSub;
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+
   PosController() {
     _initFromCache();
     loadCatalog();
     fetchBackendSales();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    _productsSub = AppEventBus().on(AppCacheEventType.productsMutated, (_) {
+      loadCatalog(forceRefresh: true);
+    });
+    _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
+      _products = [];
+      _serverSales = [];
+      clearCart();
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _productsSub?.cancel();
+    _logoutSub?.cancel();
+    super.dispose();
   }
 
   void _initFromCache() {
@@ -228,7 +254,7 @@ class PosController extends BaseController {
       _products = response.data!;
       notifyListeners();
     } else {
-      setError(response.error ?? 'Products load nahi ho sake');
+      setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'उत्पाद लोड नहीं हो सके' : 'Failed to load products'));
     }
   }
 
@@ -260,12 +286,12 @@ class PosController extends BaseController {
 
   Future<SaleModel?> completeSale() async {
     if (_cart.isEmpty) {
-      setError('Bill Cart is empty, please scan or add items first');
+      setError(TokenStorage.getLanguage() == 'hi' ? 'बिल कार्ट खाली है, कृपया पहले आइटम जोड़ें' : 'Bill Cart is empty, please scan or add items first');
       return null;
     }
 
     if (_paymentMethod == 'khata' && _customerPhone.trim().length < 10) {
-      setError('10-digit customer mobile required for credit (khata) billing');
+      setError(TokenStorage.getLanguage() == 'hi' ? 'उधार बिलिंग के लिए 10 अंकों का मोबाइल नंबर आवश्यक है' : '10-digit customer mobile required for credit billing');
       return null;
     }
 
@@ -287,11 +313,18 @@ class PosController extends BaseController {
       clearCart();
       fetchBackendSales();
       notifyListeners();
+
+      // Emit event-driven invalidation events
+      AppEventBus().emit(AppCacheEventType.posSaleCompleted, payload: _lastCompletedSale);
+      AppEventBus().emit(AppCacheEventType.inventoryMutated);
+      if (_paymentMethod == 'khata') {
+        AppEventBus().emit(AppCacheEventType.khataMutated);
+      }
       return _lastCompletedSale;
     } else {
       setError((response.message != null && response.message!.isNotEmpty)
           ? response.message!
-          : 'Failed to record bill on server');
+          : (TokenStorage.getLanguage() == 'hi' ? 'सर्वर पर बिल दर्ज करने में विफल' : 'Failed to record bill on server'));
       notifyListeners();
       return null;
     }

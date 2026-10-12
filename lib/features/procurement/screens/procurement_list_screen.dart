@@ -162,6 +162,16 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
+              tooltip: 'Refresh Procurement List',
+              onPressed: () {
+                controller.refreshList();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('✓ Mandi Procurement List Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                );
+              },
+            ),
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

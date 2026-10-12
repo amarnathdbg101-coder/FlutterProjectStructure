@@ -1,9 +1,12 @@
+import 'dart:async';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../repositories/dashboard_repository.dart';
 
 /// High-performance Dashboard Controller with 0ms load speed.
-/// Hydrates metrics immediately from local cache, revalidates silently in background.
+/// Hydrates metrics immediately from local cache, revalidates silently in background,
+/// and reacts instantly to all system mutations via Event-Driven Cache Invalidation.
 class DashboardController extends BaseController {
   final DashboardRepository _repo = DashboardRepository();
 
@@ -16,8 +19,49 @@ class DashboardController extends BaseController {
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
 
+  StreamSubscription<AppCacheEvent>? _posSub;
+  StreamSubscription<AppCacheEvent>? _prodSub;
+  StreamSubscription<AppCacheEvent>? _invSub;
+  StreamSubscription<AppCacheEvent>? _khataSub;
+  StreamSubscription<AppCacheEvent>? _expenseSub;
+  StreamSubscription<AppCacheEvent>? _resSub;
+  StreamSubscription<AppCacheEvent>? _shopProfileSub;
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+
   DashboardController() {
     _hydrateFromLocalCache();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    final bus = AppEventBus();
+
+    _posSub = bus.on(AppCacheEventType.posSaleCompleted, (_) => fetchDashboardData(silent: true));
+    _prodSub = bus.on(AppCacheEventType.productsMutated, (_) => fetchDashboardData(silent: true));
+    _invSub = bus.on(AppCacheEventType.inventoryMutated, (_) => fetchDashboardData(silent: true));
+    _khataSub = bus.on(AppCacheEventType.khataMutated, (_) => fetchDashboardData(silent: true));
+    _expenseSub = bus.on(AppCacheEventType.expenseMutated, (_) => fetchDashboardData(silent: true));
+    _resSub = bus.on(AppCacheEventType.reservationMutated, (_) => fetchDashboardData(silent: true));
+    _shopProfileSub = bus.on(AppCacheEventType.shopProfileUpdated, (_) => fetchDashboardData(silent: true));
+
+    _logoutSub = bus.on(AppCacheEventType.authLogout, (_) {
+      _stats = DashboardStats();
+      _qrCodeUrl = null;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _prodSub?.cancel();
+    _invSub?.cancel();
+    _khataSub?.cancel();
+    _expenseSub?.cancel();
+    _resSub?.cancel();
+    _shopProfileSub?.cancel();
+    _logoutSub?.cancel();
+    super.dispose();
   }
 
   void _hydrateFromLocalCache() {

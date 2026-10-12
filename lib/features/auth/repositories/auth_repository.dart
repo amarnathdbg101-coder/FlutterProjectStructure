@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/storage/token_storage.dart';
 import '../../dashboard/models/shop_model.dart';
 
 class AuthRepository {
@@ -68,8 +69,14 @@ class AuthRepository {
     try {
       final response = await _dio.get(ApiConstants.myShop);
       return ApiResponse.fromJson(response.data, (data) {
-        final map = (data is Map<String, dynamic>) ? (data['shop'] ?? data['data'] ?? data) : data;
-        return ShopModel.fromJson(map as Map<String, dynamic>);
+        if (data is Map) {
+          final m = Map<String, dynamic>.from(data);
+          final inner = m['shop'] ?? m['data'] ?? m;
+          if (inner is Map) {
+            return ShopModel.fromJson(Map<String, dynamic>.from(inner));
+          }
+        }
+        return ShopModel(id: '', name: 'Store', slug: '', phone: '', category: '');
       });
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
@@ -82,9 +89,33 @@ class AuthRepository {
         ApiConstants.createShop,
         data: data,
       );
+      final raw = response.data;
+      if (raw is Map) {
+        final rawMap = Map<String, dynamic>.from(raw);
+        final dataMap = rawMap['data'] ?? rawMap;
+        if (dataMap is Map) {
+          final m = Map<String, dynamic>.from(dataMap);
+          if (m['access_token'] != null) {
+            final newJwt = m['access_token'].toString();
+            if (newJwt.isNotEmpty) {
+              await TokenStorage.saveToken(newJwt);
+            }
+          }
+          final shopMap = m['shop'] ?? m;
+          if (shopMap is Map) {
+            return ApiResponse(success: true, data: ShopModel.fromJson(Map<String, dynamic>.from(shopMap)));
+          }
+        }
+      }
       return ApiResponse.fromJson(response.data, (d) {
-        final map = (d is Map<String, dynamic>) ? (d['shop'] ?? d['data'] ?? d) : d;
-        return ShopModel.fromJson(map as Map<String, dynamic>);
+        if (d is Map) {
+          final m = Map<String, dynamic>.from(d);
+          final inner = m['shop'] ?? m['data'] ?? m;
+          if (inner is Map) {
+            return ShopModel.fromJson(Map<String, dynamic>.from(inner));
+          }
+        }
+        return ShopModel(id: '', name: 'Store', slug: '', phone: '', category: '');
       });
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
@@ -98,8 +129,14 @@ class AuthRepository {
         data: data,
       );
       return ApiResponse.fromJson(response.data, (d) {
-        final map = (d is Map<String, dynamic>) ? (d['shop'] ?? d['data'] ?? d) : d;
-        return ShopModel.fromJson(map as Map<String, dynamic>);
+        if (d is Map) {
+          final m = Map<String, dynamic>.from(d);
+          final inner = m['shop'] ?? m['data'] ?? m;
+          if (inner is Map) {
+            return ShopModel.fromJson(Map<String, dynamic>.from(inner));
+          }
+        }
+        return ShopModel(id: '', name: 'Store', slug: '', phone: '', category: '');
       });
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));

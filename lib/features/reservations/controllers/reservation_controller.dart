@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/counter_websocket_service.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../dashboard/repositories/shop_operations_repository.dart';
 import '../models/reservation_model.dart';
@@ -23,6 +24,8 @@ class ReservationController extends BaseController {
   ReservationModel? get latestAlertReservation => _latestAlertReservation;
 
   StreamSubscription? _wsSubscription;
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+  StreamSubscription<AppCacheEvent>? _reservationSub;
   Timer? _pollingTimer;
 
   int get totalCount => _reservations.length;
@@ -31,8 +34,30 @@ class ReservationController extends BaseController {
   int get cancelledCount => _reservations.where((r) => r.isCancelled).length;
 
   ReservationController() {
+    _hydrateFromLocalCache();
     _initRealtimeListener();
     _startPeriodicSync();
+    _subscribeToEvents();
+  }
+
+  void _hydrateFromLocalCache() {
+    final cached = LocalCacheService.getReservations();
+    if (cached.isNotEmpty) {
+      _reservations = cached;
+      notifyListeners();
+    }
+  }
+
+  void _subscribeToEvents() {
+    _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
+      _pollingTimer?.cancel();
+      _reservations = [];
+      _latestAlertReservation = null;
+      notifyListeners();
+    });
+    _reservationSub = AppEventBus().on(AppCacheEventType.reservationMutated, (_) {
+      loadReservations(silent: true);
+    });
   }
 
   void _initRealtimeListener() {
@@ -52,8 +77,10 @@ class ReservationController extends BaseController {
         }
 
         _latestAlertReservation = newOrder;
+        LocalCacheService.saveReservations(_reservations);
         notifyListeners();
 
+        AppEventBus().emit(AppCacheEventType.reservationMutated);
         // Background server re-sync to fetch full relational aggregates
         loadReservations(silent: true);
       } catch (e) {
@@ -112,6 +139,13 @@ class ReservationController extends BaseController {
   }
 
   Future<void> loadReservations({bool silent = false}) async {
+    if (_reservations.isEmpty) {
+      final cached = LocalCacheService.getReservations();
+      if (cached.isNotEmpty) {
+        _reservations = cached;
+      }
+    }
+
     if (!silent && _reservations.isEmpty) {
       setLoading(true);
     }
@@ -125,6 +159,7 @@ class ReservationController extends BaseController {
           .map((e) => ReservationModel.fromJson(e))
           .toList();
       _reservations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      await LocalCacheService.saveReservations(_reservations);
       notifyListeners();
     } else {
       if (!silent && _reservations.isEmpty) {
@@ -143,6 +178,7 @@ class ReservationController extends BaseController {
 
     if (response.success) {
       await loadReservations(silent: true);
+      AppEventBus().emit(AppCacheEventType.reservationMutated);
       return true;
     } else {
       setError(response.error ?? 'Invalid or expired pickup code');
@@ -156,6 +192,7 @@ class ReservationController extends BaseController {
     final response = await _repo.cancelReservation(id);
     if (response.success) {
       await loadReservations(silent: true);
+      AppEventBus().emit(AppCacheEventType.reservationMutated);
       return true;
     } else {
       setError(response.error ?? 'Failed to cancel reservation');
@@ -213,6 +250,8 @@ class ReservationController extends BaseController {
   @override
   void dispose() {
     _wsSubscription?.cancel();
+    _logoutSub?.cancel();
+    _reservationSub?.cancel();
     _pollingTimer?.cancel();
     super.dispose();
   }

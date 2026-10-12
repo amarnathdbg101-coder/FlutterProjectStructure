@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,8 +8,9 @@ import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_product_image.dart';
+import '../../../core/widgets/app_ui_components.dart';
+import '../../../core/widgets/dynamic_upi_qr_dialog.dart';
 import '../../../core/widgets/merchant_shell.dart';
-import '../../../core/widgets/store_qr_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../khata/models/khata_model.dart';
 import '../../products/models/product_model.dart';
@@ -32,6 +34,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   List<ProductModel> _matchingSearchResults = [];
   bool _isSearchingLocal = false;
+  String _selectedPosCategory = 'All';
 
   KhataCustomerModel? _matchedKhataCustomer;
 
@@ -221,6 +224,184 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
     );
   }
 
+  /// Opens Discount Dialog to apply a flat discount (₹)
+  void _showDiscountDialog(BuildContext context, PosController pos) {
+    final discountCtrl = TextEditingController(
+      text: pos.discount > 0 ? pos.discount.toStringAsFixed(0) : '',
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.discount_rounded, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('Apply Bill Discount (₹)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: discountCtrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Discount Amount (₹)',
+                prefixText: '₹ ',
+                hintText: 'e.g. 50',
+              ),
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildQuickDiscountChip(ctx, discountCtrl, '₹10', 10),
+                  _buildQuickDiscountChip(ctx, discountCtrl, '₹20', 20),
+                  _buildQuickDiscountChip(ctx, discountCtrl, '₹50', 50),
+                  _buildQuickDiscountChip(ctx, discountCtrl, '₹100', 100),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              pos.setDiscount(0);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Remove Discount', style: TextStyle(color: AppColors.error)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () {
+              final d = double.tryParse(discountCtrl.text.trim()) ?? 0.0;
+              pos.setDiscount(d);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Apply Discount'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickDiscountChip(BuildContext context, TextEditingController ctrl, String label, double amount) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        onTap: () => ctrl.text = amount.toStringAsFixed(0),
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: context.colorPrimaryLight,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+          ),
+          child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPosCategoryPill(BuildContext context, String catName, PosController pos) {
+    final isSel = _selectedPosCategory.toLowerCase() == catName.toLowerCase();
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedPosCategory = catName;
+            if (catName == 'All') {
+              _matchingSearchResults = [];
+              _isSearchingLocal = false;
+            } else {
+              _matchingSearchResults = pos.products
+                  .where((p) => p.category.toLowerCase().contains(catName.toLowerCase()))
+                  .take(8)
+                  .toList();
+              _isSearchingLocal = true;
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: isSel ? context.colorPrimaryLight : context.colorSurfaceSubtle,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSel ? AppColors.primary : context.colorBorder,
+            ),
+          ),
+          child: Text(
+            catName,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
+              color: isSel ? AppColors.primary : context.colorTextSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Formats an executive, clean itemized receipt text for WhatsApp & Clipboard
+  String _formatBillReceiptText(BuildContext context, SaleModel sale) {
+    final shop = context.read<AuthController>().currentShop;
+    final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Retail Store';
+    final shopAddress = shop?.address.isNotEmpty == true ? shop!.address : '';
+    final shopPhone = shop?.phone.isNotEmpty == true ? shop!.phone : '';
+    final isHindi = context.isHindi;
+
+    final buffer = StringBuffer();
+    buffer.writeln('🧾 *${shopName.toUpperCase()}*');
+    if (shopAddress.isNotEmpty) {
+      buffer.writeln('📍 $shopAddress');
+    }
+    if (shopPhone.isNotEmpty) {
+      buffer.writeln('📞 Ph: $shopPhone');
+    }
+    buffer.writeln('--------------------------------');
+    buffer.writeln('${isHindi ? "बिल संख्या" : "Bill No"}: #${sale.billNumber ?? "1001"}');
+    buffer.writeln('${isHindi ? "दिनांक" : "Date"}: ${sale.createdAt.day}/${sale.createdAt.month}/${sale.createdAt.year}');
+    if (sale.customerPhone.isNotEmpty) {
+      buffer.writeln('${isHindi ? "ग्राहक" : "Customer"}: ${sale.customerPhone}');
+    }
+    buffer.writeln('--------------------------------');
+    buffer.writeln(isHindi ? '*सामान की सूची:*' : '*ITEMS PURCHASED:*');
+
+    for (int i = 0; i < sale.items.length; i++) {
+      final item = sale.items[i];
+      final itemName = item.product.name.trim();
+      final qty = item.quantity;
+      final unitPrice = item.customPrice.toStringAsFixed(0);
+      final total = item.total.toStringAsFixed(0);
+      buffer.writeln('${i + 1}. $itemName\n    $qty x ₹$unitPrice = *₹$total*');
+    }
+
+    buffer.writeln('--------------------------------');
+    buffer.writeln('${isHindi ? "उप-योग" : "Subtotal"}: ₹${sale.subtotal.toStringAsFixed(2)}');
+    if (sale.discountAmount > 0) {
+      buffer.writeln('${isHindi ? "छूट" : "Discount"}: -₹${sale.discountAmount.toStringAsFixed(2)}');
+    }
+    buffer.writeln('*${isHindi ? "कुल राशि (TOTAL)" : "GRAND TOTAL"}: ₹${sale.totalAmount.toStringAsFixed(2)}*');
+    buffer.writeln('${isHindi ? "भुगतान माध्यम" : "Payment Mode"}: ${sale.paymentMethod.toUpperCase()}');
+    buffer.writeln('--------------------------------');
+    buffer.writeln(isHindi
+        ? '🙏 हमारे यहाँ पधारने के लिए धन्यवाद!\nफिर मिलेंगे!'
+        : '🙏 Thank you for shopping with us!\nVisit again!');
+
+    return buffer.toString();
+  }
+
   /// Opens Completed Bill Success Receipt Modal with WhatsApp Sharing
   void _showSuccessReceipt(BuildContext context, SaleModel sale) {
     showDialog(
@@ -292,35 +473,67 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
             const SizedBox(height: 16),
 
-            // Share via WhatsApp Button
-            if (sale.customerPhone.trim().length >= 10) ...[
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF25D366),
-                  minimumSize: const Size(double.infinity, 44),
-                ),
-                icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
-                label: const Text('Share Bill on WhatsApp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                onPressed: () async {
-                  final phone = sale.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
-                  final msg = Uri.encodeComponent(
-                    '🧾 *ShopSilo POS Receipt*\nBill #${sale.billNumber ?? "1001"}\nTotal: ₹${sale.totalAmount.toStringAsFixed(2)}\nPayment: ${sale.paymentMethod.toUpperCase()}\n\nThank you for shopping with us!',
-                  );
-                  final url = Uri.parse('https://wa.me/91$phone?text=$msg');
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Print Thermal Receipt PDF Button
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
+            // 1. Share via WhatsApp Button (with formatted rich itemized receipt)
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
                 minimumSize: const Size(double.infinity, 44),
               ),
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
+              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+              label: const Text('Share Bill on WhatsApp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                final receiptText = _formatBillReceiptText(ctx, sale);
+                final cleanPhone = sale.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+                final formattedPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+                final encodedMsg = Uri.encodeComponent(receiptText);
+
+                final Uri url;
+                if (formattedPhone.isNotEmpty && formattedPhone.length >= 10) {
+                  url = Uri.parse('https://wa.me/$formattedPhone?text=$encodedMsg');
+                } else {
+                  url = Uri.parse('https://wa.me/?text=$encodedMsg');
+                }
+
+                try {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                } catch (_) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text(ctx.tr('khata_whatsapp_not_installed'))),
+                    );
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+
+            // 2. 1-Tap Copy Bill Receipt to Clipboard
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 42),
+              ),
+              icon: const Icon(Icons.copy_rounded, size: 17, color: AppColors.primary),
+              label: Text(ctx.tr('pos_btn_copy_bill'), style: const TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () {
+                final receiptText = _formatBillReceiptText(ctx, sale);
+                Clipboard.setData(ClipboardData(text: receiptText));
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(ctx.tr('pos_bill_copied')),
+                    backgroundColor: AppColors.success,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+
+            // 3. Print Thermal Receipt PDF Button
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 42),
+              ),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 17, color: AppColors.primary),
               label: const Text('Print / Save Thermal Receipt PDF', style: TextStyle(fontWeight: FontWeight.bold)),
               onPressed: () {
                 final shop = context.read<AuthController>().currentShop;
@@ -421,6 +634,18 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
+              tooltip: 'Refresh Billing Catalog',
+              onPressed: () async {
+                await context.read<PosController>().loadCatalog();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('✓ POS Billing Catalog Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                  );
+                }
+              },
+            ),
             if (pos.cart.isNotEmpty)
               TextButton.icon(
                 icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.error, size: 18),
@@ -495,54 +720,42 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   /// Fast Scan & Search Bar with Auto-Add and Live Overlay Matches
   Widget _buildFastScanBar(BuildContext context, PosController pos) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colorSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.colorBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _scanController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Scan Barcode, SKU or type item name...',
-                    prefixIcon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary),
-                    suffixIcon: _scanController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _scanController.clear();
-                              setState(() {
-                                _matchingSearchResults = [];
-                                _isSearchingLocal = false;
-                              });
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (val) => _onSearchQueryChanged(val, pos),
-                  onSubmitted: (_) => _handleScanOrAdd(pos),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  minimumSize: const Size(90, 48),
-                ),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add'),
-                onPressed: () => _handleScanOrAdd(pos),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppProductSearchBar(
+          controller: _scanController,
+          autoFocus: true,
+          hintText: 'Scan Barcode, SKU or type item name...',
+          showBarcodeScanner: true,
+          onBarcodeScan: () => _handleScanOrAdd(pos),
+          onChanged: (val) => _onSearchQueryChanged(val, pos),
+          onClear: () {
+            setState(() {
+              _matchingSearchResults = [];
+              _isSearchingLocal = false;
+            });
+          },
+        ),
+
+        // 1-Tap Quick Category Shortcuts Bar
+        if (pos.products.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildPosCategoryPill(context, 'All', pos),
+                _buildPosCategoryPill(context, 'Grocery', pos),
+                _buildPosCategoryPill(context, 'Dairy', pos),
+                _buildPosCategoryPill(context, 'Snacks', pos),
+                _buildPosCategoryPill(context, 'Beverages', pos),
+                _buildPosCategoryPill(context, 'Personal Care', pos),
+                _buildPosCategoryPill(context, 'Household', pos),
+              ],
+            ),
           ),
+        ],
 
           // LIVE AUTO-COMPLETE MATCHES OVERLAY
           if (_isSearchingLocal && _matchingSearchResults.isNotEmpty) ...[
@@ -654,8 +867,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   /// Active Bill Receipt Table with Proper Item Deletion & Steppers
@@ -747,7 +959,20 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     children: [
-                      // Item Name & Category
+                      // Item Image Thumbnail
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: AppProductImage(
+                          imageUrl: item.product.imageUrl,
+                          width: 38,
+                          height: 38,
+                          fit: BoxFit.cover,
+                          fallbackIcon: Icons.inventory_2_outlined,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // Item Name & Unit Price
                       Expanded(
                         flex: 4,
                         child: Column(
@@ -759,9 +984,10 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colorTextPrimary),
                             ),
+                            const SizedBox(height: 2),
                             Text(
                               '₹${item.customPrice.toStringAsFixed(0)} / ${item.product.unit}',
-                              style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.colorTextMuted),
                             ),
                           ],
                         ),
@@ -863,7 +1089,6 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   /// Full Checkout Summary Panel with Khata Auto-Link
   Widget _buildCheckoutPanel(BuildContext context, PosController pos) {
     _phoneController.text = pos.customerPhone;
-    final shop = context.watch<AuthController>().currentShop;
 
     return SingleChildScrollView(
       child: Column(
@@ -933,9 +1158,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 selected: pos.paymentMethod == 'upi',
                 onTap: () {
                   pos.setPaymentMethod('upi');
-                  if (shop != null) {
-                    showStoreQrDialog(context, shop);
-                  }
+                  showDynamicUpiQrDialog(context, amount: pos.grandTotal);
                 },
               ),
               const SizedBox(width: 8),
@@ -946,6 +1169,48 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               ),
             ],
           ),
+          if (pos.paymentMethod == 'upi' && pos.cart.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => showDynamicUpiQrDialog(context, amount: pos.grandTotal),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: context.colorPrimaryLight,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_scanner_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr('pos_show_upi_qr'),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                          ),
+                          Text(
+                            context.tr('pos_upi_qr_subtitle'),
+                            style: TextStyle(fontSize: 10, color: context.colorTextSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '₹${pos.grandTotal.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.primary),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.primary),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           // Cash Tendered & Change Due Calculator (Only for Cash Payment)
@@ -1027,15 +1292,24 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                     Text('₹${pos.subtotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Discount:', style: TextStyle(color: context.colorTextMuted)),
+                    Row(
+                      children: [
+                        Text('Discount:', style: TextStyle(color: context.colorTextMuted)),
+                        const SizedBox(width: 6),
+                        InkWell(
+                          onTap: () => _showDiscountDialog(context, pos),
+                          child: const Text('✏️ Edit Discount', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                        ),
+                      ],
+                    ),
                     Text('-₹${pos.discount.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
                   ],
                 ),
-                Divider(height: 16, color: context.colorBorder),
+                Divider(height: 18, color: context.colorBorder),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1056,12 +1330,20 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             const SizedBox(height: 10),
           ],
 
-          // COMPLETE SALE BUTTON
-          ElevatedButton(
+          // COMPLETE SALE & PRINT BILL BUTTON
+          ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              minimumSize: const Size(double.infinity, 52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 2,
+            ),
+            icon: pos.isLoading
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.bolt_rounded, size: 22, color: Colors.white),
+            label: Text(
+              pos.isLoading ? 'Processing Sale...' : '⚡ Complete Sale & Print Bill (₹${pos.grandTotal.toStringAsFixed(0)})',
+              style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: Colors.white),
             ),
             onPressed: (pos.cart.isEmpty || pos.isLoading)
                 ? null
@@ -1080,9 +1362,6 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                       );
                     }
                   },
-            child: pos.isLoading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : Text('COMPLETE SALE (₹${pos.grandTotal.toStringAsFixed(2)})', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

@@ -1,4 +1,6 @@
+import 'dart:async';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../products/repositories/product_repository.dart';
 import '../models/analytics_model.dart';
@@ -10,9 +12,36 @@ class AnalyticsController extends BaseController {
 
   AnalyticsModel? get analytics => _analytics;
 
+  StreamSubscription<AppCacheEvent>? _posSub;
+  StreamSubscription<AppCacheEvent>? _prodSub;
+  StreamSubscription<AppCacheEvent>? _expenseSub;
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+
   AnalyticsController() {
     _hydrateFromLocalCache();
     fetchAnalytics();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    final bus = AppEventBus();
+    _posSub = bus.on(AppCacheEventType.posSaleCompleted, (_) => fetchAnalytics());
+    _prodSub = bus.on(AppCacheEventType.productsMutated, (_) => fetchAnalytics());
+    _expenseSub = bus.on(AppCacheEventType.expenseMutated, (_) => fetchAnalytics());
+
+    _logoutSub = bus.on(AppCacheEventType.authLogout, (_) {
+      _analytics = null;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _prodSub?.cancel();
+    _expenseSub?.cancel();
+    _logoutSub?.cancel();
+    super.dispose();
   }
 
   void _hydrateFromLocalCache() {

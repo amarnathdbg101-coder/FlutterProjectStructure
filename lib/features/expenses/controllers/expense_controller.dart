@@ -1,5 +1,8 @@
+import 'dart:async';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/storage/token_storage.dart';
 import '../models/expense_model.dart';
 import '../repositories/expense_repository.dart';
 
@@ -25,9 +28,25 @@ class ExpenseController extends BaseController {
           e.expenseDate.month == DateTime.now().month)
       .fold(0.0, (sum, e) => sum + e.amount);
 
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+
   ExpenseController() {
     _hydrateFromLocalCache();
     loadExpenses();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
+      _expenses = [];
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _logoutSub?.cancel();
+    super.dispose();
   }
 
   void _hydrateFromLocalCache() {
@@ -53,7 +72,7 @@ class ExpenseController extends BaseController {
       notifyListeners();
     } else {
       if (_expenses.isEmpty) {
-        setError(response.error ?? 'Kharche load nahi ho sake');
+        setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'खर्च लोड नहीं हो सके' : 'Failed to load expenses'));
       } else {
         notifyListeners();
       }
@@ -82,6 +101,7 @@ class ExpenseController extends BaseController {
     _expenses.insert(0, optimisticExpense);
     await LocalCacheService.saveExpenses(_expenses);
     notifyListeners();
+    AppEventBus().emit(AppCacheEventType.expenseMutated);
 
     // 2. BACKGROUND SERVER SYNC
     final response = await _repo.createExpense({
@@ -101,6 +121,7 @@ class ExpenseController extends BaseController {
       }
       await LocalCacheService.saveExpenses(_expenses);
       notifyListeners();
+      AppEventBus().emit(AppCacheEventType.expenseMutated);
       return true;
     } else {
       // Keep optimistic item in local cache for offline usage
@@ -123,6 +144,7 @@ class ExpenseController extends BaseController {
 
     final response = await _repo.deleteExpense(id);
     if (response.success) {
+      AppEventBus().emit(AppCacheEventType.expenseMutated);
       return true;
     } else {
       if (removed != null && index >= 0) {
@@ -130,7 +152,7 @@ class ExpenseController extends BaseController {
         await LocalCacheService.saveExpenses(_expenses);
         notifyListeners();
       }
-      setError(response.error ?? 'Kharcha delete nahi ho saka');
+      setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'खर्च हटाने में विफल' : 'Failed to delete expense'));
       return false;
     }
   }

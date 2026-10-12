@@ -328,9 +328,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.refresh_rounded, color: context.colorTextSecondary),
+              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
               tooltip: 'Refresh Expenses',
-              onPressed: () => expController.loadExpenses(),
+              onPressed: () async {
+                await expController.loadExpenses();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('✓ Shop Expenses Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                  );
+                }
+              },
             ),
             const SizedBox(width: 4),
           ],

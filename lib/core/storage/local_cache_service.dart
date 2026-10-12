@@ -10,6 +10,7 @@ import '../../features/analytics/models/analytics_model.dart';
 import '../../features/expenses/models/expense_model.dart';
 import '../../features/offers/models/offer_model.dart';
 import '../../features/pos/models/pos_model.dart';
+import '../../features/reservations/models/reservation_model.dart';
 import 'token_storage.dart';
 
 /// Centralized High-Performance Local Cache Engine for ShopSilo.
@@ -20,6 +21,8 @@ class LocalCacheService {
   static const String _keyProductsTime = 'shopsilo_cache_products_time';
   static const String _keyDashboardStats = 'shopsilo_cache_dash_stats';
   static const String _keyDashboardStatsTime = 'shopsilo_cache_dash_stats_time';
+  static const String _keyReservations = 'shopsilo_cache_reservations';
+  static const String _keyReservationsTime = 'shopsilo_cache_reservations_time';
 
   static SharedPreferences? _prefs;
 
@@ -30,6 +33,7 @@ class LocalCacheService {
   static List<ExpenseModel>? _memoryExpenses;
   static List<OfferModel>? _memoryOffers;
   static List<SaleModel>? _memorySalesHistory;
+  static List<ReservationModel>? _memoryReservations;
 
   static Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -454,7 +458,50 @@ class LocalCacheService {
   }
 
   // ==========================================
-  // 5. CACHE FRESHNESS & INVALIDATION
+  // 10. RESERVATIONS & PICKUP ORDERS PERSISTENCE
+  // ==========================================
+
+  /// Save Reservations list to device local storage and in-memory cache
+  static Future<void> saveReservations(List<ReservationModel> reservations) async {
+    try {
+      _memoryReservations = List<ReservationModel>.from(reservations);
+      await init();
+      final listJson = jsonEncode(reservations.map((r) => r.toJson()).toList());
+      await _prefs!.setString(_keyReservations, listJson);
+      await _prefs!.setInt(_keyReservationsTime, DateTime.now().millisecondsSinceEpoch);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving reservations to cache: $e');
+    }
+  }
+
+  /// Retrieve Reservations list synchronously from cache for 0ms startup
+  static List<ReservationModel> getReservations() {
+    if (_memoryReservations != null && _memoryReservations!.isNotEmpty) {
+      return List<ReservationModel>.from(_memoryReservations!);
+    }
+    try {
+      final raw = _prefs?.getString(_keyReservations);
+      if (raw == null || raw.trim().isEmpty) return [];
+
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded
+            .whereType<Map>()
+            .map((item) => ReservationModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        if (list.isNotEmpty) {
+          _memoryReservations = List<ReservationModel>.from(list);
+        }
+        return list;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading reservations from cache: $e');
+    }
+    return [];
+  }
+
+  // ==========================================
+  // 11. CACHE FRESHNESS & TARGETED INVALIDATION
   // ==========================================
 
   /// Check whether cached data is fresh within the threshold
@@ -469,15 +516,90 @@ class LocalCacheService {
     return isCacheFresh(_keyProductsTime, maxAge: maxAge);
   }
 
-  /// Wipe non-session cache (on manual full refresh or logout)
+  static bool isReservationsCacheFresh({Duration maxAge = const Duration(minutes: 5)}) {
+    return isCacheFresh(_keyReservationsTime, maxAge: maxAge);
+  }
+
+  static bool isKhataCacheFresh({Duration maxAge = const Duration(minutes: 5)}) {
+    return isCacheFresh(_keyKhataCustomersTime, maxAge: maxAge);
+  }
+
+  static bool isDashboardStatsFresh({Duration maxAge = const Duration(minutes: 5)}) {
+    return isCacheFresh(_keyDashboardStatsTime, maxAge: maxAge);
+  }
+
+  /// Invalidate products catalog cache
+  static void invalidateProducts() {
+    _memoryProducts = null;
+    _prefs?.remove(_keyProductsTime);
+  }
+
+  /// Invalidate dashboard stats cache
+  static void invalidateDashboardStats() {
+    _prefs?.remove(_keyDashboardStats);
+    _prefs?.remove(_keyDashboardStatsTime);
+  }
+
+  /// Invalidate khata customers and summary cache
+  static void invalidateKhata() {
+    _memoryKhataCustomers = null;
+    _prefs?.remove(_keyKhataCustomers);
+    _prefs?.remove(_keyKhataCustomersTime);
+    _prefs?.remove(_keyKhataSummary);
+  }
+
+  /// Invalidate expenses cache
+  static void invalidateExpenses() {
+    _memoryExpenses = null;
+    _prefs?.remove(_keyExpenses);
+  }
+
+  /// Invalidate offers cache
+  static void invalidateOffers() {
+    _memoryOffers = null;
+    _prefs?.remove(_keyOffers);
+  }
+
+  /// Invalidate reservations cache
+  static void invalidateReservations() {
+    _memoryReservations = null;
+    _prefs?.remove(_keyReservations);
+    _prefs?.remove(_keyReservationsTime);
+  }
+
+  /// Invalidate analytics cache
+  static void invalidateAnalytics() {
+    _prefs?.remove(_keyAnalytics);
+  }
+
+  /// Wipe ALL caches (in-memory & persistent storage) on user logout
   static Future<void> clearCache() async {
+    // 1. Wipe all in-memory static caches immediately
+    _memoryProducts = null;
+    _memoryKhataCustomers = null;
+    _memoryProcurementItems = null;
+    _memoryExpenses = null;
+    _memoryOffers = null;
+    _memorySalesHistory = null;
+    _memoryReservations = null;
+
+    // 2. Wipe all persistent storage keys from device
     await init();
-    await _prefs!.remove(_keyProducts);
-    await _prefs!.remove(_keyProductsTime);
-    await _prefs!.remove(_keyDashboardStats);
-    await _prefs!.remove(_keyDashboardStatsTime);
-    await _prefs!.remove(_keyKhataCustomers);
-    await _prefs!.remove(_keyKhataCustomersTime);
-    await _prefs!.remove(_keyKhataSummary);
+    if (_prefs != null) {
+      await _prefs!.remove(_keyProducts);
+      await _prefs!.remove(_keyProductsTime);
+      await _prefs!.remove(_keyDashboardStats);
+      await _prefs!.remove(_keyDashboardStatsTime);
+      await _prefs!.remove(_keyKhataCustomers);
+      await _prefs!.remove(_keyKhataCustomersTime);
+      await _prefs!.remove(_keyKhataSummary);
+      await _prefs!.remove(_keyProcurement);
+      await _prefs!.remove(_keyAnalytics);
+      await _prefs!.remove(_keyExpenses);
+      await _prefs!.remove(_keyOffers);
+      await _prefs!.remove(_keySalesHistory);
+      await _prefs!.remove(_keyReservations);
+      await _prefs!.remove(_keyReservationsTime);
+    }
   }
 }

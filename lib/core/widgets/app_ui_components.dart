@@ -615,3 +615,125 @@ class AppAvatar extends StatelessWidget {
   }
 }
 
+/// Universal Reusable Product Search Bar with 1-Tap Clear & Barcode Scanner Integration.
+/// Guarantees 100% design consistency across POS Billing, Inventory, Sales, and Procurement screens.
+class AppProductSearchBar extends StatefulWidget {
+  final TextEditingController controller;
+  final String? hintText;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onClear;
+  final VoidCallback? onBarcodeScan;
+  final bool showBarcodeScanner;
+  final bool autoFocus;
+
+  const AppProductSearchBar({
+    super.key,
+    required this.controller,
+    this.hintText,
+    this.onChanged,
+    this.onClear,
+    this.onBarcodeScan,
+    this.showBarcodeScanner = false,
+    this.autoFocus = false,
+  });
+
+  @override
+  State<AppProductSearchBar> createState() => _AppProductSearchBarState();
+}
+
+class _AppProductSearchBarState extends State<AppProductSearchBar> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTextChanged);
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasText = widget.controller.text.isNotEmpty;
+
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.colorBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: context.isDark ? 0.15 : 0.02),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          Icon(Icons.search_rounded, size: 19, color: context.colorTextMuted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              autofocus: widget.autoFocus,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.colorTextPrimary,
+              ),
+              decoration: InputDecoration(
+                hintText: widget.hintText ?? 'Search products...',
+                hintStyle: TextStyle(
+                  fontSize: 12.5,
+                  color: context.colorTextMuted,
+                  fontWeight: FontWeight.normal,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              onChanged: widget.onChanged,
+            ),
+          ),
+          if (hasText)
+            GestureDetector(
+              onTap: () {
+                widget.controller.clear();
+                if (widget.onChanged != null) widget.onChanged!('');
+                if (widget.onClear != null) widget.onClear!();
+              },
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: context.colorSurfaceSubtle,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.close_rounded, size: 14, color: context.colorTextMuted),
+              ),
+            ),
+          if (widget.showBarcodeScanner && widget.onBarcodeScan != null) ...[
+            if (hasText) const SizedBox(width: 6),
+            GestureDetector(
+              onTap: widget.onBarcodeScan,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: const Icon(Icons.qr_code_scanner_rounded, size: 19, color: AppColors.primary),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/localization/language_controller.dart';
 import '../../../core/widgets/app_product_image.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
@@ -220,8 +219,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               _buildProductHeader(context, p),
                               const SizedBox(height: 14),
                               _buildPricingHeroCard(context, p),
-                              const SizedBox(height: 14),
-                              _buildInventoryStockCard(context, p),
                               if (isProfitVisible) ...[
                                 const SizedBox(height: 14),
                                 _buildMerchantIntelligenceCard(context, p),
@@ -247,8 +244,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       _buildProductHeader(context, p),
                       const SizedBox(height: 14),
                       _buildPricingHeroCard(context, p),
-                      const SizedBox(height: 14),
-                      _buildInventoryStockCard(context, p),
                       if (isProfitVisible) ...[
                         const SizedBox(height: 14),
                         _buildMerchantIntelligenceCard(context, p),
@@ -601,7 +596,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ),
               ),
             ),
-            if (p.attributes.containsKey('brand') && p.attributes['brand'].toString().isNotEmpty)
+            if (p.brand.isNotEmpty || (p.attributes.containsKey('brand') && p.attributes['brand'].toString().isNotEmpty))
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -610,7 +605,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   border: Border.all(color: context.colorBorder),
                 ),
                 child: Text(
-                  p.attributes['brand'].toString(),
+                  p.brand.isNotEmpty ? p.brand : p.attributes['brand'].toString(),
                   style: TextStyle(
                     color: context.colorTextPrimary,
                     fontSize: 10,
@@ -804,222 +799,69 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 : 'Fixed counter price • No customer bargaining',
             style: TextStyle(fontSize: 11, color: context.colorTextSecondary),
           ),
-        ],
-      ),
-    );
-  }
-
-  // --- 4. INVENTORY & STOCK MANAGEMENT (Tactile Stepper & Quick Restock) ---
-  Widget _buildInventoryStockCard(BuildContext context, ProductModel p) {
-    final isOutOfStock = p.stock <= 0;
-    final isLowStock = p.stock <= p.lowStockThreshold && p.stock > 0;
-
-    final badgeColor = isOutOfStock
-        ? AppColors.error
-        : (isLowStock ? AppColors.warning : AppColors.success);
-    final badgeBg = isOutOfStock
-        ? context.colorErrorLight
-        : (isLowStock ? context.colorWarningLight : context.colorSuccessLight);
-    final statusText = isOutOfStock
-        ? context.tr('inv_status_out_of_stock')
-        : (isLowStock ? context.tr('inv_status_low_stock') : context.tr('inv_status_in_stock'));
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.colorSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.colorBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.02),
-            blurRadius: 5,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          const SizedBox(height: 10),
+          Divider(height: 1, color: context.colorBorder),
+          const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      color: context.colorPrimaryLight,
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: const Icon(Icons.inventory_2_rounded, size: 15, color: AppColors.primary),
+                  Icon(
+                    p.isPricePublic ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    size: 14,
+                    color: p.isPricePublic ? AppColors.success : AppColors.warning,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 5),
                   Text(
-                    'Inventory & Stock Control',
+                    p.isPricePublic
+                        ? 'Online Storefront: Public Price'
+                        : 'Online Storefront: 🔒 Price Hidden',
                     style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: context.colorTextPrimary,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: p.isPricePublic ? AppColors.success : AppColors.warning,
                     ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: badgeBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        shape: BoxShape.circle,
+              InkWell(
+                onTap: () async {
+                  final newStatus = !p.isPricePublic;
+                  final success = await context.read<ProductController>().editProduct(
+                    p.id,
+                    {'is_price_public': newStatus},
+                  );
+                  if (context.mounted && success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(newStatus
+                            ? 'Price is now visible to online customers.'
+                            : 'Price is now hidden from online customers (Shows "Price on Request").'),
+                        duration: const Duration(seconds: 2),
                       ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: badgeColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Tactile Stepper & Quick Fill Row
-          Row(
-            children: [
-              // Stepper Controls
-              Container(
-                decoration: BoxDecoration(
-                  color: context.colorSurfaceSubtle,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.colorBorder),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_rounded, size: 18),
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Decrease Stock (-1)',
-                      onPressed: p.stock > 0
-                          ? () => context.read<ProductController>().adjustStock(p, -1)
-                          : null,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Text(
-                        '${p.stock}',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: context.colorTextPrimary,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Increase Stock (+1)',
-                      onPressed: () => context.read<ProductController>().adjustStock(p, 1),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Stock Unit & Threshold Detail
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${p.stock} ${p.unit} in stock',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: context.colorTextPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Alert limit: ${p.lowStockThreshold} ${p.unit}',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: context.colorTextMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Quick Restock Fill Chips (+5, +10, +25, +50, +100)
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                '${context.tr('inv_quick_restock')}:',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.colorTextMuted),
-              ),
-              for (final count in [5, 10, 25, 50, 100])
-                InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () async {
-                    await context.read<ProductController>().adjustStock(p, count);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('+$count ${p.unit} added to stock!'),
-                          backgroundColor: AppColors.success,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: context.colorPrimaryLight,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Text(
-                      '+$count',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
-                      ),
+                    );
+                  }
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    p.isPricePublic ? 'Hide Online' : 'Show Online',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
+              ),
             ],
           ),
         ],
       ),
     );
   }
-
 
   // --- 5. MERCHANT INTELLIGENCE & PROFIT HUB (Centrally Controlled from Settings) ---
   Widget _buildMerchantIntelligenceCard(BuildContext context, ProductModel p) {
@@ -1147,20 +989,64 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 6. SPECIFICATIONS GRID (Clean Modern Minimalist Chips) ---
+  // --- 6. SPECIFICATIONS & ATTRIBUTES SHOWCASE ---
   Widget _buildSpecificationsGrid(BuildContext context, ProductModel p) {
-    final specItems = <MapEntry<String, String>>[
-      MapEntry('Category', p.category),
-      MapEntry('Unit', p.unit),
-      if (p.sku.isNotEmpty) MapEntry('SKU', p.sku),
-      if (p.barcode.isNotEmpty) MapEntry('Barcode', p.barcode),
-      if (p.weight > 0) MapEntry('Net Weight', '${p.weight} kg'),
-    ];
+    final specItems = <MapEntry<String, String>>[];
 
+    // 1. Core Identity & Classification
+    final brandVal = p.brand.isNotEmpty
+        ? p.brand
+        : (p.attributes['brand']?.toString().trim() ?? '');
+    if (brandVal.isNotEmpty) {
+      specItems.add(MapEntry('Brand', brandVal));
+    }
+
+    specItems.add(MapEntry('Category', p.category));
+    specItems.add(MapEntry('Unit', p.unit));
+
+    if (p.weight > 0) {
+      specItems.add(MapEntry('Net Weight', '${p.weight} kg'));
+    }
+
+    if (p.sku.isNotEmpty) {
+      specItems.add(MapEntry('SKU', p.sku));
+    }
+
+    if (p.barcode.isNotEmpty && p.barcode != p.sku) {
+      specItems.add(MapEntry('Barcode', p.barcode));
+    }
+
+    // 2. Pricing & Negotiation Rules
+    if (p.floorPrice > 0) {
+      specItems.add(MapEntry('Floor Price', '₹${p.floorPrice.toStringAsFixed(0)}'));
+    }
+
+    if (p.allowBargain) {
+      specItems.add(const MapEntry('Bargain', 'Allowed'));
+    }
+
+    if (p.lowStockThreshold > 0) {
+      specItems.add(MapEntry('Low Stock Alert', '≤ ${p.lowStockThreshold} units'));
+    }
+
+    // 3. Dynamic Custom JSONB Attributes & Merchant Specifications
     if (p.attributes.isNotEmpty) {
       p.attributes.forEach((k, v) {
-        if (k.toLowerCase() != 'brand' && v != null && v.toString().isNotEmpty) {
-          specItems.add(MapEntry(k[0].toUpperCase() + k.substring(1), v.toString()));
+        final kLow = k.toLowerCase().trim();
+        if (kLow != 'brand' &&
+            kLow != 'category_name' &&
+            kLow != 'category' &&
+            kLow != 'unit' &&
+            v != null &&
+            v.toString().trim().isNotEmpty) {
+          final formattedKey = k
+              .replaceAll('_', ' ')
+              .replaceAll('-', ' ')
+              .split(' ')
+              .where((w) => w.isNotEmpty)
+              .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+              .join(' ');
+          specItems.add(MapEntry(formattedKey, v.toString().trim()));
         }
       });
     }
@@ -1199,6 +1085,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 'Specifications & Attributes',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
               ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: context.colorSurfaceSubtle,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: context.colorBorder),
+                ),
+                child: Text(
+                  '${specItems.length} specs',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1208,7 +1107,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             runSpacing: 8,
             children: specItems.map((item) {
               return Container(
-                constraints: const BoxConstraints(maxWidth: 280),
+                constraints: const BoxConstraints(maxWidth: 300),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: context.colorSurfaceSubtle,

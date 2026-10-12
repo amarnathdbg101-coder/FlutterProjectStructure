@@ -43,6 +43,11 @@ class TokenStorage {
     return _prefs?.getBool(_keyShowProfitMargins) ?? true;
   }
 
+  static Future<void> saveToken(String token) async {
+    await init();
+    await _prefs!.setString(_keyToken, token);
+  }
+
   static Future<void> saveSession({
     required String token,
     Map<String, dynamic>? user,
@@ -66,6 +71,11 @@ class TokenStorage {
   static Future<void> saveShop(Map<String, dynamic> shop) async {
     await init();
     await _prefs!.setString(_keyShopJson, jsonEncode(shop));
+  }
+
+  static Future<void> removeShop() async {
+    await init();
+    await _prefs!.remove(_keyShopJson);
   }
 
   static Future<void> saveStaff(Map<String, dynamic> staff) async {

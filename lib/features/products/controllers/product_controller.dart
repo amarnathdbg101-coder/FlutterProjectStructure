@@ -1,5 +1,10 @@
+import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/constants/app_colors.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/routes/app_router.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../../core/utils/image_utils.dart';
@@ -33,8 +38,39 @@ class ProductController extends BaseController {
     notifyListeners();
   }
 
+  StreamSubscription<AppCacheEvent>? _posSaleSub;
+  StreamSubscription<AppCacheEvent>? _inventorySub;
+  StreamSubscription<AppCacheEvent>? _reservationSub;
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+
   ProductController() {
     _hydrateFromLocalCache();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    _posSaleSub = AppEventBus().on(AppCacheEventType.posSaleCompleted, (_) {
+      loadProducts(silent: true);
+    });
+    _inventorySub = AppEventBus().on(AppCacheEventType.inventoryMutated, (_) {
+      loadProducts(silent: true);
+    });
+    _reservationSub = AppEventBus().on(AppCacheEventType.reservationMutated, (_) {
+      loadProducts(silent: true);
+    });
+    _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
+      _products = [];
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSaleSub?.cancel();
+    _inventorySub?.cancel();
+    _reservationSub?.cancel();
+    _logoutSub?.cancel();
+    super.dispose();
   }
 
   /// Instantaneous 0ms hydration from local persistent storage on startup
@@ -121,9 +157,7 @@ class ProductController extends BaseController {
 
   Future<List<String>> uploadProductImages(List<XFile> xFiles) async {
     if (xFiles.isEmpty) return [];
-    setLoading(true);
     final response = await _repo.uploadProductXFiles(xFiles);
-    setLoading(false);
     if (response.success && response.data != null) {
       return response.data!;
     }
@@ -131,22 +165,7 @@ class ProductController extends BaseController {
     return [];
   }
 
-  String _slugifyCategory(String category) {
-    final clean = category.trim().toLowerCase();
-    if (clean.contains('kirana') || clean.contains('grocery') || clean.contains('staple')) return 'kirana-grocery';
-    if (clean.contains('dairy') || clean.contains('breakfast') || clean.contains('bakery')) return 'dairy-breakfast';
-    if (clean.contains('snack') || clean.contains('beverage') || clean.contains('drink') || clean.contains('munch')) return 'snacks-beverages';
-    if (clean.contains('fruit') || clean.contains('vegetable') || clean.contains('sabji')) return 'fruits-vegetables';
-    if (clean.contains('personal') || clean.contains('care')) return 'personal-care';
-    if (clean.contains('cleaning') || clean.contains('household')) return 'household-cleaning';
-    if (clean.contains('clothing') || clean.contains('apparel') || clean.contains('fashion')) return 'clothing-apparel';
-    if (clean.contains('footwear') || clean.contains('shoe')) return 'footwear';
-    if (clean.contains('electronic') || clean.contains('mobile') || clean.contains('accessory')) return 'electronics-accessories';
-    if (clean.contains('pharmacy') || clean.contains('health') || clean.contains('medicine')) return 'pharmacy-healthcare';
-    return 'kirana-grocery';
-  }
-
-  /// Add product with 0ms Optimistic UI & Local Storage update, then syncs with database
+  /// Add product with 0ms Optimistic UI & Local Storage update, then syncs with database in background
   Future<bool> addProduct({
     required String name,
     required double price,
@@ -162,7 +181,9 @@ class ProductController extends BaseController {
     String description = '',
     double weight = 0.0,
     bool isFeatured = false,
+    bool isPricePublic = true,
     List<String> images = const [],
+    List<XFile> localImageFiles = const [],
     Map<String, dynamic> attributes = const {},
   }) async {
     clearError();
@@ -171,16 +192,18 @@ class ProductController extends BaseController {
         ? barcode.trim()
         : 'SKU${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
-    // Only include valid HTTP/HTTPS or relative server image URLs in backend API request
-    final validServerImages = images
-        .where((img) => isServerImageUrl(img))
-        .take(4)
-        .toList();
-
-    final catSlug = _slugifyCategory(category);
+    final cleanCategory = formatCategoryName(category);
+    final catSlug = getCategorySlug(cleanCategory);
     final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
 
-    // 1. OPTIMISTIC 0ms LOCAL CREATION
+    // Embed category_name, unit, and is_price_public into attributes JSONB so PostgreSQL preserves them forever
+    final mergedAttributes = Map<String, dynamic>.from(attributes);
+    mergedAttributes['category_name'] = cleanCategory;
+    mergedAttributes['category'] = cleanCategory;
+    mergedAttributes['unit'] = unit;
+    mergedAttributes['is_price_public'] = isPricePublic;
+
+    // 1. OPTIMISTIC 0ms LOCAL CREATION (User sees product in catalog immediately)
     final optimisticProduct = ProductModel(
       id: tempId,
       name: name.trim(),
@@ -195,13 +218,13 @@ class ProductController extends BaseController {
       stock: stock,
       lowStockThreshold: lowStockThreshold,
       unit: unit,
-      category: category,
+      category: cleanCategory,
       weight: weight,
-      images: images.isNotEmpty ? images : validServerImages,
+      images: images.isNotEmpty ? images : const [],
       isActive: true,
       isFeatured: isFeatured,
-      isPricePublic: true,
-      attributes: attributes,
+      isPricePublic: isPricePublic,
+      attributes: mergedAttributes,
     );
 
     // Immediately insert in memory & write to device storage
@@ -209,57 +232,138 @@ class ProductController extends BaseController {
     await LocalCacheService.saveProducts(_products);
     notifyListeners();
 
-    // 2. BACKGROUND SERVER SYNC
-    final payload = {
-      'name': name.trim(),
-      'description': description.trim(),
-      'sku': generatedSku,
-      'barcode': barcode.trim().isNotEmpty ? barcode.trim() : generatedSku,
-      'price': price,
-      'cost_price': costPrice,
-      'compare_price': comparePrice,
-      'mrp': comparePrice,
-      'floor_price': floorPrice,
-      'allow_bargain': allowBargain,
-      'stock_quantity': stock,
-      'min_stock': lowStockThreshold,
-      'low_stock_threshold': lowStockThreshold,
-      'unit': unit,
-      'category_id': catSlug,
-      'category': category,
-      'weight': weight,
-      'images': validServerImages,
-      'is_active': true,
-      'is_featured': isFeatured,
-      'is_price_public': true,
-      'attributes': attributes,
-    };
+    // 2. BACKGROUND SERVER SYNC (Silent, non-blocking)
+    try {
+      final validServerImages = images
+          .where((img) => isServerImageUrl(img))
+          .take(10)
+          .toList();
 
-    final response = await _repo.createProduct(payload);
-
-    if (response.success && response.data != null) {
-      // Replace optimistic temporary item with actual DB entity
-      final idx = _products.indexWhere((p) => p.id == tempId);
-      if (idx >= 0) {
-        _products[idx] = response.data!;
-      } else {
-        _products.insert(0, response.data!);
+      if (localImageFiles.isNotEmpty) {
+        try {
+          final uploadRes = await _repo.uploadProductXFiles(localImageFiles);
+          if (uploadRes.success && uploadRes.data != null) {
+            for (final u in uploadRes.data!) {
+              if (validServerImages.length < 10 && !validServerImages.contains(u)) {
+                validServerImages.add(u);
+              }
+            }
+          } else {
+            debugPrint('[ProductController] Add product image upload failed: ${uploadRes.error}');
+            rootScaffoldMessengerKey.currentState?.showSnackBar(
+              SnackBar(
+                content: Text('Image upload warning: ${uploadRes.error ?? "Could not upload image"}'),
+                backgroundColor: AppColors.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } catch (e) {
+          debugPrint('[ProductController] Background image upload error: $e');
+        }
       }
-      await LocalCacheService.saveProducts(_products);
-      notifyListeners();
-      return true;
-    } else {
-      // Revert optimistic item if backend rejected
+
+      final payload = {
+        'name': name.trim(),
+        'description': description.trim(),
+        'sku': generatedSku,
+        'barcode': barcode.trim().isNotEmpty ? barcode.trim() : generatedSku,
+        'price': price,
+        'cost_price': costPrice,
+        'compare_price': comparePrice,
+        'mrp': comparePrice,
+        'floor_price': floorPrice,
+        'allow_bargain': allowBargain,
+        'stock_quantity': stock,
+        'min_stock': lowStockThreshold,
+        'low_stock_threshold': lowStockThreshold,
+        'unit': unit,
+        'category_id': catSlug,
+        'category_name': cleanCategory,
+        'category': cleanCategory,
+        'weight': weight,
+        'images': validServerImages,
+        'is_active': true,
+        'is_featured': isFeatured,
+        'is_price_public': isPricePublic,
+        'attributes': mergedAttributes,
+      };
+
+      final response = await _repo.createProduct(payload);
+
+      if (response.success && response.data != null) {
+        // Replace optimistic temporary item with actual DB entity
+        final idx = _products.indexWhere((p) => p.id == tempId);
+        final createdItem = response.data!;
+        final resolvedImages = createdItem.images.isNotEmpty
+            ? createdItem.images
+            : (validServerImages.isNotEmpty ? validServerImages : images);
+
+        // Ensure all specifications and attributes are fully preserved
+        final combinedAttributes = Map<String, dynamic>.from(mergedAttributes);
+        if (createdItem.attributes.isNotEmpty) {
+          combinedAttributes.addAll(createdItem.attributes);
+        }
+
+        final finalProduct = createdItem.copyWith(
+          images: resolvedImages,
+          unit: createdItem.unit.isNotEmpty && createdItem.unit != 'piece'
+              ? createdItem.unit
+              : unit,
+          floorPrice: createdItem.floorPrice > 0 ? createdItem.floorPrice : floorPrice,
+          allowBargain: createdItem.allowBargain || allowBargain,
+          isPricePublic: isPricePublic,
+          attributes: combinedAttributes,
+        );
+
+        if (idx >= 0) {
+          _products[idx] = finalProduct;
+        } else {
+          _products.insert(0, finalProduct);
+        }
+        await LocalCacheService.saveProducts(_products);
+        notifyListeners();
+        AppEventBus().emit(AppCacheEventType.productsMutated);
+        return true;
+      } else {
+        // Revert optimistic item if backend rejected
+        _products.removeWhere((p) => p.id == tempId);
+        await LocalCacheService.saveProducts(_products);
+        final err = response.error ?? 'Failed to save product. Please check details.';
+        setError(err);
+        notifyListeners();
+        rootScaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('Failed to save "$name": $err'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return false;
+      }
+    } catch (e) {
       _products.removeWhere((p) => p.id == tempId);
       await LocalCacheService.saveProducts(_products);
-      setError(response.error ?? 'Failed to save product. Please check details.');
+      final err = e.toString();
+      setError(err);
       notifyListeners();
+      rootScaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Sync error for "$name": $err'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return false;
     }
   }
 
-  /// Edit product with 0ms Optimistic UI & Local Storage update, then syncs with database
-  Future<bool> editProduct(dynamic id, Map<String, dynamic> updateData) async {
+  /// Edit product with 0ms Optimistic UI & Local Storage update, then syncs with database in background
+  Future<bool> editProduct(
+    dynamic id,
+    Map<String, dynamic> updateData, {
+    List<XFile> localImageFiles = const [],
+  }) async {
     final targetId = id.toString();
     clearError();
 
@@ -321,17 +425,36 @@ class ProductController extends BaseController {
       payload['is_featured'] = updateData['is_featured'] == true;
     }
     if (updateData['is_price_public'] != null) {
-      payload['is_price_public'] = updateData['is_price_public'] == true;
+      final bool isPub = updateData['is_price_public'] == true;
+      payload['is_price_public'] = isPub;
+      final attr = Map<String, dynamic>.from(payload['attributes'] ?? updateData['attributes'] ?? {});
+      attr['is_price_public'] = isPub;
+      payload['attributes'] = attr;
     }
     if (updateData['attributes'] != null && updateData['attributes'] is Map) {
-      payload['attributes'] = Map<String, dynamic>.from(updateData['attributes'] as Map);
+      final currentAttr = Map<String, dynamic>.from(payload['attributes'] ?? {});
+      currentAttr.addAll(Map<String, dynamic>.from(updateData['attributes'] as Map));
+      payload['attributes'] = currentAttr;
     }
 
-    // Category
+    // Category: Canonical formatting, slug mapping & attributes persistence
+    String? cleanCategory;
     if (updateData['category'] != null && updateData['category'].toString().trim().isNotEmpty) {
-      payload['category_id'] = _slugifyCategory(updateData['category'].toString());
+      cleanCategory = formatCategoryName(updateData['category'].toString());
     } else if (updateData['category_id'] != null && updateData['category_id'].toString().trim().isNotEmpty) {
-      payload['category_id'] = updateData['category_id'].toString().trim();
+      cleanCategory = formatCategoryName(updateData['category_id'].toString());
+    }
+
+    if (cleanCategory != null) {
+      final catSlug = getCategorySlug(cleanCategory);
+      payload['category_id'] = catSlug;
+      payload['category_name'] = cleanCategory;
+      payload['category'] = cleanCategory;
+
+      final attr = Map<String, dynamic>.from(payload['attributes'] ?? updateData['attributes'] ?? {});
+      attr['category_name'] = cleanCategory;
+      attr['category'] = cleanCategory;
+      payload['attributes'] = attr;
     }
 
     // Images: extract clean server URLs (up to 4)
@@ -340,7 +463,7 @@ class ProductController extends BaseController {
       final serverUrls = rawImages
           .map((e) => e.toString().trim())
           .where((img) => isServerImageUrl(img))
-          .take(4)
+          .take(10)
           .toList();
       payload['images'] = serverUrls;
     }
@@ -350,8 +473,9 @@ class ProductController extends BaseController {
     ProductModel? original;
     if (index >= 0) {
       original = _products[index];
-      final newImages = (payload['images'] as List<String>?) ??
-          (updateData['images'] != null ? List<String>.from(updateData['images']) : original.images);
+      final newImages = (updateData['images'] != null
+          ? List<String>.from(updateData['images'])
+          : (payload['images'] as List<String>?) ?? original.images);
 
       _products[index] = original.copyWith(
         name: updateData['name'] ?? original.name,
@@ -363,37 +487,116 @@ class ProductController extends BaseController {
         stock: stockVal != null ? (stockVal as num).toInt() : original.stock,
         lowStockThreshold: minStockVal != null ? (minStockVal as num).toInt() : original.lowStockThreshold,
         unit: updateData['unit'] ?? original.unit,
-        category: updateData['category'] ?? original.category,
+        category: cleanCategory ?? original.category,
         description: updateData['description'] ?? original.description,
         barcode: updateData['barcode'] ?? original.barcode,
         sku: rawSku.isNotEmpty ? rawSku.toUpperCase() : original.sku,
         images: newImages,
         weight: updateData['weight'] != null ? (updateData['weight'] as num).toDouble() : original.weight,
-        attributes: updateData['attributes'] ?? original.attributes,
+        attributes: payload['attributes'] ?? updateData['attributes'] ?? original.attributes,
         isActive: updateData['is_active'] ?? original.isActive,
         isFeatured: updateData['is_featured'] ?? original.isFeatured,
+        isPricePublic: updateData['is_price_public'] != null ? (updateData['is_price_public'] == true) : original.isPricePublic,
       );
       await LocalCacheService.saveProducts(_products);
       notifyListeners();
     }
 
     // 3. BACKGROUND SERVER SYNC
-    final response = await _repo.updateProduct(targetId, payload);
-    if (response.success && response.data != null) {
-      final currentIdx = _products.indexWhere((p) => p.id == id || p.id.toString() == targetId);
-      if (currentIdx >= 0) {
-        _products[currentIdx] = response.data!;
-        await LocalCacheService.saveProducts(_products);
-        notifyListeners();
+    try {
+      if (localImageFiles.isNotEmpty) {
+        try {
+          final uploadRes = await _repo.uploadProductXFiles(localImageFiles);
+          if (uploadRes.success && uploadRes.data != null) {
+            final serverUrls = List<String>.from(payload['images'] ?? []);
+            for (final u in uploadRes.data!) {
+              if (serverUrls.length < 4 && !serverUrls.contains(u)) {
+                serverUrls.add(u);
+              }
+            }
+            payload['images'] = serverUrls;
+          } else {
+            debugPrint('[ProductController] Edit product image upload warning: ${uploadRes.error}');
+            rootScaffoldMessengerKey.currentState?.showSnackBar(
+              SnackBar(
+                content: Text('Image upload warning: ${uploadRes.error ?? "Failed to upload image"}'),
+                backgroundColor: AppColors.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            if (original != null && (payload['images'] == null || (payload['images'] as List).isEmpty)) {
+              payload['images'] = original.images;
+            }
+          }
+        } catch (e) {
+          debugPrint('[ProductController] Background image upload error: $e');
+          if (original != null && (payload['images'] == null || (payload['images'] as List).isEmpty)) {
+            payload['images'] = original.images;
+          }
+        }
       }
-      return true;
-    } else {
-      // Revert if API failed and original existed
+
+      final response = await _repo.updateProduct(targetId, payload);
+      if (response.success && response.data != null) {
+        final currentIdx = _products.indexWhere((p) => p.id == id || p.id.toString() == targetId);
+        if (currentIdx >= 0) {
+          final updatedItem = response.data!;
+          final mergedAttr = Map<String, dynamic>.from(_products[currentIdx].attributes);
+          if (updatedItem.attributes.isNotEmpty) {
+            mergedAttr.addAll(updatedItem.attributes);
+          }
+          final resolvedImages = updatedItem.images.isNotEmpty
+              ? updatedItem.images
+              : (payload['images'] != null && (payload['images'] as List).isNotEmpty
+                  ? List<String>.from(payload['images'] as List)
+                  : _products[currentIdx].images);
+
+          _products[currentIdx] = updatedItem.copyWith(
+            images: resolvedImages,
+            unit: updatedItem.unit.isNotEmpty && updatedItem.unit != 'piece'
+                ? updatedItem.unit
+                : _products[currentIdx].unit,
+            floorPrice: updatedItem.floorPrice > 0 ? updatedItem.floorPrice : _products[currentIdx].floorPrice,
+            allowBargain: updatedItem.allowBargain || _products[currentIdx].allowBargain,
+            attributes: mergedAttr,
+          );
+          await LocalCacheService.saveProducts(_products);
+          notifyListeners();
+          AppEventBus().emit(AppCacheEventType.productsMutated);
+        }
+        return true;
+      } else {
+        // Revert if API failed and original existed
+        if (original != null && index >= 0) {
+          _products[index] = original;
+          await LocalCacheService.saveProducts(_products);
+          final err = response.error ?? 'Failed to update product on server';
+          setError(err);
+          notifyListeners();
+          rootScaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text('Update failed: $err'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return false;
+      }
+    } catch (e) {
       if (original != null && index >= 0) {
         _products[index] = original;
         await LocalCacheService.saveProducts(_products);
-        setError(response.error ?? 'Failed to update product on server');
+        final err = e.toString();
+        setError(err);
         notifyListeners();
+        rootScaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('Update error: $err'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
       return false;
     }
@@ -417,6 +620,7 @@ class ProductController extends BaseController {
     // 2. Sync to Server via inventory adjust
     final response = await _repo.adjustStock(productId: id, adjustment: adjustment);
     if (response.success) {
+      AppEventBus().emit(AppCacheEventType.inventoryMutated);
       return true;
     } else {
       // Revert on failure
@@ -441,6 +645,7 @@ class ProductController extends BaseController {
 
     final response = await _repo.deleteProduct(id);
     if (response.success) {
+      AppEventBus().emit(AppCacheEventType.productsMutated);
       return true;
     } else {
       // Revert deletion if failed
@@ -469,7 +674,9 @@ class ProductController extends BaseController {
 
     // 2. SERVER SYNC
     final response = await _repo.adjustStock(productId: product.id, adjustment: adjustment);
-    if (!response.success && index >= 0) {
+    if (response.success) {
+      AppEventBus().emit(AppCacheEventType.inventoryMutated);
+    } else if (index >= 0) {
       // Revert if API failed
       _products[index] = product;
       await LocalCacheService.saveProducts(_products);
@@ -503,6 +710,7 @@ class ProductController extends BaseController {
       if (res.success && res.data != null) {
         // Silently reload product catalog to reflect newly imported items instantly
         await loadProducts(forceRefresh: true, silent: true);
+        AppEventBus().emit(AppCacheEventType.productsMutated);
         return res.data;
       } else {
         setError(res.error ?? 'Failed to import products');

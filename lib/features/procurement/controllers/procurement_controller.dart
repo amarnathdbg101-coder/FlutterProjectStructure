@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../products/models/product_model.dart';
 import '../../products/repositories/product_repository.dart';
@@ -19,7 +21,27 @@ class ProcurementController extends BaseController {
   double get completedPurchasedExpense => _items.where((i) => i.isCompleted).fold(0.0, (sum, i) => sum + i.itemActualCost);
   double get pendingProcurementCost => totalEstimatedBudget - completedPurchasedExpense;
 
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+
   ProcurementController() {
+    _hydrateFromLocalCache();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
+      _items = [];
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _logoutSub?.cancel();
+    super.dispose();
+  }
+
+  void refreshList() {
     _hydrateFromLocalCache();
   }
 

@@ -7,6 +7,7 @@ import '../../../core/localization/language_controller.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
+import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/widgets/merchant_drawer.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../../../core/widgets/store_qr_dialog.dart';
@@ -77,6 +78,33 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 22, color: AppColors.primary),
+            tooltip: 'Full App Data Sync',
+            onPressed: () async {
+              CustomSnackbar.showInfo(
+                context,
+                context.isHindi ? '⚡ पूरा स्टोर डेटा सिंक किया जा रहा है...' : '⚡ Syncing full store data...',
+                duration: const Duration(seconds: 1),
+              );
+              final success = await DataSyncService().runBackgroundSync(context, force: true);
+              if (context.mounted) {
+                if (success) {
+                  CustomSnackbar.showSuccess(
+                    context,
+                    context.isHindi ? '✓ पूरा डेटा सफलतापूर्वक सिंक हो गया!' : '✓ Full App Data Synced Successfully!',
+                  );
+                } else {
+                  CustomSnackbar.showWarning(
+                    context,
+                    context.isHindi
+                        ? 'सिंक अधूरा रहा। कुछ डेटा अपडेट नहीं हो सका, कृपया इंटरनेट जांचें।'
+                        : 'Sync incomplete. Some items could not be updated, please check connection.',
+                  );
+                }
+              }
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.qr_code_2_rounded, size: 22, color: AppColors.primary),
             tooltip: 'Store QR Code',
             onPressed: () => showStoreQrDialog(context, shop),
@@ -101,9 +129,83 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 1. Clean Read-Only Shop Showcase Card with 3s Auto-Swapping Carousel
-                if (shop != null) ...[
+                if (shop != null && shop.id.toString().isNotEmpty) ...[
                   _ShopShowcaseCard(shop: shop, authController: authController),
                   const SizedBox(height: 20),
+                ] else ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: context.isDark ? 0.15 : 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.35),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.storefront_rounded, color: AppColors.primary, size: 24),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    context.isHindi ? 'दुकान अभी तक नहीं बनाई गई है' : 'Store Setup Incomplete',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: context.colorTextPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    context.isHindi
+                                        ? 'बिलिंग और उत्पाद जोड़ने के लिए अपनी दुकान प्रोफाइल बनाएं'
+                                        : 'Setup your store profile to enable billing, catalog and online presence',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: context.colorTextSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 44),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.add_business_rounded, size: 20),
+                            label: Text(
+                              context.isHindi ? 'दुकान प्रोफाइल बनाएं' : 'Create Store Profile',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () => context.go('/merchant/profile'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
 
                 // Real-Time Counter Pickup Orders Waiting Banner
@@ -163,7 +265,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           subtitle: context.tr('dash_kpi_reorder_needed'),
                           icon: Icons.warning_amber_rounded,
                           isAlert: stats.lowStockCount > 0,
-                          onTap: () => context.go('/merchant/inventory'),
+                          onTap: () => context.go('/merchant/low-stock'),
                         ),
                       ],
                     );

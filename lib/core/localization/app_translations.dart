@@ -1382,6 +1382,84 @@ class AppTranslations {
       'en': 'Recent Completed Bills',
       'hi': 'हाल के पूर्ण बिल',
     },
+
+    // Enhanced POS & Checkout Extensions
+    'pos_bill_copied': {
+      'en': 'Receipt copied to clipboard',
+      'hi': 'रसीद क्लिपबोर्ड पर कॉपी हो गई',
+    },
+    'pos_btn_copy_bill': {
+      'en': 'Copy Bill Receipt',
+      'hi': 'बिल रसीद कॉपी करें',
+    },
+    'pos_upi_qr_title': {
+      'en': 'Scan & Pay via UPI',
+      'hi': 'UPI से स्कैन और भुगतान करें',
+    },
+    'pos_upi_qr_subtitle': {
+      'en': 'Scan with Google Pay, PhonePe, Paytm, or BHIM',
+      'hi': 'Google Pay, PhonePe, Paytm या BHIM से स्कैन करें',
+    },
+    'pos_upi_enter_id': {
+      'en': 'Enter Shop UPI ID / VPA',
+      'hi': 'दुकान की UPI ID / VPA दर्ज करें',
+    },
+    'pos_upi_save_id': {
+      'en': 'Save UPI ID',
+      'hi': 'UPI ID सहेजें',
+    },
+    'pos_show_upi_qr': {
+      'en': 'Show UPI QR Code',
+      'hi': 'UPI QR कोड दिखाएं',
+    },
+    'pos_upi_not_configured': {
+      'en': 'Set your UPI ID to generate payment QR code',
+      'hi': 'भुगतान QR कोड बनाने के लिए अपनी UPI ID सेट करें',
+    },
+    'pos_whatsapp_receipt_sent': {
+      'en': 'Opening WhatsApp...',
+      'hi': 'व्हाट्सएप खुल रहा है...',
+    },
+
+    // Enhanced Inventory & Quick Stock
+    'inv_quick_stock_title': {
+      'en': 'Quick Stock Adjuster',
+      'hi': 'त्वरित स्टॉक समायोजन',
+    },
+    'inv_quick_stock_sub': {
+      'en': 'Quickly update available stock units',
+      'hi': 'उपलब्ध स्टॉक इकाइयों को तुरंत अपडेट करें',
+    },
+    'inv_quick_stock_saved': {
+      'en': 'Stock updated successfully',
+      'hi': 'स्टॉक सफलतापूर्वक अपडेट किया गया',
+    },
+    'inv_stock_low_badge': {
+      'en': 'Low Stock',
+      'hi': 'कम स्टॉक',
+    },
+    'inv_stock_in_stock': {
+      'en': 'In Stock',
+      'hi': 'स्टॉक में',
+    },
+    'inv_stock_units': {
+      'en': 'Units',
+      'hi': 'इकाइयाँ',
+    },
+
+    // Enhanced Khata & Digital Ledger
+    'khata_copied_summary': {
+      'en': 'Khata statement copied to clipboard',
+      'hi': 'खाता विवरण क्लिपबोर्ड पर कॉपी हो गया',
+    },
+    'khata_btn_copy_summary': {
+      'en': 'Copy Summary',
+      'hi': 'खाता कॉपी करें',
+    },
+    'khata_share_whatsapp_title': {
+      'en': 'Share on WhatsApp',
+      'hi': 'व्हाट्सएप पर भेजें',
+    },
   };
 
   static String get(String key, AppLanguage language) {

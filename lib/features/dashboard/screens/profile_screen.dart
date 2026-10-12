@@ -4,12 +4,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
+import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../../../core/widgets/store_qr_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
@@ -96,41 +98,47 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
               ),
               Divider(color: sheetCtx.colorBorder),
               const SizedBox(height: 8),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: sheetCtx.colorPrimaryLight,
-                    borderRadius: BorderRadius.circular(10),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: sheetCtx.colorPrimaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
                   ),
-                  child: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
-                ),
-                title: Text(
-                  sheetCtx.tr('profile_choose_gallery'),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: sheetCtx.colorTextPrimary,
+                  title: Text(
+                    sheetCtx.tr('profile_choose_gallery'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: sheetCtx.colorTextPrimary,
+                    ),
                   ),
+                  onTap: () => Navigator.of(sheetCtx).pop(ImageSource.gallery),
                 ),
-                onTap: () => Navigator.of(sheetCtx).pop(ImageSource.gallery),
               ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: sheetCtx.colorPrimaryLight,
-                    borderRadius: BorderRadius.circular(10),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: sheetCtx.colorPrimaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
                   ),
-                  child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
-                ),
-                title: Text(
-                  sheetCtx.tr('profile_take_camera'),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: sheetCtx.colorTextPrimary,
+                  title: Text(
+                    sheetCtx.tr('profile_take_camera'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: sheetCtx.colorTextPrimary,
+                    ),
                   ),
+                  onTap: () => Navigator.of(sheetCtx).pop(ImageSource.camera),
                 ),
-                onTap: () => Navigator.of(sheetCtx).pop(ImageSource.camera),
               ),
               const SizedBox(height: 8),
             ],
@@ -141,13 +149,23 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
 
     if (source == null) return;
 
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: source,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 85,
-    );
+    XFile? picked;
+    try {
+      final picker = ImagePicker();
+      picked = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+        requestFullMetadata: false,
+      );
+    } catch (e) {
+      debugPrint('[ProfileScreen] Image picker warning: $e');
+      try {
+        final picker = ImagePicker();
+        picked = await picker.pickImage(source: source, requestFullMetadata: false);
+      } catch (_) {}
+    }
 
     if (picked == null) return;
     if (!mounted) return;
@@ -234,9 +252,18 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(Icons.refresh_rounded, color: context.colorTextSecondary),
-              tooltip: 'Refresh',
-              onPressed: _isRefreshing ? null : _handleRefresh,
+                  : const Icon(Icons.refresh_rounded, color: AppColors.primary),
+              tooltip: 'Refresh Profile Details',
+              onPressed: _isRefreshing
+                  ? null
+                  : () async {
+                      await _handleRefresh();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('✓ Store Profile Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                        );
+                      }
+                    },
             ),
             const SizedBox(width: 8),
           ],
@@ -251,6 +278,83 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // PROMINENT STORE SETUP BANNER IF NO SHOP CREATED YET
+                  if (shop == null || shop.id.toString().isEmpty) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: context.isDark ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.35),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.storefront_rounded, color: AppColors.primary, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      context.isHindi ? 'दुकान अभी तक नहीं बनाई गई है' : 'Store Setup Required',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: context.colorTextPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      context.isHindi
+                                          ? 'बिलिंग और इन्वेंटरी शुरू करने के लिए अपनी दुकान प्रोफाइल बनाएं'
+                                          : 'Create your store profile to start adding inventory and billing',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: context.colorTextSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 42),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.add_business_rounded, size: 18),
+                              label: Text(
+                                context.isHindi ? 'दुकान प्रोफाइल बनाएं' : 'Create Store Profile',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () => _showEditStoreSheet(context, authController, shop),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   // EXECUTIVE STORE & OWNER SUMMARY HEADER
                   AppCard(
                     padding: const EdgeInsets.all(18),
@@ -383,9 +487,15 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                               authController: authController,
                             ),
                           ),
-                          title: context.tr('profile_store_info_section'),
-                          subtitle: '$shopName • ${shop != null && shop.fullAddress.isNotEmpty ? shop.fullAddress : (shop?.phone ?? 'Not specified')}',
-                          trailingText: shop?.category ?? 'General Store',
+                          title: (shop == null || shop.id.toString().isEmpty)
+                              ? (context.isHindi ? 'दुकान बनाएं (आवश्यक)' : 'Create Store Details (Required)')
+                              : context.tr('profile_store_info_section'),
+                          subtitle: (shop == null || shop.id.toString().isEmpty)
+                              ? (context.isHindi ? 'दुकान का नाम, पता और मोबाइल नंबर सेट करें' : 'Set up store name, address and phone')
+                              : '$shopName • ${shop.fullAddress.isNotEmpty ? shop.fullAddress : (shop.phone.isNotEmpty ? shop.phone : 'Not specified')}',
+                          trailingText: (shop == null || shop.id.toString().isEmpty)
+                              ? (context.isHindi ? 'बनाएं' : 'Create')
+                              : (shop.category.isNotEmpty ? shop.category : 'General Store'),
                           onTap: () => _showEditStoreSheet(context, authController, shop),
                         ),
                         Divider(height: 1, color: context.colorBorder),
@@ -396,7 +506,17 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                               ? '${shop.fullAddress} (${shop.formattedGps})'
                               : 'Set GPS pin & Google Maps link for nearby search',
                           trailingText: shop?.hasGpsCoordinates == true ? 'GPS Active' : 'Set GPS',
-                          onTap: () => _showEditLocationSheet(context, authController, shop),
+                          onTap: () {
+                            if (shop == null || shop.id.toString().isEmpty) {
+                              CustomSnackbar.showInfo(
+                                context,
+                                context.isHindi ? 'कृपया पहले अपनी दुकान बनाएं' : 'Please create your store profile first',
+                              );
+                              _showEditStoreSheet(context, authController, shop);
+                              return;
+                            }
+                            _showEditLocationSheet(context, authController, shop);
+                          },
                         ),
                         Divider(height: 1, color: context.colorBorder),
                         _SettingTile(
@@ -404,7 +524,17 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                           title: 'Shop Showcase Banners',
                           subtitle: '${shop?.banners.length ?? 0}/2 Showcase Banners Uploaded',
                           trailingText: 'Edit Banners',
-                          onTap: () => _showEditShopBannersSheet(context, authController, shop),
+                          onTap: () {
+                            if (shop == null || shop.id.toString().isEmpty) {
+                              CustomSnackbar.showInfo(
+                                context,
+                                context.isHindi ? 'कृपया पहले अपनी दुकान बनाएं' : 'Please create your store profile first',
+                              );
+                              _showEditStoreSheet(context, authController, shop);
+                              return;
+                            }
+                            _showEditShopBannersSheet(context, authController, shop);
+                          },
                         ),
                         Divider(height: 1, color: context.colorBorder),
                         _SettingTile(
@@ -412,7 +542,17 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                           title: context.tr('profile_timings_section'),
                           subtitle: '${shop?.openingTime ?? '09:00 AM'} - ${shop?.closingTime ?? '09:00 PM'} (${shop?.weeklyOff ?? 'Open 7 days'})',
                           trailingText: shop?.upiId?.isNotEmpty == true ? 'UPI Active' : 'Add UPI',
-                          onTap: () => _showEditTimingsSheet(context, authController, shop),
+                          onTap: () {
+                            if (shop == null || shop.id.toString().isEmpty) {
+                              CustomSnackbar.showInfo(
+                                context,
+                                context.isHindi ? 'कृपया पहले अपनी दुकान बनाएं' : 'Please create your store profile first',
+                              );
+                              _showEditStoreSheet(context, authController, shop);
+                              return;
+                            }
+                            _showEditTimingsSheet(context, authController, shop);
+                          },
                         ),
                         Divider(height: 1, color: context.colorBorder),
                         _SettingTile(
@@ -460,134 +600,142 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                     child: Column(
                       children: [
                         // Language Toggle Tile
-                        ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: context.colorPrimaryLight,
-                              borderRadius: BorderRadius.circular(8),
+                        Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: context.colorPrimaryLight,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.language_rounded, size: 18, color: AppColors.primary),
                             ),
-                            child: const Icon(Icons.language_rounded, size: 18, color: AppColors.primary),
-                          ),
-                          title: Text(
-                            context.tr('settings_language_title'),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: context.colorTextPrimary,
+                            title: Text(
+                              context.tr('settings_language_title'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: context.colorTextPrimary,
+                              ),
                             ),
-                          ),
-                          subtitle: Text(
-                            langController.currentLanguage == AppLanguage.hindi ? 'हिन्दी (Hindi)' : 'English',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: context.colorTextSecondary,
+                            subtitle: Text(
+                              langController.currentLanguage == AppLanguage.hindi ? 'हिन्दी (Hindi)' : 'English',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.colorTextSecondary,
+                              ),
                             ),
-                          ),
-                          trailing: Container(
-                            height: 32,
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: context.colorSurfaceSubtle,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: context.colorBorder),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _TextTogglePill(
-                                  label: 'EN',
-                                  isSelected: langController.currentLanguage == AppLanguage.english,
-                                  onTap: () => langController.setLanguage(AppLanguage.english),
-                                ),
-                                _TextTogglePill(
-                                  label: 'हिन्दी',
-                                  isSelected: langController.currentLanguage == AppLanguage.hindi,
-                                  onTap: () => langController.setLanguage(AppLanguage.hindi),
-                                ),
-                              ],
+                            trailing: Container(
+                              height: 32,
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: context.colorSurfaceSubtle,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: context.colorBorder),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _TextTogglePill(
+                                    label: 'EN',
+                                    isSelected: langController.currentLanguage == AppLanguage.english,
+                                    onTap: () => langController.setLanguage(AppLanguage.english),
+                                  ),
+                                  _TextTogglePill(
+                                    label: 'हिन्दी',
+                                    isSelected: langController.currentLanguage == AppLanguage.hindi,
+                                    onTap: () => langController.setLanguage(AppLanguage.hindi),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                         Divider(height: 1, color: context.colorBorder),
                         // Profit Margins Central Toggle Tile
-                        SwitchListTile.adaptive(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          secondary: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: context.colorPrimaryLight,
-                              borderRadius: BorderRadius.circular(8),
+                        Material(
+                          color: Colors.transparent,
+                          child: SwitchListTile.adaptive(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            secondary: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: context.colorPrimaryLight,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.analytics_outlined, size: 18, color: AppColors.primary),
                             ),
-                            child: const Icon(Icons.analytics_outlined, size: 18, color: AppColors.primary),
-                          ),
-                          title: Text(
-                            context.tr('settings_profit_margins_title'),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: context.colorTextPrimary,
+                            title: Text(
+                              context.tr('settings_profit_margins_title'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: context.colorTextPrimary,
+                              ),
                             ),
-                          ),
-                          subtitle: Text(
-                            context.tr('settings_profit_margins_subtitle'),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: context.colorTextSecondary,
+                            subtitle: Text(
+                              context.tr('settings_profit_margins_subtitle'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.colorTextSecondary,
+                              ),
                             ),
+                            value: prodController.showProfitMargins,
+                            activeThumbColor: AppColors.primary,
+                            onChanged: (val) => prodController.setShowProfitMargins(val),
                           ),
-                          value: prodController.showProfitMargins,
-                          activeThumbColor: AppColors.primary,
-                          onChanged: (val) => prodController.setShowProfitMargins(val),
                         ),
                         Divider(height: 1, color: context.colorBorder),
                         // Theme Toggle Tile
-                        ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: context.colorPrimaryLight,
-                              borderRadius: BorderRadius.circular(8),
+                        Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: context.colorPrimaryLight,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.palette_outlined, size: 18, color: AppColors.primary),
                             ),
-                            child: const Icon(Icons.palette_outlined, size: 18, color: AppColors.primary),
-                          ),
-                          title: Text(
-                            context.tr('settings_theme_title'),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: context.colorTextPrimary,
+                            title: Text(
+                              context.tr('settings_theme_title'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: context.colorTextPrimary,
+                              ),
                             ),
-                          ),
-                          subtitle: Text(
-                            themeController.themeMode == ThemeMode.dark
-                                ? context.tr('theme_dark')
-                                : (themeController.themeMode == ThemeMode.light
-                                    ? context.tr('theme_light')
-                                    : context.tr('theme_system')),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: context.colorTextSecondary,
+                            subtitle: Text(
+                              themeController.themeMode == ThemeMode.dark
+                                  ? context.tr('theme_dark')
+                                  : (themeController.themeMode == ThemeMode.light
+                                      ? context.tr('theme_light')
+                                      : context.tr('theme_system')),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.colorTextSecondary,
+                              ),
                             ),
-                          ),
-                          trailing: Container(
-                            height: 32,
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: context.colorSurfaceSubtle,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: context.colorBorder),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _IconTogglePill(
-                                  icon: Icons.wb_sunny_rounded,
-                                  tooltip: context.tr('theme_light'),
-                                  isSelected: themeController.themeMode == ThemeMode.light,
-                                  onTap: () => themeController.setThemeMode(ThemeMode.light),
+                            trailing: Container(
+                              height: 32,
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: context.colorSurfaceSubtle,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: context.colorBorder),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _IconTogglePill(
+                                    icon: Icons.wb_sunny_rounded,
+                                    tooltip: context.tr('theme_light'),
+                                    isSelected: themeController.themeMode == ThemeMode.light,
+                                    onTap: () => themeController.setThemeMode(ThemeMode.light),
                                 ),
                                 _IconTogglePill(
                                   icon: Icons.nightlight_round,
@@ -605,9 +753,10 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
                   const SizedBox(height: 24),
 
                   // SECTION 4: LOGOUT BUTTON
@@ -671,6 +820,7 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
     final lngCtrl = TextEditingController(text: shop?.longitude != null ? shop!.longitude.toString() : '');
     final mapsUrlCtrl = TextEditingController(text: shop?.googleMapsUrl ?? '');
     bool isSaving = false;
+    bool isDetectingGps = false;
 
     showModalBottomSheet(
       context: context,
@@ -759,8 +909,16 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                         keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                         decoration: const InputDecoration(
                           labelText: 'GPS Latitude',
-                          hintText: '25.5941',
+                          hintText: '26.1054',
                         ),
+                        onChanged: (val) {
+                          final lat = double.tryParse(val.trim());
+                          final lng = double.tryParse(lngCtrl.text.trim());
+                          if (lat != null && lng != null) {
+                            mapsUrlCtrl.text = 'https://www.google.com/maps?q=$lat,$lng';
+                            setSheetState(() {});
+                          }
+                        },
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -770,83 +928,110 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                         keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                         decoration: const InputDecoration(
                           labelText: 'GPS Longitude',
-                          hintText: '85.1376',
+                          hintText: '85.9201',
                         ),
+                        onChanged: (val) {
+                          final lat = double.tryParse(latCtrl.text.trim());
+                          final lng = double.tryParse(val.trim());
+                          if (lat != null && lng != null) {
+                            mapsUrlCtrl.text = 'https://www.google.com/maps?q=$lat,$lng';
+                            setSheetState(() {});
+                          }
+                        },
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 14),
 
-                // Quick Location & Distance Presets
-                Text(
-                  'Quick GPS Location Presets:',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: ctx.colorTextSecondary),
+                // SINGLE EXCLUSIVE OPTION: "📍 Use Live GPS Location"
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  ),
+                  icon: isDetectingGps
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                      : const Icon(Icons.my_location_rounded, size: 20, color: AppColors.primary),
+                  label: Text(
+                    isDetectingGps ? 'Detecting Live GPS...' : '📍 Use Live GPS Location',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: AppColors.primary),
+                  ),
+                  onPressed: isDetectingGps
+                      ? null
+                      : () async {
+                          setSheetState(() => isDetectingGps = true);
+                          try {
+                            // Fetch real device hardware GPS coordinates (Never IP-based)
+                            final locResult = await LocationService.getCurrentLiveLocation();
+                            if (locResult.isSuccess) {
+                              latCtrl.text = locResult.latitude.toStringAsFixed(6);
+                              lngCtrl.text = locResult.longitude.toStringAsFixed(6);
+                              mapsUrlCtrl.text = locResult.googleMapsUrl;
+                              if (locResult.city != null && locResult.city!.isNotEmpty) {
+                                cityCtrl.text = locResult.city!;
+                              }
+                              if (locResult.pincode != null && locResult.pincode!.isNotEmpty) {
+                                pincodeCtrl.text = locResult.pincode!;
+                              }
+                              if (locResult.address != null && locResult.address!.isNotEmpty && addressCtrl.text.isEmpty) {
+                                addressCtrl.text = locResult.address!;
+                              }
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(
+                                    content: Text('📍 Exact Live GPS Captured: ${locResult.latitude.toStringAsFixed(4)}, ${locResult.longitude.toStringAsFixed(4)}'),
+                                    backgroundColor: AppColors.success,
+                                    duration: const Duration(seconds: 3),
+                                  ),
+                                );
+                              }
+                            } else {
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(
+                                    content: Text(locResult.error ?? 'Could not detect live GPS.'),
+                                    backgroundColor: AppColors.error,
+                                    duration: const Duration(seconds: 4),
+                                  ),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            debugPrint('GPS detection warning: $e');
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text('GPS detection error: $e'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (ctx.mounted) {
+                              setSheetState(() => isDetectingGps = false);
+                            }
+                          }
+                        },
                 ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    ActionChip(
-                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
-                      label: const Text('Darbhanga Suburbs (7km)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        setSheetState(() {
-                          latCtrl.text = '26.1050';
-                          lngCtrl.text = '85.9200';
-                          cityCtrl.text = 'darbhanga';
-                          mapsUrlCtrl.text = 'https://maps.google.com/?q=26.1050,85.9200';
-                        });
-                      },
-                    ),
-                    ActionChip(
-                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
-                      label: const Text('Darbhanga Center (0km)', style: TextStyle(fontSize: 11)),
-                      onPressed: () {
-                        setSheetState(() {
-                          latCtrl.text = '26.1542';
-                          lngCtrl.text = '85.8918';
-                          cityCtrl.text = 'darbhanga';
-                          mapsUrlCtrl.text = 'https://maps.google.com/?q=26.1542,85.8918';
-                        });
-                      },
-                    ),
-                    ActionChip(
-                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
-                      label: const Text('Noida Sector 15', style: TextStyle(fontSize: 11)),
-                      onPressed: () {
-                        setSheetState(() {
-                          latCtrl.text = '28.5828';
-                          lngCtrl.text = '77.3110';
-                          cityCtrl.text = 'noida';
-                          mapsUrlCtrl.text = 'https://maps.google.com/?q=28.5828,77.3110';
-                        });
-                      },
-                    ),
-                    ActionChip(
-                      avatar: const Icon(Icons.location_on_rounded, size: 14, color: AppColors.primary),
-                      label: const Text('Patna Center', style: TextStyle(fontSize: 11)),
-                      onPressed: () {
-                        setSheetState(() {
-                          latCtrl.text = '25.5941';
-                          lngCtrl.text = '85.1376';
-                          cityCtrl.text = 'patna';
-                          mapsUrlCtrl.text = 'https://maps.google.com/?q=25.5941,85.1376';
-                        });
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
 
                 // Google Maps Share URL
                 TextFormField(
                   controller: mapsUrlCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Google Maps Link / URL',
-                    hintText: 'https://maps.google.com/?q=25.5941,85.1376',
+                    labelText: 'Google Maps Link / URL (Auto-Extracts Coordinates)',
+                    hintText: 'https://maps.google.com/?q=26.1054,85.9201',
                   ),
+                  onChanged: (val) {
+                    final extracted = LocationService.extractCoordinatesFromMapsUrl(val);
+                    if (extracted != null) {
+                      latCtrl.text = extracted['latitude']!.toStringAsFixed(6);
+                      lngCtrl.text = extracted['longitude']!.toStringAsFixed(6);
+                      setSheetState(() {});
+                    }
+                  },
                 ),
                 const SizedBox(height: 12),
 
@@ -879,14 +1064,32 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                           final lat = double.tryParse(latCtrl.text.trim());
                           final lng = double.tryParse(lngCtrl.text.trim());
 
-                          final updatePayload = <String, dynamic>{
-                            'address': addressCtrl.text.trim(),
-                            'city': cityCtrl.text.trim(),
-                            'pincode': pincodeCtrl.text.trim(),
-                            'google_maps_url': mapsUrlCtrl.text.trim(),
-                          };
+                          // Sanitize updatePayload: omit empty strings so Go validator min=1 passes
+                          final updatePayload = <String, dynamic>{};
+                          if (addressCtrl.text.trim().isNotEmpty) {
+                            updatePayload['address'] = addressCtrl.text.trim();
+                          }
+                          if (cityCtrl.text.trim().isNotEmpty) {
+                            updatePayload['city'] = cityCtrl.text.trim();
+                          }
+                          if (pincodeCtrl.text.trim().isNotEmpty) {
+                            updatePayload['pincode'] = pincodeCtrl.text.trim();
+                          }
+                          if (mapsUrlCtrl.text.trim().isNotEmpty) {
+                            updatePayload['google_maps_url'] = mapsUrlCtrl.text.trim();
+                          } else if (lat != null && lng != null) {
+                            updatePayload['google_maps_url'] = 'https://www.google.com/maps?q=$lat,$lng';
+                          }
                           if (lat != null) updatePayload['latitude'] = lat;
                           if (lng != null) updatePayload['longitude'] = lng;
+
+                          if (updatePayload.isEmpty) {
+                            if (ctx.mounted) {
+                              setSheetState(() => isSaving = false);
+                              Navigator.pop(ctx);
+                            }
+                            return;
+                          }
 
                           final success = await authController.updateShop(updatePayload);
 
@@ -894,12 +1097,20 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                             setSheetState(() => isSaving = false);
                             if (success) {
                               Navigator.pop(ctx);
+                              // Refresh shop details so all profile cards immediately reflect new location
+                              authController.fetchShopDetails();
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Store GPS location & address updated!')),
+                                const SnackBar(
+                                  content: Text('Store GPS location & address updated!'),
+                                  backgroundColor: AppColors.success,
+                                ),
                               );
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(authController.errorMessage ?? 'Failed to update location')),
+                                SnackBar(
+                                  content: Text(authController.errorMessage ?? 'Failed to update location'),
+                                  backgroundColor: AppColors.error,
+                                ),
                               );
                             }
                           }
@@ -969,15 +1180,28 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                 title: Text('Choose from Gallery / Photos', style: TextStyle(fontWeight: FontWeight.w600, color: sheetCtx.colorTextPrimary)),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
-                  final pickedFiles = await picker.pickMultiImage(
-                    maxWidth: 1024,
-                    maxHeight: 1024,
-                    imageQuality: 85,
-                  );
-                  if (pickedFiles.isNotEmpty) {
-                    final remaining = maxAllowed - currentCount;
-                    final selectedPaths = pickedFiles.take(remaining).map((f) => f.path).toList();
-                    onImagesSelected(selectedPaths);
+                  try {
+                    final pickedFiles = await picker.pickMultiImage(
+                      maxWidth: 1024,
+                      maxHeight: 1024,
+                      imageQuality: 85,
+                      requestFullMetadata: false,
+                    );
+                    if (pickedFiles.isNotEmpty) {
+                      final remaining = maxAllowed - currentCount;
+                      final selectedPaths = pickedFiles.take(remaining).map((f) => f.path).toList();
+                      onImagesSelected(selectedPaths);
+                    }
+                  } catch (e) {
+                    debugPrint('[ProfileScreen] MultiImage picker warning: $e');
+                    try {
+                      final pickedFiles = await picker.pickMultiImage(requestFullMetadata: false);
+                      if (pickedFiles.isNotEmpty) {
+                        final remaining = maxAllowed - currentCount;
+                        final selectedPaths = pickedFiles.take(remaining).map((f) => f.path).toList();
+                        onImagesSelected(selectedPaths);
+                      }
+                    } catch (_) {}
                   }
                 },
               ),
@@ -994,14 +1218,19 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                 title: Text('Take Photo with Camera', style: TextStyle(fontWeight: FontWeight.w600, color: sheetCtx.colorTextPrimary)),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
-                  final picked = await picker.pickImage(
-                    source: ImageSource.camera,
-                    maxWidth: 1024,
-                    maxHeight: 1024,
-                    imageQuality: 85,
-                  );
-                  if (picked != null) {
-                    onImagesSelected([picked.path]);
+                  try {
+                    final picked = await picker.pickImage(
+                      source: ImageSource.camera,
+                      maxWidth: 1024,
+                      maxHeight: 1024,
+                      imageQuality: 85,
+                      requestFullMetadata: false,
+                    );
+                    if (picked != null) {
+                      onImagesSelected([picked.path]);
+                    }
+                  } catch (e) {
+                    debugPrint('[ProfileScreen] Camera picker warning: $e');
                   }
                 },
               ),
@@ -1224,18 +1453,20 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
     );
   }
 
-  // --- EDIT STORE MODAL ---
+  // --- EDIT / CREATE STORE MODAL ---
   void _showEditStoreSheet(BuildContext context, AuthController authController, ShopModel? shop) {
     final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController(text: shop?.name ?? '');
-    final categoryCtrl = TextEditingController(text: shop?.category ?? 'General Store');
-    final phoneCtrl = TextEditingController(text: shop?.phone ?? '');
-    final whatsappCtrl = TextEditingController(text: shop?.whatsappNumber ?? '');
-    final addressCtrl = TextEditingController(text: shop?.address ?? '');
-    final cityCtrl = TextEditingController(text: shop?.city ?? '');
-    final pincodeCtrl = TextEditingController(text: shop?.pincode ?? '');
-    final descriptionCtrl = TextEditingController(text: shop?.description ?? '');
+    final isNewShop = shop == null || shop.id.toString().isEmpty;
+    final nameCtrl = TextEditingController(text: (!isNewShop && shop.name != 'ShopSilo Store') ? shop.name : '');
+    final categoryCtrl = TextEditingController(text: (!isNewShop && shop.category.isNotEmpty) ? shop.category : 'General Store');
+    final phoneCtrl = TextEditingController(text: (!isNewShop && shop.phone.isNotEmpty) ? shop.phone : (authController.currentUser?.phone ?? ''));
+    final whatsappCtrl = TextEditingController(text: (!isNewShop && shop.whatsappNumber.isNotEmpty) ? shop.whatsappNumber : (authController.currentUser?.phone ?? ''));
+    final addressCtrl = TextEditingController(text: !isNewShop ? shop.address : '');
+    final cityCtrl = TextEditingController(text: !isNewShop ? shop.city : '');
+    final pincodeCtrl = TextEditingController(text: !isNewShop ? shop.pincode : '');
+    final descriptionCtrl = TextEditingController(text: !isNewShop ? shop.description : '');
     bool isSaving = false;
+    String? localError;
 
     showModalBottomSheet(
       context: context,
@@ -1268,7 +1499,9 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          ctx.tr('profile_store_info_section'),
+                          isNewShop
+                              ? (ctx.isHindi ? 'अपनी दुकान बनाएं' : 'Create Your Store')
+                              : ctx.tr('profile_store_info_section'),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1282,19 +1515,49 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                       ],
                     ),
                     Divider(color: ctx.colorBorder),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
+                    if (localError != null && localError!.isNotEmpty) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                localError!,
+                                style: const TextStyle(
+                                  color: AppColors.error,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     TextFormField(
                       controller: nameCtrl,
                       decoration: InputDecoration(
                         labelText: ctx.tr('profile_store_name'),
+                        hintText: ctx.isHindi ? 'जैसे: शर्मा किराना स्टोर' : 'e.g. Sharma Kirana Store',
                       ),
-                      validator: (val) => val == null || val.trim().isEmpty ? 'Store name is required' : null,
+                      validator: (val) => val == null || val.trim().isEmpty
+                          ? (ctx.isHindi ? 'दुकान का नाम आवश्यक है' : 'Store name is required')
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: categoryCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Business Category',
+                      decoration: InputDecoration(
+                        labelText: ctx.isHindi ? 'व्यापार श्रेणी' : 'Business Category',
                         hintText: 'Grocery, Kirana, Bakery, Mobile',
                       ),
                     ),
@@ -1304,14 +1567,15 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                       keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
                         labelText: ctx.tr('profile_phone'),
+                        hintText: '9876543210',
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: whatsappCtrl,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'WhatsApp Support Number',
+                      decoration: InputDecoration(
+                        labelText: ctx.isHindi ? 'व्हाट्सएप सपोर्ट नंबर' : 'WhatsApp Support Number',
                         hintText: '9876543210',
                       ),
                     ),
@@ -1321,8 +1585,8 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                       maxLines: 2,
                       decoration: InputDecoration(
                         labelText: ctx.tr('profile_address'),
+                        hintText: ctx.isHindi ? 'दुकान का पता (वैकल्पिक)' : 'Store address (Optional)',
                       ),
-                      validator: (val) => val == null || val.trim().isEmpty ? 'Address is required' : null,
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -1330,8 +1594,9 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                         Expanded(
                           child: TextFormField(
                             controller: cityCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'City',
+                            decoration: InputDecoration(
+                              labelText: ctx.isHindi ? 'शहर' : 'City',
+                              hintText: 'Store City',
                             ),
                           ),
                         ),
@@ -1340,8 +1605,9 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                           child: TextFormField(
                             controller: pincodeCtrl,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Pincode',
+                            decoration: InputDecoration(
+                              labelText: ctx.isHindi ? 'पिनकोड' : 'Pincode',
+                              hintText: '110001',
                             ),
                           ),
                         ),
@@ -1351,9 +1617,9 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                     TextFormField(
                       controller: descriptionCtrl,
                       maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Store Tagline / Description',
-                        hintText: 'Best quality grocery & daily essentials',
+                      decoration: InputDecoration(
+                        labelText: ctx.isHindi ? 'दुकान का विवरण / टैगलाइन' : 'Store Tagline / Description',
+                        hintText: ctx.isHindi ? 'सर्वश्रेष्ठ किराना और दैनिक आवश्यक सामान' : 'Best quality grocery & daily essentials',
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -1365,31 +1631,67 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                       onPressed: isSaving
                           ? null
                           : () async {
-                              if (!formKey.currentState!.validate()) return;
-                              setSheetState(() => isSaving = true);
-                              final success = await authController.updateShop({
-                                'name': nameCtrl.text.trim(),
-                                'category': categoryCtrl.text.trim(),
-                                'phone': phoneCtrl.text.trim(),
-                                'whatsapp_number': whatsappCtrl.text.trim(),
-                                'address': addressCtrl.text.trim(),
-                                'city': cityCtrl.text.trim(),
-                                'pincode': pincodeCtrl.text.trim(),
-                                'description': descriptionCtrl.text.trim(),
+                              final isHindi = ctx.isHindi;
+                              if (nameCtrl.text.trim().isEmpty) {
+                                final msg = isHindi ? 'कृपया दुकान का नाम दर्ज करें' : 'Please enter store name';
+                                setSheetState(() => localError = msg);
+                                CustomSnackbar.showError(ctx, msg);
+                                return;
+                              }
+                              if (!formKey.currentState!.validate()) {
+                                final msg = isHindi ? 'कृपया सभी आवश्यक फ़ील्ड सही तरीके से भरें' : 'Please check required fields';
+                                setSheetState(() => localError = msg);
+                                CustomSnackbar.showError(ctx, msg);
+                                return;
+                              }
+                              setSheetState(() {
+                                isSaving = true;
+                                localError = null;
                               });
+
+                              final userPhone = authController.currentUser?.phone ?? '';
+                              final phoneVal = phoneCtrl.text.trim().isNotEmpty
+                                  ? phoneCtrl.text.trim()
+                                  : (userPhone.isNotEmpty ? userPhone : '9876543210');
+                              final cityVal = cityCtrl.text.trim().isNotEmpty ? cityCtrl.text.trim() : 'Store City';
+                              final addressVal = addressCtrl.text.trim().isNotEmpty ? addressCtrl.text.trim() : '$cityVal Market';
+
+                              final payload = <String, dynamic>{
+                                'name': nameCtrl.text.trim(),
+                                'category': categoryCtrl.text.trim().isNotEmpty ? categoryCtrl.text.trim() : 'General Store',
+                                'phone': phoneVal,
+                                'whatsapp_number': whatsappCtrl.text.trim().isNotEmpty ? whatsappCtrl.text.trim() : phoneVal,
+                                'address': addressVal,
+                                'city': cityVal,
+                                'pincode': pincodeCtrl.text.trim().isNotEmpty ? pincodeCtrl.text.trim() : '110001',
+                                'description': descriptionCtrl.text.trim(),
+                              };
+
+                              final success = isNewShop
+                                  ? await authController.createShop(payload)
+                                  : await authController.updateShop(payload);
+
                               if (ctx.mounted) {
                                 setSheetState(() => isSaving = false);
                                 if (success) {
                                   Navigator.of(ctx).pop();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Store details updated successfully')),
+                                  CustomSnackbar.showSuccess(
+                                    context,
+                                    isNewShop
+                                        ? (isHindi ? 'दुकान सफलतापूर्वक बनाई गई!' : 'Store created successfully!')
+                                        : (isHindi ? 'दुकान का विवरण सफलतापूर्वक सहेजा गया' : 'Store details saved successfully'),
                                   );
+                                } else {
+                                  final err = authController.errorMessage ??
+                                      (isHindi ? 'दुकान सहेजने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to save store. Please try again.');
+                                  setSheetState(() => localError = err);
+                                  CustomSnackbar.showError(context, err);
                                 }
                               }
                             },
                       child: isSaving
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(ctx.tr('btn_save')),
+                          : Text(isNewShop ? (ctx.isHindi ? 'दुकान बनाएं' : 'Create Store') : ctx.tr('btn_save')),
                     ),
                   ],
                 ),

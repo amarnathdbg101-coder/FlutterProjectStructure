@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/localization/language_controller.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../models/khata_model.dart';
@@ -64,8 +67,30 @@ class KhataController extends BaseController {
     }).toList();
   }
 
+  StreamSubscription<AppCacheEvent>? _posSaleSub;
+  StreamSubscription<AppCacheEvent>? _logoutSub;
+
   KhataController() {
     _hydrateFromLocalCache();
+    _subscribeToEvents();
+  }
+
+  void _subscribeToEvents() {
+    _posSaleSub = AppEventBus().on(AppCacheEventType.posSaleCompleted, (_) {
+      loadCustomers(silent: true);
+    });
+    _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
+      _customers = [];
+      _summary = null;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSaleSub?.cancel();
+    _logoutSub?.cancel();
+    super.dispose();
   }
 
   void _hydrateFromLocalCache() {
@@ -108,11 +133,14 @@ class KhataController extends BaseController {
         notifyListeners();
       } else {
         if (!silent && _customers.isEmpty) {
-          setError(response.error ?? 'Khata record load nahi ho sake');
+          setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'खाता रिकॉर्ड लोड नहीं हो सके' : 'Failed to load khata records'));
         }
       }
-    } catch (_) {
-      if (!silent) setLoading(false);
+    } catch (e) {
+      if (!silent) {
+        setLoading(false);
+        if (_customers.isEmpty) setError(ApiClient.handleError(e));
+      }
     }
 
     // Concurrently update summary and aging metrics
@@ -146,7 +174,7 @@ class KhataController extends BaseController {
     if (response.success && response.data != null) {
       _currentCustomerStatement = response.data!;
     } else {
-      setError(response.error ?? 'Passbook statement load nahi ho saka');
+      setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'पासबुक विवरण लोड नहीं हो सका' : 'Failed to load passbook statement'));
     }
     notifyListeners();
   }
@@ -170,6 +198,7 @@ class KhataController extends BaseController {
 
     if (response.success) {
       await loadCustomers(silent: true);
+      AppEventBus().emit(AppCacheEventType.khataMutated);
       return true;
     } else {
       setError(response.error ?? 'Failed to record credit entry');
@@ -196,6 +225,7 @@ class KhataController extends BaseController {
 
     if (response.success) {
       await loadCustomers(silent: true);
+      AppEventBus().emit(AppCacheEventType.khataMutated);
       return true;
     } else {
       setError(response.error ?? 'Failed to record payment');
@@ -225,6 +255,7 @@ class KhataController extends BaseController {
         );
         LocalCacheService.saveKhataCustomers(_customers);
         notifyListeners();
+        AppEventBus().emit(AppCacheEventType.khataMutated);
       }
       return true;
     } else {
@@ -254,6 +285,7 @@ class KhataController extends BaseController {
         );
         LocalCacheService.saveKhataCustomers(_customers);
         notifyListeners();
+        AppEventBus().emit(AppCacheEventType.khataMutated);
       }
       return true;
     } else {
@@ -274,9 +306,40 @@ class KhataController extends BaseController {
     if (response.success) {
       await loadStatement(customerMobile);
       await loadCustomers(silent: true);
+      AppEventBus().emit(AppCacheEventType.khataMutated);
       return true;
     } else {
       setError(response.error ?? 'Failed to reverse transaction');
+      return false;
+    }
+  }
+
+  // --- Permanent Hard Deletion ---
+  Future<bool> deleteCustomer(String khataId, String mobile) async {
+    clearError();
+    final response = await _repo.deleteCustomerKhata(khataId);
+    if (response.success) {
+      _customers.removeWhere((c) => c.id.toString() == khataId || c.mobile == mobile);
+      await LocalCacheService.saveKhataCustomers(_customers);
+      notifyListeners();
+      AppEventBus().emit(AppCacheEventType.khataMutated);
+      return true;
+    } else {
+      setError(response.error ?? 'Failed to delete customer khata account');
+      return false;
+    }
+  }
+
+  Future<bool> deleteTransaction(String khataId, String txId, String customerMobile) async {
+    clearError();
+    final response = await _repo.deleteKhataTransaction(khataId, txId);
+    if (response.success) {
+      await loadStatement(customerMobile);
+      await loadCustomers(silent: true);
+      AppEventBus().emit(AppCacheEventType.khataMutated);
+      return true;
+    } else {
+      setError(response.error ?? 'Failed to delete transaction');
       return false;
     }
   }

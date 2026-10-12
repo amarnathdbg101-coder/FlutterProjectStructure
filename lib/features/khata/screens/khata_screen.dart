@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
+import '../../../core/storage/local_cache_service.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
@@ -1120,6 +1122,30 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                       ),
                       onPressed: () => khata.openStatementPdf(context, customer.mobile, customer: customer),
                     ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                      ),
+                      onPressed: () {
+                        final isHindi = context.isHindi;
+                        final shop = LocalCacheService.getShop();
+                        final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
+                        final balance = customer.balance.toStringAsFixed(0);
+                        final text = isHindi
+                            ? '📖 खाता विवरण - $shopName\nग्राहक: ${customer.name}\nमोबाइल: ${customer.mobile}\nकुल बकाया: ₹$balance\nस्थिति: ${customer.hasPendingUdhar ? "उधारी शेष" : "कोई बकाया नहीं"}'
+                            : '📖 Khata Statement - $shopName\nCustomer: ${customer.name}\nMobile: ${customer.mobile}\nBalance: ₹$balance\nStatus: ${customer.hasPendingUdhar ? "Pending Credit" : "Settled"}';
+                        Clipboard.setData(ClipboardData(text: text));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(context.tr('khata_copied_summary')),
+                            backgroundColor: AppColors.success,
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: const Icon(Icons.copy_rounded, size: 16, color: AppColors.primary),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -1345,8 +1371,16 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
               onPressed: () => khata.broadcastWhatsAppOverdueReminders(context),
             ),
             IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () => khata.loadCustomers(),
+              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+              tooltip: 'Refresh Khata Ledger',
+              onPressed: () async {
+                await khata.loadCustomers();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('✓ Khata Customer Dues Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                  );
+                }
+              },
             ),
           ],
         ),

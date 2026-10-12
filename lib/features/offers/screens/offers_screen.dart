@@ -52,9 +52,16 @@ class _OffersScreenState extends State<OffersScreen> {
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.refresh_rounded, color: context.colorTextSecondary),
+              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
               tooltip: 'Refresh Deals',
-              onPressed: () => offerController.fetchOffers(),
+              onPressed: () async {
+                await offerController.fetchOffers();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('✓ Store Offers Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                  );
+                }
+              },
             ),
             const SizedBox(width: 4),
           ],
