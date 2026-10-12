@@ -533,6 +533,70 @@ class AppTranslations {
       'en': 'Record daily operational costs',
       'hi': 'दैनिक ख़र्च दर्ज करें',
     },
+    'dash_pos_counter_sub': {
+      'en': 'Fast Counter',
+      'hi': 'तेज़ काउंटर',
+    },
+    'dash_catalog_stock_sub': {
+      'en': 'Catalog & Stock',
+      'hi': 'कैटलॉग एवं स्टॉक',
+    },
+    'dash_khata_title': {
+      'en': 'Khata Passbook',
+      'hi': 'खाता पासबुक',
+    },
+    'dash_khata_sub': {
+      'en': 'Customer Credit',
+      'hi': 'ग्राहक उधारी',
+    },
+    'dash_profit_title': {
+      'en': 'Profit Analytics',
+      'hi': 'मुनाफ़ा विश्लेषण',
+    },
+    'dash_profit_sub': {
+      'en': 'Net Profit & Sales',
+      'hi': 'कुल मुनाफ़ा एवं बिक्री',
+    },
+    'dash_expenses_title': {
+      'en': 'Shop Expenses',
+      'hi': 'दुकान के ख़र्चे',
+    },
+    'dash_expenses_sub': {
+      'en': 'Daily Operational Costs',
+      'hi': 'दैनिक व्यय',
+    },
+    'dash_mandi_title': {
+      'en': 'Mandi Sourcing',
+      'hi': 'थोक मंडी ख़रीदारी',
+    },
+    'dash_mandi_sub': {
+      'en': 'Wholesale Procurement',
+      'hi': 'थोक ख़रीद लिस्ट',
+    },
+    'dash_deals_title': {
+      'en': 'Store Deals',
+      'hi': 'दुकान के ऑफर्स',
+    },
+    'dash_deals_sub': {
+      'en': 'Offers & Discounts',
+      'hi': 'छूट एवं डिस्काउंट',
+    },
+    'dash_pickup_title': {
+      'en': 'Pickup Orders',
+      'hi': 'पिकअप ऑर्डर्स',
+    },
+    'dash_pickup_sub': {
+      'en': 'Customer Reservations',
+      'hi': 'ग्राहकों के आर्डर',
+    },
+    'dash_upi_title': {
+      'en': 'Store UPI QR',
+      'hi': 'दुकान का UPI QR',
+    },
+    'dash_upi_sub': {
+      'en': 'Counter Standee',
+      'hi': 'काउंटर स्टैंडी',
+    },
     'dash_dialog_qr_title': {
       'en': 'Digital Storefront QR',
       'hi': 'डिजिटल स्टोर क्यूआर',
@@ -979,6 +1043,22 @@ class AppTranslations {
     'exp_toast_saved': {
       'en': 'Expense recorded successfully!',
       'hi': 'ख़र्च सफलतापूर्वक दर्ज किया गया!',
+    },
+    'exp_kpi_today': {
+      'en': "Today's Expenses",
+      'hi': 'आज के खर्चे',
+    },
+    'exp_kpi_monthly': {
+      'en': 'This Month',
+      'hi': 'इस महीने',
+    },
+    'exp_cat_transport': {
+      'en': '⛽ Transport & Petrol',
+      'hi': '⛽ परिवहन एवं पेट्रोल',
+    },
+    'exp_quick_entry_title': {
+      'en': 'Daily Quick Presets (1-Tap):',
+      'hi': 'दैनिक त्वरित प्रविष्टियां (1-टैप):',
     },
 
     // Additional Storefront & Catalog Action Keys

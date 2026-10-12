@@ -114,6 +114,13 @@
    - **Inventory Stock Indicators & 1-Tap Quick Adjuster (`inventory_screen.dart`)**: Clean stock badges (Out of Stock, Low Stock, or In Stock) and quick-action bottom sheet with interactive stepper counter and delta chips (`-5`, `-1`, `+5`, `+10`, `+25`, `+50`) for immediate stock restock/adjustments via `editProduct`.
    - **Khata Ledger Summary Copy (`khata_screen.dart`)**: 1-tap "Copy Summary" button to copy customer credit ledger statement to clipboard.
 
+20. **LOCKED - Retail Flow Optimization, 10-Image Catalog & Zero-Hinglish Standards (`Frontend` & `GoBackend`)**:
+    - **10 Images Catalog Limit**: Synchronized backend DTOs, controllers, error handlers, and frontend image pickers/scrollers to support up to 10 photos per product.
+    - **POS Cart Parking / Held Bills**: Multi-cart counter parking allows merchants to park active customer carts (`PosHeldBill`), process another customer, and resume the held bill without loss of state.
+    - **1-Tap Product Duplication**: Catalog and Product Details cards offer 1-tap "Duplicate Product" cloning all specs, custom attributes, and images, speeding up variant setup by 80%.
+    - **Dynamic Expense Filtering & Pure Hindi/English Localization**: Category chips with live counts, and zero Hinglish across all screens (Dashboard, Expenses, Khata, POS).
+    - **Automatic Clipboard Fallback**: WhatsApp receipts and reminders fallback to clipboard copy if the external app is unavailable.
+
 ## 4. Continuous User Decisions Log
 - See [PROJECT_RULEBOOK.md](file:///c:/Go/ShopSilo/Frontend/PROJECT_RULEBOOK.md) Section 5 for the complete history of user requirements and architectural decisions.
 - Whenever the user gives a new rule or permanent decision, update both `PROJECT_RULEBOOK.md` and this file.

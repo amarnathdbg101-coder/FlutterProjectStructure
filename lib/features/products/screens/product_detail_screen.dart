@@ -14,11 +14,13 @@ import '../models/product_model.dart';
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
   final Function(BuildContext context, ProductModel p)? onEditRequested;
+  final Function(BuildContext context, ProductModel p)? onDuplicateRequested;
 
   const ProductDetailScreen({
     super.key,
     required this.product,
     this.onEditRequested,
+    this.onDuplicateRequested,
   });
 
   @override
@@ -146,6 +148,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 if (widget.onEditRequested != null) {
                   widget.onEditRequested!(context, p);
                 }
+              } else if (value == 'duplicate') {
+                if (widget.onDuplicateRequested != null) {
+                  widget.onDuplicateRequested!(context, p);
+                }
               } else if (value == 'delete') {
                 _confirmDelete(context, p.id);
               }
@@ -159,6 +165,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const SizedBox(width: 8),
                     Text(
                       'Update Details',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'duplicate',
+                child: Row(
+                  children: [
+                    Icon(Icons.copy_rounded, size: 18, color: ctx.colorTextPrimary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Duplicate Product',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],

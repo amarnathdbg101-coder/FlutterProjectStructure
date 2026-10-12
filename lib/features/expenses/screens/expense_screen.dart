@@ -20,7 +20,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
   @override
   bool get wantKeepAlive => true;
 
-  final String _selectedFilter = 'all';
+  String _selectedFilter = 'all';
 
   @override
   void initState() {
@@ -292,6 +292,48 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
     );
   }
 
+  Widget _buildFilterChip({
+    required BuildContext context,
+    required String label,
+    required int count,
+    required bool isSelected,
+    required VoidCallback onSelected,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        selected: isSelected,
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label),
+            if (count > 0) ...[
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Colors.white : AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        onSelected: (_) => onSelected(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -323,7 +365,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
             },
           ),
           title: Text(
-            'Shop Expenses (Roz Ke Kharche)',
+            context.tr('exp_title'),
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
           ),
           actions: [
@@ -362,18 +404,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                   children: [
                     Expanded(
                       child: AppStatCard(
-                        title: 'Today\'s Kharche',
+                        title: context.tr('exp_kpi_today'),
                         value: '₹${expController.todayExpenses.toStringAsFixed(0)}',
-                        subtitle: 'Today\'s Expenses',
+                        subtitle: context.isHindi ? 'आज के खर्चे' : "Today's Expenses",
                         icon: Icons.receipt_long_rounded,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: AppStatCard(
-                        title: 'This Month',
+                        title: context.tr('exp_kpi_monthly'),
                         value: '₹${expController.monthlyExpenses.toStringAsFixed(0)}',
-                        subtitle: '${expController.expenses.length} Records',
+                        subtitle: '${expController.expenses.length} ${context.isHindi ? 'प्रविष्टियां' : 'Records'}',
                         icon: Icons.account_balance_wallet_rounded,
                       ),
                     ),
@@ -392,7 +434,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                         const Icon(Icons.bolt_rounded, size: 16, color: AppColors.primary),
                         const SizedBox(width: 4),
                         Text(
-                          'Roz Ke Kharche (1-Tap Quick Entry):',
+                          context.tr('exp_quick_entry_title'),
                           style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: context.colorTextMuted),
                         ),
                       ],
@@ -402,19 +444,86 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildQuickPresetChip(context, '☕ Chai / Tea (₹20)', 'chai_nashta', 'Staff Tea & Snacks', 20.0),
-                          _buildQuickPresetChip(context, '⚡ Electricity Bill', 'electricity', 'Monthly Power Bill', null),
-                          _buildQuickPresetChip(context, '🏬 Shop Rent', 'rent', 'Monthly Shop Rent', null),
-                          _buildQuickPresetChip(context, '👨‍🍳 Staff Salary', 'salary', 'Staff Salary Advance', null),
-                          _buildQuickPresetChip(context, '⛽ Petrol / Transport', 'transport', 'Delivery / Auto Fare', 100.0),
-                          _buildQuickPresetChip(context, '📦 Polythene / Bags', 'packaging', 'Packing Material', 500.0),
+                          _buildQuickPresetChip(context, context.isHindi ? '☕ चाय-नाश्ता (₹20)' : '☕ Tea & Snacks (₹20)', 'chai_nashta', 'Staff Tea & Snacks', 20.0),
+                          _buildQuickPresetChip(context, context.isHindi ? '⚡ बिजली बिल' : '⚡ Electricity Bill', 'electricity', 'Monthly Power Bill', null),
+                          _buildQuickPresetChip(context, context.isHindi ? '🏬 दुकान किराया' : '🏬 Store Rent', 'rent', 'Monthly Shop Rent', null),
+                          _buildQuickPresetChip(context, context.isHindi ? '👨‍🍳 स्टाफ वेतन' : '👨‍🍳 Staff Salary', 'salary', 'Staff Salary Advance', null),
+                          _buildQuickPresetChip(context, context.isHindi ? '⛽ पेट्रोल / परिवहन' : '⛽ Petrol / Transport', 'transport', 'Delivery / Auto Fare', 100.0),
+                          _buildQuickPresetChip(context, context.isHindi ? '📦 पैकेजिंग / बैग' : '📦 Packaging Bags', 'packaging', 'Packing Material', 500.0),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
+
+              // 3. CATEGORY FILTER CHIPS
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    _buildFilterChip(
+                      context: context,
+                      label: context.isHindi ? 'सभी' : 'All',
+                      count: expController.expenses.length,
+                      isSelected: _selectedFilter == 'all',
+                      onSelected: () => setState(() => _selectedFilter = 'all'),
+                    ),
+                    _buildFilterChip(
+                      context: context,
+                      label: context.tr('exp_cat_tea'),
+                      count: expController.expenses.where((e) => e.category.toLowerCase() == 'chai_nashta').length,
+                      isSelected: _selectedFilter == 'chai_nashta',
+                      onSelected: () => setState(() => _selectedFilter = 'chai_nashta'),
+                    ),
+                    _buildFilterChip(
+                      context: context,
+                      label: context.tr('exp_cat_electricity'),
+                      count: expController.expenses.where((e) => e.category.toLowerCase() == 'electricity').length,
+                      isSelected: _selectedFilter == 'electricity',
+                      onSelected: () => setState(() => _selectedFilter = 'electricity'),
+                    ),
+                    _buildFilterChip(
+                      context: context,
+                      label: context.tr('exp_cat_rent'),
+                      count: expController.expenses.where((e) => e.category.toLowerCase() == 'rent').length,
+                      isSelected: _selectedFilter == 'rent',
+                      onSelected: () => setState(() => _selectedFilter = 'rent'),
+                    ),
+                    _buildFilterChip(
+                      context: context,
+                      label: context.tr('exp_cat_salary'),
+                      count: expController.expenses.where((e) => e.category.toLowerCase() == 'salary').length,
+                      isSelected: _selectedFilter == 'salary',
+                      onSelected: () => setState(() => _selectedFilter = 'salary'),
+                    ),
+                    _buildFilterChip(
+                      context: context,
+                      label: context.isHindi ? '⛽ परिवहन' : '⛽ Transport',
+                      count: expController.expenses.where((e) => e.category.toLowerCase() == 'transport').length,
+                      isSelected: _selectedFilter == 'transport',
+                      onSelected: () => setState(() => _selectedFilter = 'transport'),
+                    ),
+                    _buildFilterChip(
+                      context: context,
+                      label: context.tr('exp_cat_packaging'),
+                      count: expController.expenses.where((e) => e.category.toLowerCase() == 'packaging').length,
+                      isSelected: _selectedFilter == 'packaging',
+                      onSelected: () => setState(() => _selectedFilter = 'packaging'),
+                    ),
+                    _buildFilterChip(
+                      context: context,
+                      label: context.tr('exp_cat_other'),
+                      count: expController.expenses.where((e) => e.category.toLowerCase() == 'other').length,
+                      isSelected: _selectedFilter == 'other',
+                      onSelected: () => setState(() => _selectedFilter = 'other'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
 
               // 3. EXPENSES LIST
               Expanded(

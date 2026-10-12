@@ -416,6 +416,10 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         builder: (_) => ProductDetailScreen(
           product: p,
           onEditRequested: (ctx, item) => _showAddProductDialog(ctx, initialProduct: item),
+          onDuplicateRequested: (ctx, item) {
+            Navigator.pop(ctx);
+            _showAddProductDialog(context, initialProduct: item, isDuplicate: true);
+          },
         ),
       ),
     );
@@ -553,9 +557,12 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     );
   }
 
-  void _showAddProductDialog(BuildContext context, {ProductModel? initialProduct}) {
-    final isEdit = initialProduct != null;
-    final nameCtrl = TextEditingController(text: initialProduct?.name ?? '');
+  void _showAddProductDialog(BuildContext context, {ProductModel? initialProduct, bool isDuplicate = false}) {
+    final isEdit = initialProduct != null && !isDuplicate;
+    final initialName = isDuplicate
+        ? '${initialProduct?.name ?? ''} (Copy)'
+        : (initialProduct?.name ?? '');
+    final nameCtrl = TextEditingController(text: initialName);
     final priceCtrl = TextEditingController(
       text: initialProduct != null && initialProduct.price > 0
           ? initialProduct.price.toStringAsFixed(0)
@@ -589,7 +596,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     );
     final initialCategory = formatCategoryName(initialProduct?.category ?? 'General Store');
     final categoryCtrl = TextEditingController(text: initialCategory);
-    final barcodeCtrl = TextEditingController(text: initialProduct?.barcode ?? '');
+    final initialBarcode = isDuplicate ? '' : (initialProduct?.barcode ?? '');
+    final barcodeCtrl = TextEditingController(text: initialBarcode);
     final descriptionCtrl = TextEditingController(text: initialProduct?.description ?? '');
     final brandCtrl = TextEditingController(
       text: initialProduct?.brand.isNotEmpty == true
@@ -711,7 +719,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
-                            isEdit ? Icons.edit_note_rounded : Icons.add_box_rounded,
+                            isDuplicate
+                                ? Icons.copy_rounded
+                                : (isEdit ? Icons.edit_note_rounded : Icons.add_box_rounded),
                             color: AppColors.primary,
                             size: 24,
                           ),
@@ -719,7 +729,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            isEdit ? 'Edit Product Details' : 'Add New Product',
+                            isDuplicate
+                                ? (sheetCtx.isHindi ? 'उत्पाद की प्रति बनाएं' : 'Duplicate Product')
+                                : (isEdit ? sheetCtx.tr('inv_edit_dialog_title') : sheetCtx.tr('inv_add_dialog_title')),
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
@@ -1635,9 +1647,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                              isEdit
-                                                  ? context.tr('inv_toast_updated')
-                                                  : context.tr('inv_toast_added'),
+                                              isDuplicate
+                                                  ? (context.isHindi ? '✓ उत्पाद की प्रति बनाई गई' : '✓ Product duplicated successfully')
+                                                  : (isEdit
+                                                      ? context.tr('inv_toast_updated')
+                                                      : context.tr('inv_toast_added')),
                                               style: const TextStyle(fontWeight: FontWeight.w600),
                                             ),
                                           ),
@@ -3018,33 +3032,80 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 ),
               ),
 
-              // Quick Stock Adjuster (+/-) Action Button
-              InkWell(
-                onTap: () => _showQuickStockSheet(context, p),
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: context.colorPrimaryLight,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Quick Stock Adjuster (+/-) Action Button
+                  InkWell(
+                    onTap: () => _showQuickStockSheet(context, p),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: context.colorPrimaryLight,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit_note_rounded, size: 12, color: AppColors.primary),
+                          SizedBox(width: 2),
+                          Text(
+                            '+/-',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.edit_note_rounded, size: 12, color: AppColors.primary),
-                      SizedBox(width: 2),
-                      Text(
-                        '+/-',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primary,
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: Icon(Icons.more_vert_rounded, size: 16, color: context.colorTextMuted),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    color: context.colorSurface,
+                    onSelected: (val) {
+                      if (val == 'edit') {
+                        _showAddProductDialog(context, initialProduct: p);
+                      } else if (val == 'duplicate') {
+                        _showAddProductDialog(context, initialProduct: p, isDuplicate: true);
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem<String>(
+                        value: 'edit',
+                        height: 34,
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_outlined, size: 14, color: ctx.colorTextPrimary),
+                            const SizedBox(width: 8),
+                            Text(ctx.isHindi ? 'विवरण बदलें' : 'Edit Details', style: const TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'duplicate',
+                        height: 34,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.copy_rounded, size: 14, color: AppColors.primary),
+                            const SizedBox(width: 8),
+                            Text(
+                              ctx.isHindi ? 'प्रति बनाएं (Duplicate)' : 'Duplicate Product',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ],
           ),
@@ -3321,12 +3382,12 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
 }
 
 /// Public Top-Level Helper Function to Launch Add / Edit Product Modal Sheet across all screens
-void showAddProductDialog(BuildContext context, {ProductModel? initialProduct}) {
+void showAddProductDialog(BuildContext context, {ProductModel? initialProduct, bool isDuplicate = false}) {
   final state = context.findAncestorStateOfType<_InventoryScreenState>();
   if (state != null) {
-    state._showAddProductDialog(context, initialProduct: initialProduct);
+    state._showAddProductDialog(context, initialProduct: initialProduct, isDuplicate: isDuplicate);
   } else {
     final invState = _InventoryScreenState();
-    invState._showAddProductDialog(context, initialProduct: initialProduct);
+    invState._showAddProductDialog(context, initialProduct: initialProduct, isDuplicate: isDuplicate);
   }
 }

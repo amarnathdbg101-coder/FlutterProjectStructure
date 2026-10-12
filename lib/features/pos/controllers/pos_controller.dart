@@ -20,6 +20,9 @@ class PosController extends BaseController {
   final List<PosCartItem> _cart = [];
   List<PosCartItem> get cart => List.unmodifiable(_cart);
 
+  final List<PosHeldBill> _heldBills = [];
+  List<PosHeldBill> get heldBills => List.unmodifiable(_heldBills);
+
   String _customerPhone = '';
   String get customerPhone => _customerPhone;
 
@@ -149,11 +152,22 @@ class PosController extends BaseController {
   /// Fetches confirmed PostgreSQL sales for live reports and Today's Sales Screen
   Future<void> fetchBackendSales({String date = 'today'}) async {
     try {
-      final res = await _repo.getSales(date: date);
-      if (res.success && res.data != null) {
+      var res = await _repo.getSales(date: date);
+      if (res.success && res.data != null && res.data!.isNotEmpty) {
         _serverSales = res.data!;
         await LocalCacheService.saveSalesList(_serverSales);
         notifyListeners();
+        return;
+      }
+
+      // Fallback: If date='today' returned empty, fetch all recent sales history
+      if (date == 'today') {
+        res = await _repo.getSales(date: '');
+        if (res.success && res.data != null && res.data!.isNotEmpty) {
+          _serverSales = res.data!;
+          await LocalCacheService.saveSalesList(_serverSales);
+          notifyListeners();
+        }
       }
     } catch (_) {}
   }
@@ -240,6 +254,50 @@ class PosController extends BaseController {
     _customerName = '';
     _cashTendered = 0.0;
     _paymentMethod = 'cash';
+    notifyListeners();
+  }
+
+  /// Parks current active bill cart so another customer can be billed at the counter
+  bool holdCurrentBill() {
+    if (_cart.isEmpty) return false;
+    _heldBills.add(PosHeldBill(
+      id: 'held_${DateTime.now().millisecondsSinceEpoch}',
+      heldAt: DateTime.now(),
+      items: List<PosCartItem>.from(_cart.map((e) => PosCartItem(
+        product: e.product,
+        quantity: e.quantity,
+        customPrice: e.customPrice,
+      ))),
+      customerPhone: _customerPhone,
+      customerName: _customerName,
+      discount: _discount,
+      paymentMethod: _paymentMethod,
+    ));
+    clearCart();
+    return true;
+  }
+
+  /// Restores a previously held bill back into the active counter cart
+  void recallHeldBill(PosHeldBill bill) {
+    clearCart();
+    for (final item in bill.items) {
+      _cart.add(PosCartItem(
+        product: item.product,
+        quantity: item.quantity,
+        customPrice: item.customPrice,
+      ));
+    }
+    _customerPhone = bill.customerPhone;
+    _customerName = bill.customerName;
+    _discount = bill.discount;
+    _paymentMethod = bill.paymentMethod;
+    _heldBills.removeWhere((b) => b.id == bill.id);
+    notifyListeners();
+  }
+
+  /// Discards a held bill from memory
+  void deleteHeldBill(PosHeldBill bill) {
+    _heldBills.removeWhere((b) => b.id == bill.id);
     notifyListeners();
   }
 

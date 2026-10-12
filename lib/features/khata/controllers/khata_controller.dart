@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/network/api_client.dart';
@@ -105,6 +106,16 @@ class KhataController extends BaseController {
     if (_customers.isNotEmpty || _summary != null) {
       notifyListeners();
     }
+  }
+
+  double getCustomerBalance(String mobile) {
+    final clean = KhataRepository.normalizePhone(mobile);
+    for (final c in _customers) {
+      if (c.mobile == clean || c.mobile == mobile) {
+        return c.balance;
+      }
+    }
+    return 0.0;
   }
 
   void setSearchQuery(String query) {
@@ -393,11 +404,24 @@ class KhataController extends BaseController {
     final uri = Uri.parse(urlString);
 
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await Clipboard.setData(ClipboardData(text: reminderText));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${context.tr('khata_whatsapp_not_installed')} - ${context.tr('khata_copied_summary')}'),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: reminderText));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('khata_whatsapp_not_installed'))),
+          SnackBar(
+            content: Text('${context.tr('khata_whatsapp_not_installed')} - ${context.tr('khata_copied_summary')}'),
+          ),
         );
       }
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
@@ -616,12 +617,50 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                             setModalState(() => isSaving = false);
                             if (success) {
                               Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(context.tr('khata_toast_saved')),
-                                  backgroundColor: AppColors.success,
-                                ),
-                              );
+
+                              if (!currentIsCredit && cleanPhone.length >= 10) {
+                                final remainingBal = khataController.getCustomerBalance(cleanPhone);
+                                final shop = LocalCacheService.getShop();
+                                final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Store';
+                                final msg = Uri.encodeComponent(
+                                  '🧾 *Khata Payment Receipt*\n'
+                                  'Dear $name,\n'
+                                  'Thank you! Your payment of ₹${amount.toStringAsFixed(0)} (${paymentMode.toUpperCase()}) was received at $shopName.\n'
+                                  'Remaining Khata Balance: ₹${remainingBal.toStringAsFixed(0)}.\n\n'
+                                  'Thank you for shopping with us!',
+                                );
+                                final waUrl = Uri.parse('https://wa.me/91$cleanPhone?text=$msg');
+
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Payment of ₹${amount.toStringAsFixed(0)} received!'),
+                                    backgroundColor: AppColors.success,
+                                    duration: const Duration(seconds: 5),
+                                    action: SnackBarAction(
+                                      label: 'WhatsApp Receipt',
+                                      textColor: Colors.white,
+                                      onPressed: () async {
+                                        try {
+                                          if (await canLaunchUrl(waUrl)) {
+                                            await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+                                          } else {
+                                            await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
+                                          }
+                                        } catch (_) {
+                                          await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(context.tr('khata_toast_saved')),
+                                    backgroundColor: AppColors.success,
+                                  ),
+                                );
+                              }
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(

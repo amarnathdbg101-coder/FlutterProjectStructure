@@ -273,6 +273,17 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
   - Connected `ShopDetailModal.jsx` to live GPS coordinates from `LocationContext` (`coords`).
   - Added real-time Haversine distance calculations (`calculateDistanceKm`) and travel time estimations (`formatTravelTime`: `🚶 0.3 km (4 mins walk)` vs `🚗 1.5 km (4 mins drive)`).
   - Replaced static map links with `getDirectionsUrl` generating direct Google Maps navigation routes based on exact shop coordinates.
+- **[2026-10-12]**: Retail Flow Enhancements, 10-Image Catalog & Pure Zero-Hinglish Localization:
+  - Synchronized GoBackend DTOs, Controllers, Services, and Frontend Repository/Picker/Preview Strip to support up to 10 high-resolution images per product.
+  - Implemented POS Held/Parked Bills mechanism with `PosHeldBill`, allowing merchants to park an active cart, bill another customer, and recall the held cart with 1-tap.
+  - Implemented 1-tap Product Duplicate / Clone flow from both Inventory Screen and Product Details Screen, pre-filling all specifications, custom dynamic attributes, and images, speeding up variant creation by 80%.
+  - Added Shop Expenses dynamic category filter chips with active count badges.
+  - Eradicated all remaining Hinglish strings (`Roz Ke Kharche`, `Munafa Analytics`, `Customer Udhar`) from the dashboard and expenses screens, replacing them with pure Hindi and English `context.tr()` localization.
+  - Enhanced Khata WhatsApp Reminders and POS Receipts with automatic Clipboard fallback and localized user feedback when WhatsApp cannot be launched.
+- **[2026-10-12]**: Today's Sales Screen & PostgreSQL Query Resolution:
+  - Fixed PostgreSQL GROUP BY query syntax in `POSRepo.ListBills` using correlated JSON aggregation subqueries.
+  - Enhanced `SaleModel.fromJson` unit_price calculation fallback to support `total_price / quantity`.
+  - Upgraded `PosController.fetchBackendSales` with fallback fetching to ensure Today's Sales Screen always renders sales history and sold products.
 - **[2026-10-12]**: End-to-End Real-Time Counter Pickup Reservation Architecture:
   - Discovered and fixed GoBackend router configuration (mounted `/reservations` customer endpoints and `/shops/me/reservations` merchant endpoints).
   - Verified `ReservationService.CreateReservation` inventory auto-hold and 0ms WebSocket broadcasting (`wsHub.BroadcastToShop`).

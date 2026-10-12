@@ -64,11 +64,18 @@ class SaleModel {
         if (item is Map<String, dynamic>) {
           final pName = item['product_name']?.toString() ?? item['name']?.toString() ?? 'Product';
           final qty = (item['quantity'] is num) ? (item['quantity'] as num).toInt() : 1;
-          final price = (item['unit_price'] is num)
-              ? (item['unit_price'] as num).toDouble()
-              : ((item['custom_price'] is num)
-                  ? (item['custom_price'] as num).toDouble()
-                  : ((item['price'] is num) ? (item['price'] as num).toDouble() : 0.0));
+
+          double price = 0.0;
+          if (item['unit_price'] is num && (item['unit_price'] as num) > 0) {
+            price = (item['unit_price'] as num).toDouble();
+          } else if (item['custom_price'] is num && (item['custom_price'] as num) > 0) {
+            price = (item['custom_price'] as num).toDouble();
+          } else if (item['price'] is num && (item['price'] as num) > 0) {
+            price = (item['price'] as num).toDouble();
+          } else if (item['total_price'] is num && qty > 0) {
+            price = (item['total_price'] as num).toDouble() / qty;
+          }
+
           final prodId = item['product_id']?.toString() ?? '';
 
           cartItems.add(
@@ -114,5 +121,34 @@ class SaleModel {
       'payment_method': paymentMethod,
       'created_at': createdAt.toIso8601String(),
     };
+  }
+}
+
+class PosHeldBill {
+  final String id;
+  final DateTime heldAt;
+  final List<PosCartItem> items;
+  final String customerPhone;
+  final String customerName;
+  final double discount;
+  final String paymentMethod;
+
+  PosHeldBill({
+    required this.id,
+    required this.heldAt,
+    required this.items,
+    this.customerPhone = '',
+    this.customerName = '',
+    this.discount = 0.0,
+    this.paymentMethod = 'cash',
+  });
+
+  int get totalItemCount => items.fold(0, (sum, i) => sum + i.quantity);
+
+  double get subtotal => items.fold(0.0, (sum, i) => sum + i.total);
+
+  double get grandTotal {
+    final t = subtotal - discount;
+    return t > 0 ? t : 0.0;
   }
 }

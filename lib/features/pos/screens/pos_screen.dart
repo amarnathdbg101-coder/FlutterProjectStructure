@@ -310,6 +310,204 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
     );
   }
 
+  /// Opens Held Bills Bottom Sheet to recall or discard parked counter bills
+  void _showHeldBillsSheet(BuildContext context, PosController pos) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final bills = pos.heldBills;
+          return Container(
+            decoration: BoxDecoration(
+              color: sheetCtx.colorSurface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetCtx).size.height * 0.75,
+              maxWidth: 580,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: sheetCtx.colorBorder,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.pause_circle_filled_rounded, color: AppColors.warning, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sheetCtx.isHindi ? 'पार्क किए गए बिल' : 'Parked / Held Bills',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: sheetCtx.colorTextPrimary,
+                            ),
+                          ),
+                          Text(
+                            sheetCtx.isHindi ? 'बिल दोबारा शुरू करने के लिए चुनें' : 'Select a bill to resume billing at counter',
+                            style: TextStyle(fontSize: 11, color: sheetCtx.colorTextMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.pop(sheetCtx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (bills.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 36),
+                    child: Center(
+                      child: Text(
+                        sheetCtx.isHindi ? 'कोई पार्क किया गया बिल नहीं है' : 'No held bills at the moment',
+                        style: TextStyle(color: sheetCtx.colorTextMuted),
+                      ),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: bills.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (ctx, idx) {
+                        final b = bills[idx];
+                        final diffMinutes = DateTime.now().difference(b.heldAt).inMinutes;
+                        final timeAgo = diffMinutes < 1 ? 'Just now' : '${diffMinutes}m ago';
+
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: sheetCtx.colorSurfaceSubtle,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: sheetCtx.colorBorder),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '₹${b.grandTotal.toStringAsFixed(0)}',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w900,
+                                            color: sheetCtx.colorTextPrimary,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '${b.totalItemCount} Items',
+                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          timeAgo,
+                                          style: TextStyle(fontSize: 11, color: sheetCtx.colorTextMuted),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      b.customerName.isNotEmpty
+                                          ? '${b.customerName} (${b.customerPhone})'
+                                          : (b.customerPhone.isNotEmpty ? b.customerPhone : (sheetCtx.isHindi ? 'ग्राहक' : 'Walk-in Customer')),
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sheetCtx.colorTextSecondary),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      b.items.map((i) => '${i.quantity}x ${i.product.name}').join(', '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontSize: 11, color: sheetCtx.colorTextMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+                                tooltip: 'Discard Held Bill',
+                                onPressed: () {
+                                  pos.deleteHeldBill(b);
+                                  if (pos.heldBills.isEmpty) {
+                                    Navigator.pop(sheetCtx);
+                                  } else {
+                                    setSheetState(() {});
+                                  }
+                                },
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  minimumSize: const Size(60, 36),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onPressed: () {
+                                  pos.recallHeldBill(b);
+                                  Navigator.pop(sheetCtx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(context.isHindi ? '✓ बिल वापस रीस्टोर कर दिया गया' : '✓ Bill restored to active cart'),
+                                      duration: const Duration(seconds: 1),
+                                      backgroundColor: AppColors.success,
+                                    ),
+                                  );
+                                },
+                                child: Text(sheetCtx.isHindi ? 'बिल करें' : 'Resume', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildPosCategoryPill(BuildContext context, String catName, PosController pos) {
     final isSel = _selectedPosCategory.toLowerCase() == catName.toLowerCase();
     return Padding(
@@ -634,6 +832,50 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
           ),
           actions: [
+            if (pos.heldBills.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                child: InkWell(
+                  onTap: () => _showHeldBillsSheet(context, pos),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.pause_circle_filled_rounded, size: 14, color: AppColors.warning),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Held (${pos.heldBills.length})',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.warning),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (pos.cart.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.pause_circle_outline_rounded, color: AppColors.warning, size: 20),
+                tooltip: 'Hold / Park Active Bill',
+                onPressed: () {
+                  final ok = pos.holdCurrentBill();
+                  if (ok && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.isHindi ? '✓ बिल पार्क कर दिया गया (Hold)' : '✓ Active bill parked on hold'),
+                        backgroundColor: AppColors.warning,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
               tooltip: 'Refresh Billing Catalog',
