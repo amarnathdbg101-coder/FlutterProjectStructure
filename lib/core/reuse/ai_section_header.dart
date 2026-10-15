@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// Reusable Section Header with tracking and optional action label
-class AiSectionHeader extends StatelessWidget {
+/// Centralized Reusable Section Header with tracking and optional action label
+class AppSectionHeader extends StatelessWidget {
   final String title;
   final String? actionText;
   final VoidCallback? onActionTap;
   final bool isDark;
 
-  const AiSectionHeader({
+  const AppSectionHeader({
     super.key,
     required this.title,
     this.actionText,
@@ -21,7 +21,7 @@ class AiSectionHeader extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          title,
+          title.toUpperCase(),
           style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w800,
@@ -39,8 +39,8 @@ class AiSectionHeader extends StatelessWidget {
                 actionText!,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                 ),
               ),
             ),
@@ -49,3 +49,6 @@ class AiSectionHeader extends StatelessWidget {
     );
   }
 }
+
+/// Backward compatibility alias for AiSectionHeader
+typedef AiSectionHeader = AppSectionHeader;

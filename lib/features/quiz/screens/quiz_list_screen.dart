@@ -1,10 +1,15 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/routes/app_router.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/custom_snackbar.dart';
 import '../controllers/quiz_controller.dart';
 import '../models/quiz_model.dart';
+import '../widgets/quiz_card.dart';
+import '../widgets/quiz_attempt_card.dart';
+import '../widgets/quiz_generate_dialog.dart';
 
 class QuizListScreen extends StatefulWidget {
   final String? initialTopic;
@@ -20,191 +25,58 @@ class QuizListScreen extends StatefulWidget {
   State<QuizListScreen> createState() => _QuizListScreenState();
 }
 
-class _QuizListScreenState extends State<QuizListScreen> {
+class _QuizListScreenState extends State<QuizListScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  String _selectedFilter = 'all';
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<QuizController>().loadQuizzesAndProfile();
       if (widget.initialTopic != null && widget.initialTopic!.isNotEmpty) {
-        _showGenerateQuizDialog(initialTopic: widget.initialTopic);
+        _openGenerateQuizDialog(initialTopic: widget.initialTopic);
       }
     });
   }
 
-  Future<void> _handleGenerateQuiz(String topic, String difficulty, int count) async {
-    final controller = context.read<QuizController>();
-
-    // Show progress dialog with academic status
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: AppColors.primary),
-              const SizedBox(height: 20),
-              const Text(
-                'Generating Adaptive Quiz...',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Calibrating $count exam questions on "$topic" with LaTeX formulas, derivations, and traps.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    try {
-      await controller.generateAndStartQuiz(
-        topic: topic,
-        noteId: widget.noteId,
-        difficulty: difficulty,
-        questionCount: count,
-      );
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop(); // dismiss loading dialog
-        context.push('/quizzes/take');
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop(); // dismiss loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.error,
-            content: Text('Failed to generate quiz: $e'),
-          ),
-        );
-      }
-    }
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
-  void _showGenerateQuizDialog({String? initialTopic}) {
-    final topicController = TextEditingController(text: initialTopic ?? '');
-    String selectedDifficulty = 'adaptive';
-    int questionCount = 5;
+  void _openGenerateQuizDialog({String? initialTopic}) {
+    QuizGenerateDialog.show(
+      context,
+      initialTopic: initialTopic,
+      noteId: widget.noteId,
+      onGenerate: ({
+        required String topic,
+        String? noteId,
+        required String difficulty,
+        required int questionCount,
+      }) async {
+        try {
+          final controller = context.read<QuizController>();
+          await controller.generateAndStartQuiz(
+            topic: topic,
+            noteId: noteId,
+            difficulty: difficulty,
+            questionCount: questionCount,
+          );
 
-    final quickTopics = [
-      'Thermodynamics',
-      'Computer Architecture',
-      'Operating Systems',
-      'Data Structures',
-      'Electromagnetism',
-      'Linear Algebra',
-    ];
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.quiz_outlined, color: AppColors.primary),
-              SizedBox(width: 8),
-              Text('Generate Adaptive Quiz', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: topicController,
-                  decoration: const InputDecoration(
-                    labelText: 'Quiz Topic *',
-                    hintText: 'e.g. Thermodynamics, Computer Networks',
-                    border: OutlineInputBorder(),
-                  ),
-                  autofocus: true,
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Quick Topic Suggestions:',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: quickTopics.map((t) {
-                    return ActionChip(
-                      label: Text(t, style: const TextStyle(fontSize: 11)),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        setDialogState(() {
-                          topicController.text = t;
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedDifficulty,
-                  decoration: const InputDecoration(
-                    labelText: 'Difficulty Level',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'adaptive', child: Text('Adaptive (Biased to Weak Areas)')),
-                    DropdownMenuItem(value: 'easy', child: Text('Easy / Foundation')),
-                    DropdownMenuItem(value: 'medium', child: Text('Medium / Standard')),
-                    DropdownMenuItem(value: 'hard', child: Text('Hard / Advanced')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedDifficulty = val);
-                  },
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Question Count:', style: TextStyle(fontWeight: FontWeight.w600)),
-                    Text('$questionCount Questions', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                Slider(
-                  value: questionCount.toDouble(),
-                  min: 3,
-                  max: 15,
-                  divisions: 12,
-                  label: '$questionCount',
-                  onChanged: (val) {
-                    setDialogState(() => questionCount = val.round());
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final topic = topicController.text.trim();
-                if (topic.isEmpty) return;
-                Navigator.pop(ctx);
-                _handleGenerateQuiz(topic, selectedDifficulty, questionCount);
-              },
-              child: const Text('Generate & Start'),
-            ),
-          ],
-        ),
-      ),
+          if (mounted) {
+            Navigator.pop(context);
+            context.push(AppRoutes.quizTake);
+          }
+        } catch (e) {
+          if (mounted) {
+            CustomSnackbar.showError(context, 'Failed to generate quiz: $e');
+          }
+        }
+      },
     );
   }
 
@@ -214,102 +86,257 @@ class _QuizListScreenState extends State<QuizListScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final profile = controller.profile;
 
+    final filteredQuizzes = controller.quizzes.where((q) {
+      if (_selectedFilter == 'all') return true;
+      return q.difficulty.toLowerCase() == _selectedFilter;
+    }).toList();
+
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Quizzes & Cognitive Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.getSurface(isDark),
+        elevation: 0,
+        shape: Border(
+          bottom: BorderSide(color: AppColors.getBorder(isDark), width: 1),
+        ),
+        title: const Text(
+          'Adaptive Quizzes',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            tooltip: 'Cognitive Brain Hub',
+            icon: const Icon(Icons.psychology_outlined, size: 21),
+            onPressed: () => context.push(AppRoutes.cognitiveProfile).then((_) {
+              controller.loadQuizzesAndProfile();
+            }),
+          ),
+          IconButton(
+            tooltip: 'Refresh Quizzes',
+            icon: const Icon(Icons.refresh_rounded, size: 21),
             onPressed: () => controller.loadQuizzesAndProfile(),
           ),
+          const SizedBox(width: 4),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: const Color(0xFF2563EB),
+          unselectedLabelColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+          indicatorColor: const Color(0xFF2563EB),
+          indicatorWeight: 2.5,
+          tabs: [
+            Tab(text: 'Available Quizzes (${controller.quizzes.length})'),
+            Tab(text: 'Attempt History (${controller.attempts.length})'),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showGenerateQuizDialog(),
-        icon: const Icon(Icons.add),
-        label: const Text('New Quiz'),
-        backgroundColor: AppColors.primary,
+        onPressed: () => _openGenerateQuizDialog(),
+        icon: const Icon(Icons.bolt_rounded, size: 20),
+        label: const Text('Generate Quiz', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: const Color(0xFF2563EB),
         foregroundColor: Colors.white,
+        elevation: 3,
       ),
       body: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
-          child: SafeScrollable(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- Cognitive Profile Header Card ---
-                  _buildCognitiveProfileCard(profile, isDark),
-                  const SizedBox(height: 24),
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // Tab 1: Available Quizzes
+              _buildQuizzesTab(controller, filteredQuizzes, profile, isDark),
 
-                  // --- Quizzes Section Header ---
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Practice Quizzes',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.auto_awesome, size: 16),
-                        label: const Text('Adaptive Generator'),
-                        onPressed: () => _showGenerateQuizDialog(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
+              // Tab 2: Attempt History
+              _buildAttemptsTab(controller, isDark),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                  if (controller.isLoading)
-                    const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
-                  else if (controller.quizzes.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : Colors.grey[50],
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: isDark ? const Color(0xFF334155) : Colors.grey[200]!),
-                      ),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.quiz_outlined, size: 48, color: AppColors.primary),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No Quizzes Generated Yet',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Generate an adaptive quiz targeting your course topics and weak memory areas.',
-                            style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.add),
-                            label: const Text('Create First Quiz'),
-                            onPressed: () => _showGenerateQuizDialog(),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: controller.quizzes.length,
-                      separatorBuilder: (context, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final quiz = controller.quizzes[index];
-                        return _buildQuizCard(quiz, controller, isDark);
-                      },
-                    ),
-                  const SizedBox(height: 80),
-                ],
+  Widget _buildQuizzesTab(
+    QuizController controller,
+    List<QuizModel> filteredQuizzes,
+    CognitiveProfileModel profile,
+    bool isDark,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cognitive Memory Matrix Card (Clean Slate / Deep Indigo)
+          _buildCognitiveProfileCard(profile, isDark),
+          const SizedBox(height: 18),
+
+          // Practice Quizzes Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'PRACTICE QUIZZES',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                  letterSpacing: 0.8,
+                ),
               ),
+              Text(
+                '${filteredQuizzes.length} Available',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('All', 'all', isDark),
+                const SizedBox(width: 6),
+                _buildFilterChip('Adaptive', 'adaptive', isDark),
+                const SizedBox(width: 6),
+                _buildFilterChip('Easy', 'easy', isDark),
+                const SizedBox(width: 6),
+                _buildFilterChip('Medium', 'medium', isDark),
+                const SizedBox(width: 6),
+                _buildFilterChip('Hard', 'hard', isDark),
+              ],
             ),
+          ),
+          const SizedBox(height: 14),
+
+          if (controller.isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(color: Color(0xFF2563EB)),
+              ),
+            )
+          else if (filteredQuizzes.isEmpty)
+            _buildEmptyState(isDark)
+          else
+            Column(
+              children: [
+                for (int i = 0; i < filteredQuizzes.length; i++) ...[
+                  QuizCard(
+                    quiz: filteredQuizzes[i],
+                    isDark: isDark,
+                    onStart: () async {
+                      await controller.startQuiz(filteredQuizzes[i]);
+                      if (mounted) {
+                        context.push(AppRoutes.quizTake);
+                      }
+                    },
+                    onDelete: () async {
+                      final ok = await controller.deleteQuiz(filteredQuizzes[i].id);
+                      if (mounted && ok) {
+                        CustomSnackbar.showSuccess(context, 'Quiz deleted');
+                      }
+                    },
+                  ),
+                  if (i < filteredQuizzes.length - 1) const SizedBox(height: 12),
+                ],
+              ],
+            ),
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttemptsTab(QuizController controller, bool isDark) {
+    if (controller.isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB)));
+    }
+
+    if (controller.attempts.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.history_rounded, size: 36, color: Color(0xFF2563EB)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No Attempts Yet',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Attempt a quiz to see diagnostic feedback and Bloom taxonomy scores here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: controller.attempts.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        return QuizAttemptCard(
+          attempt: controller.attempts[index],
+          isDark: isDark,
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value, bool isDark) {
+    final isSelected = _selectedFilter == value;
+    return InkWell(
+      onTap: () => setState(() => _selectedFilter = value),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF2563EB)
+              : (isDark ? const Color(0xFF1E293B) : Colors.white),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF2563EB)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
           ),
         ),
       ),
@@ -320,19 +347,16 @@ class _QuizListScreenState extends State<QuizListScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1E1B4B), const Color(0xFF312E81)]
-              : [const Color(0xFF4F46E5), const Color(0xFF3730A3)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
         ),
-        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -342,15 +366,26 @@ class _QuizListScreenState extends State<QuizListScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
+              Expanded(
                 child: Row(
                   children: [
-                    Icon(Icons.psychology, color: Colors.white, size: 24),
-                    SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.psychology_rounded, color: Color(0xFF2563EB), size: 18),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Cognitive Memory Matrix',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        'Memory & Diagnostic Profile',
+                        style: TextStyle(
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -362,17 +397,22 @@ class _QuizListScreenState extends State<QuizListScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.getBorder(isDark)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.local_fire_department, color: Colors.orangeAccent, size: 16),
+                    const Icon(Icons.local_fire_department_rounded, color: Color(0xFFEA580C), size: 14),
                     const SizedBox(width: 4),
                     Text(
                       '${profile.studyStreakDays} Day Streak',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                      ),
                     ),
                   ],
                 ),
@@ -386,53 +426,55 @@ class _QuizListScreenState extends State<QuizListScreen> {
                 child: _buildMetricTile(
                   label: 'Avg Score',
                   value: '${profile.averageQuizScore.toStringAsFixed(1)}%',
-                  icon: Icons.trending_up,
+                  icon: Icons.trending_up_rounded,
+                  isDark: isDark,
                 ),
               ),
-              Container(width: 1, height: 40, color: Colors.white24),
+              Container(width: 1, height: 32, color: AppColors.getBorder(isDark)),
               Expanded(
                 child: _buildMetricTile(
-                  label: 'Quizzes',
+                  label: 'Quizzes Taken',
                   value: '${profile.totalQuizzesTaken}',
                   icon: Icons.checklist_rounded,
+                  isDark: isDark,
                 ),
               ),
-              Container(width: 1, height: 40, color: Colors.white24),
+              Container(width: 1, height: 32, color: AppColors.getBorder(isDark)),
               Expanded(
                 child: _buildMetricTile(
-                  label: 'Target',
+                  label: 'Target Goal',
                   value: profile.targetExam,
-                  icon: Icons.school,
+                  icon: Icons.school_rounded,
+                  isDark: isDark,
                 ),
               ),
             ],
           ),
           if (profile.weakTopics.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            const Text(
+            const SizedBox(height: 14),
+            Text(
               'Identified Weak Areas (Adaptive AI Revision Bias):',
-              style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: profile.weakTopics.map((topic) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.redAccent.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
                   ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 100),
-                    child: Text(
-                      topic,
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  child: Text(
+                    topic,
+                    style: const TextStyle(color: Color(0xFFEF4444), fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 );
               }).toList(),
@@ -443,21 +485,33 @@ class _QuizListScreenState extends State<QuizListScreen> {
     );
   }
 
-  Widget _buildMetricTile({required String label, required String value, required IconData icon}) {
+  Widget _buildMetricTile({
+    required String label,
+    required String value,
+    required IconData icon,
+    required bool isDark,
+  }) {
     return Column(
       children: [
-        Icon(icon, color: Colors.white70, size: 18),
+        Icon(icon, color: const Color(0xFF2563EB), size: 17),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
         ),
         Text(
           label,
-          style: const TextStyle(color: Colors.white60, fontSize: 10.5),
+          style: TextStyle(
+            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            fontSize: 10.5,
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
@@ -466,90 +520,55 @@ class _QuizListScreenState extends State<QuizListScreen> {
     );
   }
 
-  Widget _buildQuizCard(QuizModel quiz, QuizController controller, bool isDark) {
-    Color difficultyColor;
-    switch (quiz.difficulty.toLowerCase()) {
-      case 'easy':
-        difficultyColor = AppColors.success;
-        break;
-      case 'hard':
-        difficultyColor = AppColors.error;
-        break;
-      default:
-        difficultyColor = AppColors.secondary;
-    }
-
+  Widget _buildEmptyState(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        color: AppColors.getSurface(isDark),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? const Color(0xFF334155) : Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: AppColors.getBorder(isDark)),
       ),
-      child: Row(
+      child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: difficultyColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+              shape: BoxShape.circle,
             ),
-            child: Icon(Icons.timer_outlined, color: difficultyColor, size: 24),
+            child: const Icon(Icons.quiz_outlined, size: 32, color: Color(0xFF2563EB)),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  quiz.title,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: difficultyColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        quiz.difficulty.toUpperCase(),
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: difficultyColor),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${quiz.totalQuestions} Questions',
-                      style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ],
+          const SizedBox(height: 14),
+          Text(
+            'No Quizzes Found',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
             ),
           ),
-          ElevatedButton(
+          const SizedBox(height: 6),
+          Text(
+            'Generate an adaptive quiz targeting your course topics and weak memory areas.',
+            style: TextStyle(
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: const Color(0xFF2563EB),
               foregroundColor: Colors.white,
+              elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () {
-              controller.startQuiz(quiz);
-              context.push('/quizzes/take');
-            },
-            child: const Text('Start'),
+            icon: const Icon(Icons.bolt_rounded, size: 16),
+            label: const Text('Generate First Quiz', style: TextStyle(fontWeight: FontWeight.w700)),
+            onPressed: () => _openGenerateQuizDialog(),
           ),
         ],
       ),

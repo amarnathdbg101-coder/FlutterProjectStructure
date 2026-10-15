@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../models/student_memory.dart';
 import '../services/student_memory_service.dart';
+import '../services/smart_ai_context_helper.dart';
 import '../../ai_tutor/repositories/ai_tutor_repository.dart';
 import '../../ai_tutor/widgets/formatted_ai_text.dart';
 
@@ -61,19 +62,8 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
     ],
   };
 
-  // High-yield topic suggestions for quick one-tap tagging
-  final List<String> _suggestedTopics = [
-    'Thermodynamics',
-    'Rotational Dynamics',
-    'Electromagnetism',
-    'Integral Calculus',
-    'Organic Reaction Mechanisms',
-    'Chemical Equilibrium',
-    'Data Structures & Algorithms',
-    'Probability & Statistics',
-    'Newton Laws of Motion',
-    'Wave Optics',
-  ];
+  // Syllabus topics aligned dynamically with student's target exam
+  List<String> get _suggestedTopics => SmartAiContextHelper.getExamTopics(_profile?.targetExam);
 
   @override
   void initState() {
@@ -98,6 +88,13 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _handleManualSync() async {
+    setState(() => _isLoading = true);
+    await _loadProfile(forceRemote: true);
+    if (!mounted) return;
+    CustomSnackbar.showSuccess(context, 'Synced with cognitive profile database');
   }
 
   Future<void> _addWeakTopicInline() async {
@@ -435,7 +432,7 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
                         TextField(
                           controller: textController,
                           decoration: InputDecoration(
-                            hintText: 'e.g. CAT Exam, SSC CGL, Olympiads',
+                            hintText: 'Enter target exam or certification name...',
                             hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                             filled: true,
                             fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
@@ -701,13 +698,7 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded, size: 20),
                     tooltip: 'Sync with Cloud DB',
-                    onPressed: () async {
-                      setState(() => _isLoading = true);
-                      await _loadProfile(forceRemote: true);
-                      if (mounted) {
-                        CustomSnackbar.showSuccess(context, 'Synced with cognitive profile database');
-                      }
-                    },
+                    onPressed: _handleManualSync,
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded, size: 20),
@@ -924,9 +915,11 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
                   children: [
                     Icon(Icons.auto_awesome, size: 16, color: Color(0xFF6366F1)),
                     SizedBox(width: 8),
-                    Text(
-                      'How AI Tutor Calibrates to You',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Text(
+                        'How AI Tutor Calibrates to You',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
@@ -1012,7 +1005,7 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
                         controller: _weakInputController,
                         style: const TextStyle(fontSize: 12.5),
                         decoration: InputDecoration(
-                          hintText: 'Add weak concept (e.g. Thermodynamics, Optics)...',
+                          hintText: 'Add topic needing revision...',
                           hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                           filled: true,
                           fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
@@ -1150,7 +1143,7 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
                         controller: _strongInputController,
                         style: const TextStyle(fontSize: 12.5),
                         decoration: InputDecoration(
-                          hintText: 'Add mastered concept (e.g. Newton Laws)...',
+                          hintText: 'Add mastered topic or strength...',
                           hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                           filled: true,
                           fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),

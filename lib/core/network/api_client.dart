@@ -36,6 +36,17 @@ class ApiClient {
 
   static String handleError(dynamic error) {
     if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 502 || statusCode == 503 || statusCode == 504) {
+        return 'Cloud server so raha tha aur abhi wake up ho raha hai (Render Cold Start). Kripya 10-15 seconds baad dobara try karein!';
+      }
+      if (statusCode == 429) {
+        return 'AI rate limit exceed ho gaya hai. Kripya 1 minute baad try karein ya custom API key use karein.';
+      }
+      if (statusCode == 401) {
+        return 'Session expire ho gaya hai. Kripya dobara login karein.';
+      }
+
       if (error.response?.data != null && error.response?.data is Map) {
         final data = error.response!.data as Map;
         if (data.containsKey('error')) {
@@ -45,16 +56,25 @@ class ApiClient {
           return data['message'].toString();
         }
       }
+
       switch (error.type) {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.receiveTimeout:
-          return 'Connection timed out. Check your backend server.';
+          return 'Server ne response dene me zyada waqt liya (Timeout). Kripya thodi der baad dobara koshish karein.';
         case DioExceptionType.connectionError:
-          return 'Cannot connect to backend. Is Go server running at ${ApiConstants.baseUrl}?';
+          return 'Backend server se connect nahi ho pa raha hai. Kya server running hai (${ApiConstants.baseUrl})?';
         default:
-          return error.message ?? 'An unexpected network error occurred.';
+          final rawMsg = error.message ?? '';
+          if (rawMsg.contains('502') || rawMsg.contains('503') || rawMsg.contains('504')) {
+            return 'Cloud server so raha tha aur abhi wake up ho raha hai (Render Cold Start). Kripya 10-15 seconds baad dobara try karein!';
+          }
+          return rawMsg.isNotEmpty ? rawMsg : 'Network error occurred. Kripya dobara koshish karein.';
       }
     }
-    return error.toString();
+    final errStr = error.toString();
+    if (errStr.contains('502') || errStr.contains('503') || errStr.contains('504')) {
+      return 'Cloud server so raha tha aur abhi wake up ho raha hai (Render Cold Start). Kripya 10-15 seconds baad dobara try karein!';
+    }
+    return errStr;
   }
 }

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_project_structure/features/quiz/models/quiz_model.dart';
 
 void main() {
@@ -95,6 +95,36 @@ void main() {
       expect(profile.strongTopics.length, 2);
       expect(profile.studyStreakDays, 7);
       expect(profile.averageQuizScore, 88.2);
+    });
+
+    test('QuizAttemptModel JSON deserialization', () {
+      final json = {
+        'id': 'att-99',
+        'quiz_id': 'quiz-1',
+        'user_id': 'u-101',
+        'score': 4,
+        'total_score': 5,
+        'percentage': 80.0,
+        'answers': [
+          {
+            'question_id': 'q-1',
+            'selected_option': 0,
+            'is_correct': true,
+          },
+        ],
+        'weak_areas_identified': ['Pipelining'],
+        'time_taken_seconds': 120,
+        'created_at': '2026-10-15T08:00:00Z',
+      };
+
+      final attempt = QuizAttemptModel.fromJson(json);
+      expect(attempt.id, 'att-99');
+      expect(attempt.score, 4);
+      expect(attempt.percentage, 80.0);
+      expect(attempt.answers.length, 1);
+      expect(attempt.answers.first.isCorrect, true);
+      expect(attempt.weakAreasIdentified, contains('Pipelining'));
+      expect(attempt.timeTakenSeconds, 120);
     });
   });
 }

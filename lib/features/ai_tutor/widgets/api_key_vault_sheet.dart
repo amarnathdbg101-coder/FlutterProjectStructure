@@ -304,7 +304,7 @@ class _ApiKeyVaultSheetState extends State<ApiKeyVaultSheet> {
             TextField(
               controller: _labelController,
               decoration: InputDecoration(
-                hintText: 'Nickname / Label (e.g. My Personal Key)',
+                hintText: 'Nickname or label for this key...',
                 prefixIcon: const Icon(Icons.label_outline, size: 18),
                 filled: true,
                 fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),

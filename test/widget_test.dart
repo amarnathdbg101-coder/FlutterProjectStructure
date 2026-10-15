@@ -52,4 +52,31 @@ void main() {
     expect(find.text('Render interactive diagram'), findsOneWidget);
     expect(find.byType(InteractiveVisualDiagram), findsNothing);
   });
+
+  testWidgets('inline LaTeX renders inside highlighted headings and bold text', (WidgetTester tester) async {
+    const answer = r'''
+### **$\rightarrow$ $q_0$ (Start)**
+
+**$\rightarrow$ $q_1$ (Final)**
+''';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: FormattedAiText(text: answer, isDark: false),
+          ),
+        ),
+      ),
+    );
+
+    final renderedText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.textSpan?.toPlainText() ?? widget.data ?? '')
+        .join('\n');
+
+    expect(renderedText, contains('→ q₀ (Start)'));
+    expect(renderedText, contains('→ q₁ (Final)'));
+    expect(renderedText, isNot(contains(r'\rightarrow')));
+  });
 }

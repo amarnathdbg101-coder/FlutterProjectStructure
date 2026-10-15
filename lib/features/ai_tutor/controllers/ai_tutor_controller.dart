@@ -695,7 +695,8 @@ class AiTutorController extends ChangeNotifier {
           ChatMessageModel(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             role: 'assistant',
-            content: 'Sorry, I could not get an AI response: $errorMessage',
+            content: errorMessage,
+            followUpQuestions: question.trim().isNotEmpty ? [question.trim()] : const [],
             createdAt: DateTime.now(),
           ),
         );

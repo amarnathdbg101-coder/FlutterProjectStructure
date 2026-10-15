@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -265,22 +266,35 @@ class QuizTakerScreen extends StatelessWidget {
     final letter = index < letters.length ? letters[index] : '${index + 1}';
 
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(14),
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.1)
-              : (isDark ? const Color(0xFF1E293B) : Colors.white),
-          borderRadius: BorderRadius.circular(12),
+              ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.08)
+              : AppColors.getSurface(isDark),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected
                 ? AppColors.primary
-                : (isDark ? const Color(0xFF334155) : Colors.grey[200]!),
+                : AppColors.getBorder(isDark),
             width: isSelected ? 2.0 : 1.0,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           children: [
@@ -289,16 +303,18 @@ class QuizTakerScreen extends StatelessWidget {
               height: 32,
               alignment: Alignment.center,
               decoration: BoxDecoration(
+                gradient: isSelected ? AppColors.primaryGradient : null,
                 color: isSelected
-                    ? AppColors.primary
-                    : (isDark ? const Color(0xFF334155) : Colors.grey[100]),
+                    ? null
+                    : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                 shape: BoxShape.circle,
               ),
               child: Text(
                 letter,
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : AppColors.textPrimary),
                 ),
               ),
             ),
@@ -307,7 +323,7 @@ class QuizTakerScreen extends StatelessWidget {
               child: _buildMathOrText(text, isDark, isSelected),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+              const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 21),
           ],
         ),
       ),
@@ -459,9 +475,11 @@ class QuizTakerScreen extends StatelessWidget {
                             children: [
                               Icon(Icons.biotech, size: 20, color: AppColors.error),
                               SizedBox(width: 8),
-                              Text(
-                                'Bloom Taxonomy Diagnostics (Weak Areas):',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 13),
+                              Expanded(
+                                child: Text(
+                                  'Bloom Taxonomy Diagnostics (Weak Areas):',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 13),
+                                ),
                               ),
                             ],
                           ),
@@ -534,12 +552,14 @@ class QuizTakerScreen extends StatelessWidget {
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
-                'Question $qNum ${fb.isCorrect ? "(Correct)" : "(Incorrect)"}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: fb.isCorrect ? AppColors.success : AppColors.error,
-                  fontSize: 14,
+              Expanded(
+                child: Text(
+                  'Question $qNum ${fb.isCorrect ? "(Correct)" : "(Incorrect)"}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: fb.isCorrect ? AppColors.success : AppColors.error,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ],

@@ -6,6 +6,7 @@ import '../../../core/utils/validators.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/reuse/reuse.dart';
 import '../controllers/auth_controller.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -55,15 +56,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final bgColor = AppColors.getBackground(isDark);
+    final surfaceColor = AppColors.getSurface(isDark);
+    final borderColor = AppColors.getBorder(isDark);
+    final textPrimary = AppColors.getTextPrimary(isDark);
+    final textSecondary = AppColors.getTextSecondary(isDark);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          color: const Color(0xFF0F172A),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
+          color: textPrimary,
           onPressed: () => context.pop(),
         ),
       ),
@@ -77,122 +85,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- StudySilo Brand Logo ---
-                  Center(
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x4D4F46E5),
-                            blurRadius: 20,
-                            offset: Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          const Icon(
-                            Icons.school_rounded,
-                            size: 38,
-                            color: Colors.white,
-                          ),
-                          Positioned(
-                            top: 10,
-                            right: 12,
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.auto_awesome,
-                                size: 10,
-                                color: Color(0xFF0EA5E9),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  // --- Centralized StudySilo Brand Header ---
+                  const AppBrandHeader(
+                    subtitle: 'Create your account',
                   ),
-                  const SizedBox(height: 16),
-
-                  // Brand App Title
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'Study',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const Text(
-                        'Silo',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFC7D2FE)),
-                        ),
-                        child: const Text(
-                          'AI-HUB',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Join Your Intelligent Academic Ecosystem',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
 
                   // --- Clean Elevated Register Card ---
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: const [
+                      color: surfaceColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: borderColor),
+                      boxShadow: [
                         BoxShadow(
-                          color: Color(0x0A0F172A),
-                          blurRadius: 24,
-                          offset: Offset(0, 8),
+                          color: (isDark ? Colors.black : const Color(0xFF0F172A)).withValues(alpha: isDark ? 0.3 : 0.04),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
@@ -201,20 +111,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Create Account',
                             style: TextStyle(
                               fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
+                              fontWeight: FontWeight.w800,
+                              color: textPrimary,
+                              letterSpacing: -0.4,
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
+                          Text(
                             'Fill in your details to register as a student',
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.textSecondary,
+                              color: textSecondary,
                             ),
                           ),
                           const SizedBox(height: 20),

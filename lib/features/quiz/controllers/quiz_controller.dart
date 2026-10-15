@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/quiz_model.dart';
 import '../repositories/quiz_repository.dart';
@@ -15,11 +15,13 @@ class QuizController extends ChangeNotifier {
   String? _errorMessage;
   QuizSubmissionResponseModel? _lastResult;
   CognitiveProfileModel _profile = CognitiveProfileModel();
+  List<QuizAttemptModel> _attempts = [];
 
   Timer? _timer;
   int _timeRemainingSeconds = 0;
 
   List<QuizModel> get quizzes => _quizzes;
+  List<QuizAttemptModel> get attempts => _attempts;
   QuizModel? get activeQuiz => _activeQuiz;
   int get currentQuestionIndex => _currentQuestionIndex;
   Map<String, int> get selectedAnswers => _selectedAnswers;
@@ -47,9 +49,11 @@ class QuizController extends ChangeNotifier {
       final results = await Future.wait([
         _repository.getQuizzes(),
         _repository.getCognitiveProfile(),
+        _repository.getQuizAttempts(),
       ]);
       _quizzes = results[0] as List<QuizModel>;
       _profile = results[1] as CognitiveProfileModel;
+      _attempts = results[2] as List<QuizAttemptModel>;
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -58,12 +62,41 @@ class QuizController extends ChangeNotifier {
     }
   }
 
-  void startQuiz(QuizModel quiz) {
-    _activeQuiz = quiz;
+  Future<bool> deleteQuiz(String quizId) async {
+    final success = await _repository.deleteQuiz(quizId);
+    if (success) {
+      _quizzes.removeWhere((q) => q.id == quizId);
+      _attempts.removeWhere((a) => a.quizId == quizId);
+      notifyListeners();
+    }
+    return success;
+  }
+
+
+  Future<void> startQuiz(QuizModel quiz) async {
+    QuizModel active = quiz;
+    if (active.questions.isEmpty) {
+      _isLoading = true;
+      notifyListeners();
+      try {
+        final fullQuiz = await _repository.getQuizById(quiz.id);
+        if (fullQuiz != null && fullQuiz.questions.isNotEmpty) {
+          active = fullQuiz;
+          final idx = _quizzes.indexWhere((q) => q.id == quiz.id);
+          if (idx != -1) {
+            _quizzes[idx] = fullQuiz;
+          }
+        }
+      } catch (_) {}
+      _isLoading = false;
+    }
+
+    _activeQuiz = active;
     _currentQuestionIndex = 0;
     _selectedAnswers.clear();
     _lastResult = null;
-    _timeRemainingSeconds = quiz.totalQuestions * 90; // 90 seconds per question
+    final totalQ = active.questions.isNotEmpty ? active.questions.length : 5;
+    _timeRemainingSeconds = totalQ * 90; // 90 seconds per question
 
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -125,8 +158,9 @@ class QuizController extends ChangeNotifier {
       );
 
       _lastResult = result;
-      // Refresh cognitive profile stats
+      // Refresh cognitive profile stats and attempts
       _profile = await _repository.getCognitiveProfile();
+      _attempts = await _repository.getQuizAttempts();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -155,7 +189,7 @@ class QuizController extends ChangeNotifier {
         questionCount: questionCount,
       );
       _quizzes.insert(0, quiz);
-      startQuiz(quiz);
+      await startQuiz(quiz);
       return quiz;
     } catch (e) {
       _errorMessage = e.toString();

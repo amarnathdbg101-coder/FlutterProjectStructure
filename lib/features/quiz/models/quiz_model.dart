@@ -1,4 +1,4 @@
-﻿class QuizQuestionModel {
+class QuizQuestionModel {
   final String id;
   final String quizId;
   final String questionText;
@@ -281,3 +281,88 @@ class CognitiveProfileModel {
     );
   }
 }
+
+class UserAnswerModel {
+  final String questionId;
+  final int selectedOption;
+  final bool isCorrect;
+
+  UserAnswerModel({
+    required this.questionId,
+    required this.selectedOption,
+    required this.isCorrect,
+  });
+
+  factory UserAnswerModel.fromJson(Map<String, dynamic> json) {
+    return UserAnswerModel(
+      questionId: json['question_id'] as String? ?? '',
+      selectedOption: (json['selected_option'] as num?)?.toInt() ?? -1,
+      isCorrect: json['is_correct'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'question_id': questionId,
+    'selected_option': selectedOption,
+    'is_correct': isCorrect,
+  };
+}
+
+class QuizAttemptModel {
+  final String id;
+  final String quizId;
+  final String userId;
+  final int score;
+  final int totalScore;
+  final double percentage;
+  final List<UserAnswerModel> answers;
+  final List<String> weakAreasIdentified;
+  final int timeTakenSeconds;
+  final DateTime createdAt;
+
+  QuizAttemptModel({
+    required this.id,
+    required this.quizId,
+    required this.userId,
+    required this.score,
+    required this.totalScore,
+    required this.percentage,
+    this.answers = const [],
+    this.weakAreasIdentified = const [],
+    this.timeTakenSeconds = 0,
+    required this.createdAt,
+  });
+
+  factory QuizAttemptModel.fromJson(Map<String, dynamic> json) {
+    List<String> parseList(dynamic raw) {
+      if (raw is List) {
+        return raw.map((e) => e.toString()).toList();
+      }
+      return [];
+    }
+
+    final rawAnswers = json['answers'];
+    List<UserAnswerModel> parsedAnswers = [];
+    if (rawAnswers is List) {
+      parsedAnswers = rawAnswers
+          .map((a) => UserAnswerModel.fromJson(Map<String, dynamic>.from(a as Map)))
+          .toList();
+    }
+
+    return QuizAttemptModel(
+      id: json['id'] as String? ?? '',
+      quizId: json['quiz_id'] as String? ?? '',
+      userId: json['user_id'] as String? ?? '',
+      score: (json['score'] as num?)?.toInt() ?? 0,
+      totalScore: (json['total_score'] as num?)?.toInt() ?? 0,
+      percentage: (json['percentage'] as num?)?.toDouble() ?? 0.0,
+      answers: parsedAnswers,
+      weakAreasIdentified: parseList(json['weak_areas_identified']),
+      timeTakenSeconds: (json['time_taken_seconds'] as num?)?.toInt() ?? 0,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+

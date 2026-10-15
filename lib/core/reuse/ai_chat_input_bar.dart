@@ -43,17 +43,18 @@ class AiChatInputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.getSurface(isDark),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          color: AppColors.getBorder(isDark),
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
+            blurRadius: 12,
             offset: const Offset(0, 3),
           ),
         ],
@@ -69,7 +70,7 @@ class AiChatInputBar extends StatelessWidget {
                 icon: const Icon(
                   Icons.add_photo_alternate_outlined,
                   color: AppColors.primary,
-                  size: 22,
+                  size: 21,
                 ),
                 tooltip: 'Attach Image / Handwritten Math',
                 onPressed: isLoading ? null : onAttachImage,
@@ -93,21 +94,21 @@ class AiChatInputBar extends StatelessWidget {
           // Main Text Input Field
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               child: TextField(
                 controller: controller,
                 focusNode: focusNode,
                 minLines: 1,
-                maxLines: 4,
+                maxLines: 5,
                 style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  color: isDark ? Colors.white : AppColors.textPrimary,
                   fontSize: 13.5,
                 ),
                 decoration: InputDecoration(
                   hintText: hintText,
                   hintStyle: TextStyle(
                     fontSize: 13,
-                    color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                   ),
                   border: InputBorder.none,
                   isDense: true,
@@ -120,26 +121,43 @@ class AiChatInputBar extends StatelessWidget {
 
           // Send / Loading Action Button
           Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: IconButton(
-              icon: isStreaming
-                  ? const Icon(Icons.stop_rounded, color: Color(0xFFEF4444), size: 22)
-                  : isLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            padding: const EdgeInsets.only(bottom: 3, right: 4),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: isStreaming
+                    ? const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)])
+                    : AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isStreaming ? const Color(0xFFEF4444) : AppColors.primary).withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                padding: EdgeInsets.zero,
+                icon: isStreaming
+                    ? const Icon(Icons.stop_rounded, color: Colors.white, size: 20)
+                    : isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.arrow_upward_rounded,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                    )
-                  : const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
-              tooltip: isStreaming ? 'Stop generating' : 'Send Doubt to AI',
-              onPressed: isStreaming ? onStop : (isLoading ? null : onSend),
+                tooltip: isStreaming ? 'Stop generating' : 'Send Doubt to AI',
+                onPressed: isStreaming ? onStop : (isLoading ? null : onSend),
+              ),
             ),
           ),
         ],

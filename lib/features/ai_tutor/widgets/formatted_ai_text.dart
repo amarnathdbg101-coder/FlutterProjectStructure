@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import '../../../core/widgets/custom_snackbar.dart';
-import '../../academic/widgets/collapsible_derivation_card.dart';
+import 'collapsible_derivation_card.dart';
 import '../../diagram_viewer/widgets/interactive_visual_diagram.dart';
 import '../../diagram_viewer/widgets/interactive_graph_plotter.dart';
 
@@ -435,7 +435,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         );
 
       case _BlockType.table:
-        return _buildTableWidget(context, block);
+        return RepaintBoundary(child: _buildTableWidget(context, block));
 
       case _BlockType.diagram:
         return _DeferredAiBlock(
@@ -444,25 +444,25 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         );
 
       case _BlockType.graph:
-        return _buildGraphWidget(context, block);
+        return RepaintBoundary(child: _buildGraphWidget(context, block));
 
       case _BlockType.visualFlow:
-        return _buildVisualFlowWidget(context, block);
+        return RepaintBoundary(child: _buildVisualFlowWidget(context, block));
 
       case _BlockType.formula:
-        return _buildFormulaWidget(context, block);
+        return RepaintBoundary(child: _buildFormulaWidget(context, block));
 
       case _BlockType.derivation:
-        return _buildDerivationWidget(context, block);
+        return RepaintBoundary(child: _buildDerivationWidget(context, block));
 
       case _BlockType.code:
-        return _buildCodeWidget(context, block);
+        return RepaintBoundary(child: _buildCodeWidget(context, block));
 
       case _BlockType.comparison:
-        return _buildComparisonWidget(context, block);
+        return RepaintBoundary(child: _buildComparisonWidget(context, block));
 
       case _BlockType.callout:
-        return _buildCalloutWidget(context, block);
+        return RepaintBoundary(child: _buildCalloutWidget(context, block));
 
       case _BlockType.divider:
         return Padding(
@@ -489,7 +489,18 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   }
 
   static String _cleanHeadingText(String text) {
-    return text.replaceAll(_dollarGroupRx, r'$1').replaceAll(r'$', '').trim();
+    return _formatInlineMathFallback(text).replaceAll(RegExp(r'\*{1,2}'), '').trim();
+  }
+
+  static final RegExp _inlineMathFallbackRx = RegExp(
+    r'\$\$([^$]+)\$\$|\$([^$]+)\$|\\\((.*?)\\\)|\\\[(.*?)\\\]',
+  );
+
+  static String _formatInlineMathFallback(String text) {
+    return text.replaceAllMapped(_inlineMathFallbackRx, (match) {
+      final rawMath = (match.group(1) ?? match.group(2) ?? match.group(3) ?? match.group(4) ?? '').trim();
+      return _isGenuineMath(rawMath) ? _formatMathText(rawMath) : rawMath;
+    });
   }
 
   Widget _buildHeading3Widget(BuildContext context, _AiBlock block) {
@@ -1187,63 +1198,181 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   // 💻 CODE BLOCK RENDERER
   // ===========================================================================
   Widget _buildCodeWidget(BuildContext context, _AiBlock block) {
-    final lang = block.extra?.isNotEmpty == true ? block.extra! : 'code';
+    final lang = block.extra?.isNotEmpty == true ? block.extra!.toLowerCase().trim() : 'code';
+
+    Color langColor;
+    String langName;
+    IconData langIcon;
+
+    if (lang.contains('py')) {
+      langColor = const Color(0xFF38BDF8);
+      langName = 'PYTHON 3';
+      langIcon = Icons.code_rounded;
+    } else if (lang.contains('cpp') || lang.contains('c++') || lang == 'c') {
+      langColor = const Color(0xFF6366F1);
+      langName = 'C++ / ALGORITHMIC CODE';
+      langIcon = Icons.terminal_rounded;
+    } else if (lang.contains('java') && !lang.contains('script')) {
+      langColor = const Color(0xFFF59E0B);
+      langName = 'JAVA HARDCORE';
+      langIcon = Icons.coffee_rounded;
+    } else if (lang.contains('js') || lang.contains('javascript') || lang.contains('ts') || lang.contains('typescript')) {
+      langColor = const Color(0xFFFBBF24);
+      langName = 'JAVASCRIPT / NODE.JS';
+      langIcon = Icons.javascript_rounded;
+    } else if (lang.contains('sql') || lang.contains('postgres') || lang.contains('mysql')) {
+      langColor = const Color(0xFFEC4899);
+      langName = 'SQL DATABASE QUERY';
+      langIcon = Icons.storage_rounded;
+    } else if (lang.contains('go') || lang.contains('golang')) {
+      langColor = const Color(0xFF06B6D4);
+      langName = 'GO SYSTEM CODE';
+      langIcon = Icons.data_object_rounded;
+    } else if (lang.contains('dart')) {
+      langColor = const Color(0xFF10B981);
+      langName = 'DART / FLUTTER';
+      langIcon = Icons.flutter_dash_rounded;
+    } else {
+      langColor = const Color(0xFF94A3B8);
+      langName = lang.toUpperCase();
+      langIcon = Icons.code_rounded;
+    }
+
+    final codeLines = block.text.split('\n');
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF020617) : const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(10),
+        color: isDark ? const Color(0xFF020617) : const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: langColor.withValues(alpha: isDark ? 0.35 : 0.25),
+          width: 1.2,
+        ),
+        boxShadow: const [
+          BoxShadow(color: Color(0x1F000000), blurRadius: 10, offset: Offset(0, 3)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Code Bar
+          // Studio CS Header Bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFF0F172A),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+              color: isDark ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+              border: Border(bottom: BorderSide(color: langColor.withValues(alpha: 0.2))),
             ),
             child: Row(
               children: [
-                const Icon(Icons.code_rounded, size: 14, color: Color(0xFF94A3B8)),
-                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: langColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(langIcon, size: 14, color: langColor),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    lang.toUpperCase(),
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8)),
+                    langName,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: langColor,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                // 1-Tap Big-O Complexity Action
+                InkWell(
+                  onTap: () {
+                    if (onGeneratePracticeProblem != null) {
+                      onGeneratePracticeProblem!('What is the Time and Space Complexity (Big-O) of this code algorithm?');
+                    } else {
+                      Clipboard.setData(ClipboardData(text: 'What is the Big-O Time & Space Complexity of this code:\n\n${block.text}'));
+                      CustomSnackbar.showSuccess(context, 'Ask AI for Big-O Complexity copied!');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.timer_outlined, size: 11, color: Color(0xFFA5B4FC)),
+                        SizedBox(width: 3),
+                        Text('⏱️ Big-O', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFA5B4FC))),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 IconButton(
-                  icon: const Icon(Icons.copy_rounded, size: 13, color: Color(0xFF94A3B8)),
+                  icon: const Icon(Icons.copy_rounded, size: 14, color: Color(0xFF94A3B8)),
                   tooltip: 'Copy Code',
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: block.text));
-                    CustomSnackbar.showSuccess(context, 'Code copied to clipboard!');
+                    CustomSnackbar.showSuccess(context, 'Code copied to clipboard! 💻');
                   },
                 ),
               ],
             ),
           ),
 
-          // Code Text
+          // Code Text with Monospace Line Numbers
           Padding(
             padding: const EdgeInsets.all(12),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SelectableText(
-                block.text,
-                style: GoogleFonts.firaCode(
-                  fontSize: baseFontSize - 1,
-                  color: const Color(0xFFE2E8F0),
-                  height: 1.45,
-                ),
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Line Number Margin
+                  if (codeLines.length > 1) ...[
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: List.generate(codeLines.length, (idx) {
+                        return Text(
+                          '${idx + 1}',
+                          style: GoogleFonts.firaCode(
+                            fontSize: baseFontSize - 1.5,
+                            color: const Color(0xFF475569),
+                            height: 1.45,
+                          ),
+                        );
+                      }),
+                    ),
+                    Container(
+                      width: 1,
+                      height: (codeLines.length * (baseFontSize - 1.5) * 1.45),
+                      margin: const EdgeInsets.symmetric(horizontal: 10),
+                      color: const Color(0xFF334155),
+                    ),
+                  ],
+
+                  // Code Text
+                  SelectableText(
+                    block.text,
+                    style: GoogleFonts.firaCode(
+                      fontSize: baseFontSize - 1,
+                      color: const Color(0xFFE2E8F0),
+                      height: 1.45,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1458,7 +1587,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
       if (match.group(2) != null) {
         // **bold** text with student pastel highlighter pen tint
         spans.add(TextSpan(
-          text: ' ${match.group(2)!} ',
+          text: ' ${_formatInlineMathFallback(match.group(2)!)} ',
           style: TextStyle(
             fontSize: baseFontSize,
             fontWeight: FontWeight.w700,
@@ -1625,7 +1754,6 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   static final RegExp _subScriptRx = RegExp(r'_([0-9\+\-a-zA-Z])');
   static final RegExp _subBraceRx = RegExp(r'_\{([0-9\+\-a-zA-Z=()]+)\}');
 
-  static final RegExp _dollarGroupRx = RegExp(r'\$([^\$]+)\$');
   static final RegExp _jsonTitleRx = RegExp(r'"title"\s*:\s*"([^"]+)"');
   static final RegExp _flowSplitRx = RegExp(r'\s*(?:-->|==>|->|➔|⭢)\s*');
   static final RegExp _stepHeaderRx = RegExp(

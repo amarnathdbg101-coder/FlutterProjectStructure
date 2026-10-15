@@ -8,6 +8,7 @@ import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/diagram_viewer/screens/diagram_canvas_screen.dart';
 import '../../features/quiz/screens/quiz_list_screen.dart';
 import '../../features/quiz/screens/quiz_taker_screen.dart';
+import '../../features/student_memory/screens/cognitive_hub_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -57,7 +58,8 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final extra = state.extra as Map<String, dynamic>? ?? {};
         return DiagramCanvasScreen(
-          initialTopic: extra['topic'] as String? ?? 'Autonomous AI Concept Map',
+          initialTopic: extra['topic'] as String?,
+          noteId: extra['noteId'] as String?,
         );
       },
     ),
@@ -77,11 +79,19 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.formulaStudio,
       builder: (context, state) {
-        final extra = state.extra as Map<String, dynamic>? ?? {};
-        return FormulaStudioScreen(
-          initialTopic: extra['topic'] as String?,
-        );
+        String? topic;
+        final extra = state.extra;
+        if (extra is Map) {
+          topic = extra['topic'] as String?;
+        } else if (extra is String) {
+          topic = extra;
+        }
+        return FormulaStudioScreen(initialTopic: topic);
       },
+    ),
+    GoRoute(
+      path: AppRoutes.cognitiveProfile,
+      builder: (context, state) => const CognitiveHubScreen(),
     ),
   ],
 );

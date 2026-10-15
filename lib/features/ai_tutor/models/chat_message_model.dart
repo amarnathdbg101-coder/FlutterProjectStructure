@@ -38,7 +38,7 @@ class ChatMessageModel {
       content: json['content'] as String? ?? (json['answer'] as String? ?? ''),
       imageUrl: json['image_url'] as String?,
       latexFormulas: parseList(json['latex_formulas']),
-      followUpQuestions: parseList(json['follow_up_questions']),
+      followUpQuestions: parseList(json['follow_up_questions'] ?? json['follow_up_chips']),
       keyConcepts: parseList(json['key_concepts']),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()

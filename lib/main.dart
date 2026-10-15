@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as legacy_provider;
@@ -11,6 +12,7 @@ import 'features/auth/controllers/auth_controller.dart';
 import 'features/diagram_viewer/controllers/diagram_controller.dart';
 import 'features/health/controllers/health_controller.dart';
 import 'features/quiz/controllers/quiz_controller.dart';
+import 'features/student_memory/controllers/cognitive_profile_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +24,21 @@ void main() async {
       child: MyApp(),
     ),
   );
+}
+
+class AppScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return child;
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -37,6 +54,7 @@ class MyApp extends StatelessWidget {
         legacy_provider.ChangeNotifierProvider(create: (_) => AiTutorController()),
         legacy_provider.ChangeNotifierProvider(create: (_) => DiagramController()),
         legacy_provider.ChangeNotifierProvider(create: (_) => QuizController()),
+        legacy_provider.ChangeNotifierProvider(create: (_) => CognitiveProfileController()),
       ],
       child: const StudySiloApp(),
     );
@@ -57,6 +75,7 @@ class StudySiloApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeController.themeMode,
       routerConfig: appRouter,
+      scrollBehavior: AppScrollBehavior(),
       builder: (context, child) {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,

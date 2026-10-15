@@ -9,11 +9,23 @@ class DiagramNodeModel {
   final String colorHex;
   final List<String> formulas;
 
-  // Layout coordinates (calculated by layout engine)
+  final String branchId;
+  final String domainType;
+  final String keyTakeaway;
+  final String examTrap;
+  final int importance; // 1 to 5
+  final String badge;
+  final Map<String, String> metrics;
+  final String codeSnippet;
+  final List<String> crossLinks;
+
+  // Layout & Interaction state
   double x;
   double y;
   double width;
   double height;
+  bool isCollapsed;
+  bool isVisible;
 
   DiagramNodeModel({
     required this.id,
@@ -22,10 +34,21 @@ class DiagramNodeModel {
     this.nodeType = 'leaf',
     this.colorHex = '#4F46E5',
     this.formulas = const [],
+    this.branchId = '',
+    this.domainType = 'general',
+    this.keyTakeaway = '',
+    this.examTrap = '',
+    this.importance = 3,
+    this.badge = '',
+    this.metrics = const {},
+    this.codeSnippet = '',
+    this.crossLinks = const [],
     this.x = 0,
     this.y = 0,
     this.width = 160,
-    this.height = 50,
+    this.height = 54,
+    this.isCollapsed = false,
+    this.isVisible = true,
   });
 
   bool get isRoot => nodeType == 'root';
@@ -40,6 +63,13 @@ class DiagramNodeModel {
       return [];
     }
 
+    Map<String, String> parseMetrics(dynamic raw) {
+      if (raw is Map) {
+        return raw.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+      return {};
+    }
+
     final rawType = (json['node_type'] ?? json['type'] ?? json['shape'] ?? 'leaf').toString().toLowerCase();
     String type = 'leaf';
     if (rawType.contains('root') || rawType == 'circle') {
@@ -48,14 +78,22 @@ class DiagramNodeModel {
       type = 'branch';
     }
 
-    double w = 150;
-    double h = 48;
+    double w = 165;
+    double h = 54;
     if (type == 'root') {
-      w = 180;
-      h = 56;
+      w = 195;
+      h = 62;
     } else if (type == 'branch') {
-      w = 160;
-      h = 50;
+      w = 175;
+      h = 56;
+    }
+
+    int imp = 3;
+    final rawImp = json['importance'];
+    if (rawImp is int) {
+      imp = rawImp.clamp(1, 5);
+    } else if (rawImp is num) {
+      imp = rawImp.toInt().clamp(1, 5);
     }
 
     return DiagramNodeModel(
@@ -65,6 +103,15 @@ class DiagramNodeModel {
       nodeType: type,
       colorHex: json['color_hex']?.toString() ?? (type == 'root' ? '#4F46E5' : (type == 'branch' ? '#0EA5E9' : '#10B981')),
       formulas: parseList(json['formulas']),
+      branchId: json['branch_id']?.toString() ?? '',
+      domainType: json['domain_type']?.toString() ?? 'general',
+      keyTakeaway: json['key_takeaway']?.toString() ?? '',
+      examTrap: json['exam_trap']?.toString() ?? '',
+      importance: imp,
+      badge: json['badge']?.toString() ?? '',
+      metrics: parseMetrics(json['metrics']),
+      codeSnippet: json['code_snippet']?.toString() ?? '',
+      crossLinks: parseList(json['cross_links']),
       width: w,
       height: h,
     );
@@ -77,6 +124,16 @@ class DiagramNodeModel {
     'node_type': nodeType,
     'color_hex': colorHex,
     'formulas': formulas,
+    'branch_id': branchId,
+    'domain_type': domainType,
+    'key_takeaway': keyTakeaway,
+    'exam_trap': examTrap,
+    'importance': importance,
+    'badge': badge,
+    'metrics': metrics,
+    'code_snippet': codeSnippet,
+    'cross_links': crossLinks,
+    'is_collapsed': isCollapsed,
   };
 }
 
@@ -84,11 +141,15 @@ class DiagramEdgeModel {
   final String fromId;
   final String toId;
   final String label;
+  final bool isCrossLink;
+  final String style;
 
   DiagramEdgeModel({
     required this.fromId,
     required this.toId,
     this.label = '',
+    this.isCrossLink = false,
+    this.style = 'solid',
   });
 
   factory DiagramEdgeModel.fromJson(Map<String, dynamic> json) {
@@ -101,6 +162,8 @@ class DiagramEdgeModel {
       fromId: from,
       toId: to,
       label: json['label']?.toString() ?? '',
+      isCrossLink: json['is_cross_link'] == true,
+      style: json['style']?.toString() ?? (json['is_cross_link'] == true ? 'dashed' : 'solid'),
     );
   }
 
@@ -108,37 +171,66 @@ class DiagramEdgeModel {
     'from_id': fromId,
     'to_id': toId,
     'label': label,
+    'is_cross_link': isCrossLink,
+    'style': style,
   };
 }
 
 class DiagramModel {
+  String? id;
   final String title;
   final String diagramType;
+  final String domainType;
+  bool isPinned;
   final List<DiagramNodeModel> nodes;
   final List<DiagramEdgeModel> edges;
 
   DiagramModel({
+    this.id,
     required this.title,
     this.diagramType = 'mindmap',
+    this.domainType = 'general',
+    this.isPinned = false,
     required this.nodes,
     required this.edges,
   });
 
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'concept': title,
+    'diagram_type': diagramType,
+    'domain_type': domainType,
+    'nodes': nodes.map((n) => n.toJson()).toList(),
+    'edges': edges.map((e) => e.toJson()).toList(),
+  };
+
   factory DiagramModel.fromJson(Map<String, dynamic> json) {
-    final title = json['title'] as String? ?? (json['concept'] as String? ?? 'Mind Map');
-    final diagramType = json['diagram_type'] as String? ?? 'mindmap';
+    final payload = (json['data'] is Map<String, dynamic>)
+        ? json['data'] as Map<String, dynamic>
+        : (json['data'] is Map ? Map<String, dynamic>.from(json['data'] as Map) : json);
+
+    final id = json['id']?.toString();
+    final isPinned = json['is_pinned'] == true;
+    final title = json['title'] as String? ??
+        (payload['title'] as String? ??
+            (json['concept'] as String? ??
+                (payload['concept'] as String? ?? 'Mind Map')));
+    final diagramType = json['diagram_type'] as String? ??
+        (payload['diagram_type'] as String? ?? 'mindmap');
+    final domainType = json['domain_type'] as String? ??
+        (payload['domain_type'] as String? ?? 'general');
 
     final List<DiagramNodeModel> parsedNodes = [];
     final List<DiagramEdgeModel> parsedEdges = [];
 
-    // 1. If hierarchical "root" is present, extract all nodes and edges from the tree!
-    if (json['root'] is Map) {
-      final rootMap = Map<String, dynamic>.from(json['root'] as Map);
-      _extractTreeNodesAndEdges(rootMap, parsedNodes, parsedEdges, null, 0);
+    // 1. If hierarchical "root" is present, extract all nodes and edges from the tree
+    if (payload['root'] is Map) {
+      final rootMap = Map<String, dynamic>.from(payload['root'] as Map);
+      _extractTreeNodesAndEdges(rootMap, parsedNodes, parsedEdges, null, 0, '');
     }
 
     // 2. If flat "nodes" list is present, add any nodes that weren't already added
-    final rawNodes = json['nodes'];
+    final rawNodes = payload['nodes'] ?? json['nodes'];
     if (rawNodes is List) {
       for (final n in rawNodes) {
         if (n is Map) {
@@ -151,7 +243,7 @@ class DiagramModel {
     }
 
     // 3. If flat "edges" list is present, add any edges that weren't already added
-    final rawEdges = json['edges'];
+    final rawEdges = payload['edges'] ?? json['edges'];
     if (rawEdges is List) {
       for (final e in rawEdges) {
         if (e is Map) {
@@ -173,14 +265,26 @@ class DiagramModel {
         nodeType: 'root',
         colorHex: first.colorHex,
         formulas: first.formulas,
-        width: 180,
-        height: 56,
+        branchId: first.branchId,
+        domainType: first.domainType,
+        keyTakeaway: first.keyTakeaway,
+        examTrap: first.examTrap,
+        importance: first.importance,
+        badge: first.badge,
+        metrics: first.metrics,
+        codeSnippet: first.codeSnippet,
+        crossLinks: first.crossLinks,
+        width: 195,
+        height: 62,
       );
     }
 
     return DiagramModel(
+      id: id,
       title: title,
       diagramType: diagramType,
+      domainType: domainType,
+      isPinned: isPinned,
       nodes: parsedNodes,
       edges: parsedEdges,
     );
@@ -192,6 +296,7 @@ class DiagramModel {
     List<DiagramEdgeModel> edges,
     String? parentId,
     int depth,
+    String currentBranchId,
   ) {
     final id = treeNode['id']?.toString() ?? 'node_${nodes.length + 1}';
     final label = treeNode['label']?.toString() ?? (treeNode['title']?.toString() ?? 'Concept');
@@ -200,6 +305,33 @@ class DiagramModel {
         (depth == 0 ? '#4F46E5' : (depth == 1 ? '#0EA5E9' : '#10B981'));
 
     final nodeType = depth == 0 ? 'root' : (depth == 1 ? 'branch' : 'leaf');
+    final branchId = depth == 1 ? id : (depth > 1 ? currentBranchId : '');
+
+    List<String> formulas = [];
+    final rawFormulas = treeNode['formulas'];
+    if (rawFormulas is List) {
+      formulas = rawFormulas.map((e) => e.toString()).toList();
+    }
+
+    Map<String, String> metrics = {};
+    final rawMetrics = treeNode['metrics'];
+    if (rawMetrics is Map) {
+      metrics = rawMetrics.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    List<String> crossLinks = [];
+    final rawCross = treeNode['cross_links'];
+    if (rawCross is List) {
+      crossLinks = rawCross.map((e) => e.toString()).toList();
+    }
+
+    int imp = 3;
+    final rawImp = treeNode['importance'];
+    if (rawImp is int) {
+      imp = rawImp.clamp(1, 5);
+    } else if (rawImp is num) {
+      imp = rawImp.toInt().clamp(1, 5);
+    }
 
     nodes.add(DiagramNodeModel(
       id: id,
@@ -207,9 +339,18 @@ class DiagramModel {
       description: details,
       nodeType: nodeType,
       colorHex: color,
-      formulas: [],
-      width: depth == 0 ? 180 : (depth == 1 ? 160 : 140),
-      height: depth == 0 ? 56 : (depth == 1 ? 50 : 44),
+      formulas: formulas,
+      branchId: branchId,
+      domainType: treeNode['domain_type']?.toString() ?? 'general',
+      keyTakeaway: treeNode['key_takeaway']?.toString() ?? '',
+      examTrap: treeNode['exam_trap']?.toString() ?? '',
+      importance: imp,
+      badge: treeNode['badge']?.toString() ?? '',
+      metrics: metrics,
+      codeSnippet: treeNode['code_snippet']?.toString() ?? '',
+      crossLinks: crossLinks,
+      width: depth == 0 ? 195 : (depth == 1 ? 175 : 160),
+      height: depth == 0 ? 62 : (depth == 1 ? 56 : 50),
     ));
 
     if (parentId != null && parentId.isNotEmpty) {
@@ -218,6 +359,19 @@ class DiagramModel {
         toId: id,
         label: depth == 1 ? 'Branches into' : 'Includes',
       ));
+    }
+
+    // Cross-links
+    for (final targetId in crossLinks) {
+      if (targetId.isNotEmpty) {
+        edges.add(DiagramEdgeModel(
+          fromId: id,
+          toId: targetId,
+          label: 'Relates to',
+          isCrossLink: true,
+          style: 'dashed',
+        ));
+      }
     }
 
     final children = treeNode['children'];
@@ -230,20 +384,14 @@ class DiagramModel {
             edges,
             id,
             depth + 1,
+            branchId,
           );
         }
       }
     }
   }
 
-  Map<String, dynamic> toJson() => {
-    'title': title,
-    'diagram_type': diagramType,
-    'nodes': nodes.map((n) => n.toJson()).toList(),
-    'edges': edges.map((e) => e.toJson()).toList(),
-  };
-
-  /// Computes geometric layout coordinates for all nodes in the diagram
+  /// Computes geometric layout coordinates and handles branch folding/expansion
   void calculateLayout(Size canvasSize) {
     if (nodes.isEmpty) return;
 
@@ -253,12 +401,14 @@ class DiagramModel {
     // Find root node
     final rootIndex = nodes.indexWhere((n) => n.isRoot);
     final root = rootIndex != -1 ? nodes[rootIndex] : nodes.first;
+    root.isVisible = true;
     root.x = centerX - (root.width / 2);
     root.y = centerY - (root.height / 2);
 
-    // Map parent -> children
+    // Map parent -> children (excluding cross-links)
     final Map<String, List<DiagramNodeModel>> childrenMap = {};
     for (final edge in edges) {
+      if (edge.isCrossLink) continue;
       final child = nodes.firstWhere(
         (n) => n.id == edge.toId,
         orElse: () => DiagramNodeModel(id: '', label: ''),
@@ -271,31 +421,55 @@ class DiagramModel {
     // Direct children of root (Branches)
     final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
     final branchCount = branches.length;
-    const branchRadius = 260.0;
+    const branchRadius = 280.0;
 
     for (int i = 0; i < branchCount; i++) {
       final angle = (2 * math.pi * i) / (branchCount > 0 ? branchCount : 1);
       final bx = centerX + branchRadius * math.cos(angle);
       final by = centerY + branchRadius * math.sin(angle);
       final branch = branches[i];
+      branch.isVisible = true;
       branch.x = bx - (branch.width / 2);
       branch.y = by - (branch.height / 2);
 
       // Leaves of this branch
       final leaves = childrenMap[branch.id] ?? [];
       final leafCount = leaves.length;
-      const leafRadius = 170.0;
 
       for (int j = 0; j < leafCount; j++) {
-        // Spread leaves in an arc facing outwards from root
+        final leaf = leaves[j];
+        if (branch.isCollapsed) {
+          leaf.isVisible = false;
+          leaf.x = bx;
+          leaf.y = by;
+          continue;
+        }
+
+        leaf.isVisible = true;
+        // Staggered radial distance to completely avoid visual overlap between neighbor leaves
+        final leafRadius = (j % 2 == 0) ? 180.0 : 240.0;
         final spreadAngle = leafCount > 1
-            ? angle - 0.45 + (0.9 * j / (leafCount - 1))
+            ? angle - 0.50 + (1.0 * j / (leafCount - 1))
             : angle;
         final lx = bx + leafRadius * math.cos(spreadAngle);
         final ly = by + leafRadius * math.sin(spreadAngle);
-        final leaf = leaves[j];
         leaf.x = lx - (leaf.width / 2);
         leaf.y = ly - (leaf.height / 2);
+
+        // Sub-leaves (if this leaf was expanded with deep-dive micro-nodes)
+        final subLeaves = childrenMap[leaf.id] ?? [];
+        for (int k = 0; k < subLeaves.length; k++) {
+          final subLeaf = subLeaves[k];
+          if (!leaf.isVisible) {
+            subLeaf.isVisible = false;
+            continue;
+          }
+          subLeaf.isVisible = true;
+          final subAngle = spreadAngle - 0.40 + (0.80 * k / (subLeaves.length > 1 ? subLeaves.length - 1 : 1));
+          const subDist = 145.0;
+          subLeaf.x = lx + subDist * math.cos(subAngle) - (subLeaf.width / 2);
+          subLeaf.y = ly + subDist * math.sin(subAngle) - (subLeaf.height / 2);
+        }
       }
     }
 
@@ -303,9 +477,49 @@ class DiagramModel {
     for (final node in nodes) {
       if (node.x == 0 && node.y == 0 && node.id != root.id) {
         final randomAngle = math.Random(node.id.hashCode).nextDouble() * 2 * math.pi;
-        node.x = centerX + 400 * math.cos(randomAngle);
-        node.y = centerY + 400 * math.sin(randomAngle);
+        node.isVisible = true;
+        node.x = centerX + 440 * math.cos(randomAngle);
+        node.y = centerY + 440 * math.sin(randomAngle);
       }
     }
   }
 }
+
+class SavedMindMapSummaryModel {
+  final String id;
+  final String title;
+  final String concept;
+  final String diagramType;
+  final String domainType;
+  final String? noteId;
+  final bool isPinned;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  SavedMindMapSummaryModel({
+    required this.id,
+    required this.title,
+    required this.concept,
+    this.diagramType = 'mindmap',
+    this.domainType = 'general',
+    this.noteId,
+    this.isPinned = false,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory SavedMindMapSummaryModel.fromJson(Map<String, dynamic> json) {
+    return SavedMindMapSummaryModel(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      concept: json['concept']?.toString() ?? '',
+      diagramType: json['diagram_type']?.toString() ?? 'mindmap',
+      domainType: json['domain_type']?.toString() ?? 'general',
+      noteId: json['note_id']?.toString(),
+      isPinned: json['is_pinned'] == true,
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '') ?? DateTime.now(),
+    );
+  }
+}
+

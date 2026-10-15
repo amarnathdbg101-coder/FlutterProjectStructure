@@ -372,15 +372,17 @@ class _InteractiveGraphPlotterState extends State<InteractiveGraphPlotter> {
                     onPanEnd: (_) => setState(() => _probeX = null),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: CustomPaint(
-                        painter: _CartesianGraphPainter(
-                          curves: _curves,
-                          xMin: _xMin,
-                          xMax: _xMax,
-                          yMin: _yMin,
-                          yMax: _yMax,
-                          probeX: _probeX,
-                          isDark: widget.isDark,
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: _CartesianGraphPainter(
+                            curves: _curves,
+                            xMin: _xMin,
+                            xMax: _xMax,
+                            yMin: _yMin,
+                            yMax: _yMax,
+                            probeX: _probeX,
+                            isDark: widget.isDark,
+                          ),
                         ),
                       ),
                     ),

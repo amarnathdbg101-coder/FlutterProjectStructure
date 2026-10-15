@@ -44,23 +44,28 @@ class DerivationStep {
   };
 }
 
+/// Backward compatibility alias
+typedef DerivationStepItem = DerivationStep;
+
 /// A collapsible, step-by-step derivation card.
 /// Renders mathematical derivations step-by-step with KaTeX formulas,
 /// intuition tips, and applied theorem tags.
 class CollapsibleDerivationCard extends StatefulWidget {
-  final String derivationTitle;
+  final String? derivationTitle;
   final List<DerivationStep> steps;
   final String? finalResult;
   final bool initiallyExpanded;
   final double baseFontSize;
+  final bool? isDark;
 
   const CollapsibleDerivationCard({
     super.key,
-    required this.derivationTitle,
+    this.derivationTitle = 'Mathematical & Logical Derivation',
     required this.steps,
     this.finalResult,
     this.initiallyExpanded = false,
     this.baseFontSize = 14.0,
+    this.isDark,
   });
 
   @override
@@ -93,7 +98,7 @@ class _CollapsibleDerivationCardState extends State<CollapsibleDerivationCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = widget.isDark ?? (Theme.of(context).brightness == Brightness.dark);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -185,7 +190,7 @@ class _CollapsibleDerivationCardState extends State<CollapsibleDerivationCard> {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          widget.derivationTitle,
+                          widget.derivationTitle ?? 'Mathematical & Logical Derivation',
                           style: TextStyle(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w700,

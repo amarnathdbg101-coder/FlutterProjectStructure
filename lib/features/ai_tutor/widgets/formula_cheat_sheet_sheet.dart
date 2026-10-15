@@ -248,7 +248,7 @@ class _FormulaCheatSheetSheetState extends State<FormulaCheatSheetSheet> {
                       controller: _topicController,
                       style: const TextStyle(fontSize: 13.5),
                       decoration: InputDecoration(
-                        hintText: 'Enter topic or chapter (e.g. Calculus, Kinematics)...',
+                        hintText: 'Enter topic or chapter name...',
                         hintStyle: TextStyle(
                           fontSize: 12.5,
                           color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),

@@ -1,5 +1,6 @@
 import '../../voice_doubt/services/voice_doubt_service.dart';
 import '../../voice_doubt/widgets/voice_doubt_sheet.dart';
+import '../../voice_doubt/widgets/ai_audio_player_bar.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -17,6 +18,7 @@ import 'package:intl/intl.dart';
 import '../models/chat_message_model.dart';
 import '../models/chat_session_model.dart';
 import '../widgets/formatted_ai_text.dart';
+import '../widgets/api_key_vault_sheet.dart';
 import '../../student_memory/widgets/student_memory_sheet.dart';
 
 class AiTutorChatScreen extends StatefulWidget {
@@ -240,6 +242,46 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
     );
   }
 
+  void _showTutorModeDialog(BuildContext context, AiTutorController controller) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Text(
+                  'Select Pedagogical Mode',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...TutorMode.values.map((mode) {
+                final isSel = controller.tutorMode == mode;
+                return ListTile(
+                  title: Text(mode.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  trailing: isSel ? const Icon(Icons.check_rounded, color: AppColors.primary) : null,
+                  onTap: () {
+                    controller.setTutorMode(mode);
+                    Navigator.pop(ctx);
+                    CustomSnackbar.showInfo(context, 'Mode: ${mode.label}');
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showModelSelectorBottomSheet(BuildContext context, AiTutorController controller) {
     showModalBottomSheet(
       context: context,
@@ -320,12 +362,16 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                                 children: [
                                   Row(
                                     children: [
-                                      Text(
-                                        option.modelName,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                          color: isSelected ? AppColors.primary : null,
+                                      Flexible(
+                                        child: Text(
+                                          option.modelName,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                            color: isSelected ? AppColors.primary : null,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       const SizedBox(width: 6),
@@ -517,156 +563,120 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
       ),
       appBar: AppBar(
         titleSpacing: 0,
+        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        elevation: 0,
+        shape: Border(
+          bottom: BorderSide(
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
         leading: Builder(
           builder: (ctx) => IconButton(
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Icon(Icons.history_rounded),
-                if (controller.sessions.isNotEmpty)
-                  Positioned(
-                    right: -2,
-                    top: -2,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                      child: Text(
-                        '${controller.sessions.length > 9 ? "9+" : controller.sessions.length}',
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            tooltip: 'Chat History (ChatGPT-style)',
+            icon: const Icon(Icons.history_rounded, size: 22),
+            tooltip: 'Chat History',
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        title: InkWell(
+          onTap: () => _showModelSelectorBottomSheet(context, controller),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Text(
-                    controller.currentSessionTitle,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  controller.currentSessionTitle,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    letterSpacing: -0.2,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (controller.currentSession != null)
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.grey),
-                    tooltip: 'Rename Chat',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showRenameDialog(context, controller, controller.currentSession!),
+                Text(
+                  '${controller.selectedModel.modelName} • ${controller.tutorMode.shortTag}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                   ),
-                const SizedBox(width: 6),
-                const SizedBox(width: 6),
-                // Mode Selector Dropdown in AppBar
-                PopupMenuButton<TutorMode>(
-                  tooltip: 'Switch Pedagogical Mode',
-                  onSelected: (mode) {
-                    controller.setTutorMode(mode);
-                    CustomSnackbar.showInfo(context, 'Mode: ${mode.label}');
-                  },
-                  itemBuilder: (ctx) => TutorMode.values.map((mode) {
-                    final isSel = controller.tutorMode == mode;
-                    return PopupMenuItem(
-                      value: mode,
-                      child: Row(
-                        children: [
-                          if (isSel)
-                            const Icon(Icons.check_rounded, size: 16, color: AppColors.primary)
-                          else
-                            const SizedBox(width: 16),
-                          const SizedBox(width: 6),
-                          Text(mode.label, style: const TextStyle(fontSize: 13)),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          controller.tutorMode.shortTag,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const Icon(Icons.arrow_drop_down, size: 14, color: AppColors.primary),
-                      ],
-                    ),
-                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-            InkWell(
-              onTap: () => _showModelSelectorBottomSheet(context, controller),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    controller.selectedModel.iconEmoji,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    controller.selectedModel.modelName,
-                    style: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
-                  ),
-                  const Icon(Icons.arrow_drop_down, size: 14, color: AppColors.primary),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_comment_outlined, color: AppColors.primary),
+            icon: const Icon(Icons.add_rounded, size: 22),
             tooltip: 'Start New Chat',
             onPressed: () {
               controller.startNewChat();
               CustomSnackbar.showInfo(context, 'Started fresh chat session');
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.psychology_rounded, color: Color(0xFF6366F1)),
-            tooltip: 'Target Exam & AI Memory',
-            onPressed: () => StudentMemorySheet.show(context),
-          ),
           PopupMenuButton<String>(
             tooltip: 'Chat Options',
+            icon: const Icon(Icons.more_horiz_rounded, size: 20),
             onSelected: (val) {
-              if (val == 'clear') {
+              if (val == 'mode') {
+                _showTutorModeDialog(context, controller);
+              } else if (val == 'model') {
+                _showModelSelectorBottomSheet(context, controller);
+              } else if (val == 'rename') {
+                if (controller.currentSession != null) {
+                  _showRenameDialog(context, controller, controller.currentSession!);
+                }
+              } else if (val == 'clear') {
                 controller.clearChat();
                 CustomSnackbar.showInfo(context, 'Chat history cleared');
-              } else if (val == 'models') {
-                _showModelSelectorBottomSheet(context, controller);
               } else if (val == 'memory') {
                 StudentMemorySheet.show(context);
               } else if (val == 'export') {
                 _exportChatAsStudyNotes(context, controller);
+              } else if (val == 'vault') {
+                ApiKeyVaultSheet.show(context);
               }
             },
             itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'mode',
+                child: Row(
+                  children: [
+                    Icon(Icons.psychology_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Switch Tutor Mode'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'model',
+                child: Row(
+                  children: [
+                    Icon(Icons.tune_rounded, size: 18),
+                    SizedBox(width: 8),
+                    Text('Switch AI Model'),
+                  ],
+                ),
+              ),
+              if (controller.currentSession != null)
+                const PopupMenuItem(
+                  value: 'rename',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined, size: 18),
+                      SizedBox(width: 8),
+                      Text('Rename Chat'),
+                    ],
+                  ),
+                ),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'export',
                 child: Row(
@@ -681,19 +691,9 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                 value: 'memory',
                 child: Row(
                   children: [
-                    Icon(Icons.psychology_rounded, size: 18, color: Color(0xFF6366F1)),
+                    Icon(Icons.school_outlined, size: 18, color: Color(0xFF6366F1)),
                     SizedBox(width: 8),
                     Text('Target Exam & Weak Topics'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'models',
-                child: Row(
-                  children: [
-                    Icon(Icons.tune_rounded, size: 18),
-                    SizedBox(width: 8),
-                    Text('Switch AI Model'),
                   ],
                 ),
               ),
@@ -707,6 +707,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                   ],
                 ),
               ),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'clear',
                 child: Row(
@@ -719,6 +720,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
               ),
             ],
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Center(
@@ -762,6 +764,8 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                           ? _buildEmptyState(context, controller, isDark)
                           : ListView.builder(
                               controller: _scrollController,
+                              addAutomaticKeepAlives: true,
+                              addRepaintBoundaries: true,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               itemCount: controller.messages.length + (controller.isLoading ? 1 : 0),
                               itemBuilder: (context, index) {
@@ -769,7 +773,12 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                                   return _buildTypingIndicator(isDark);
                                 }
                                 final msg = controller.messages[index];
-                                return _buildMessageItem(context, msg, isDark, controller);
+                                return KeyedSubtree(
+                                  key: ValueKey(msg.id),
+                                  child: RepaintBoundary(
+                                    child: _buildMessageItem(context, msg, isDark, controller),
+                                  ),
+                                );
                               },
                             ),
                     ),
@@ -830,8 +839,8 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                 ),
               ],
 
-              // Mode Quick-Switcher Chips
-              _buildModeChipsBar(context, controller, isDark),
+              // Floating Masterclass Audio Player Bar
+              AiAudioPlayerBar(isDark: isDark),
 
               // Bottom Input Bar
               _buildInputBar(controller, isDark),
@@ -842,127 +851,83 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
     );
   }
 
-  Widget _buildModeChipsBar(BuildContext context, AiTutorController controller, bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: TutorMode.values.map((mode) {
-            final isSelected = controller.tutorMode == mode;
-            return Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
-                label: Text(
-                  mode.label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                  ),
-                ),
-                selected: isSelected,
-                selectedColor: AppColors.primary,
-                backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.grey[200],
-                onSelected: (val) {
-                  if (val) {
-                    controller.setTutorMode(mode);
-                    CustomSnackbar.showInfo(context, 'Switched to ${mode.label}');
-                  }
-                },
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
 
   Widget _buildEmptyState(BuildContext context, AiTutorController controller, bool isDark) {
+    final suggestions = [
+      'Explain a difficult concept simply',
+      'Solve a numerical step-by-step',
+      'Quiz me on high-yield formulas',
+      'Practice previous year questions',
+    ];
+
     return SingleChildScrollView(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.school_rounded, color: AppColors.primary, size: 48),
+              child: const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 36),
             ),
             const SizedBox(height: 16),
-            const Text(
-              '🎓 Master AI Study Mentor',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              'How can I help you study?',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : AppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Ask any conceptual doubt, solve complex LaTeX derivations, or snap handwritten numericals.',
+              'Ask a doubt, solve equations, or pick a prompt below',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
-                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                height: 1.4,
+                fontSize: 12.5,
+                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Try Asking:',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 22),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               alignment: WrapAlignment.center,
-              children: [
-                _buildPromptSuggestion('📐 Derive Newton\'s Second Law F=ma in LaTeX'),
-                _buildPromptSuggestion('💡 Explain Entropy like I am 12 (Feynman Hook)'),
-                _buildPromptSuggestion('🎯 What are the common exam traps in Bernoulli Theorem?'),
-                _buildPromptSuggestion('📊 Difference between Speed and Velocity with matrix table'),
-              ],
+              children: suggestions.map((prompt) {
+                return InkWell(
+                  onTap: () {
+                    _textController.text = prompt;
+                    _textController.selection = TextSelection.collapsed(offset: prompt.length);
+                    _inputFocusNode.requestFocus();
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Text(
+                      prompt,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPromptSuggestion(String prompt) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return InkWell(
-      onTap: () {
-        context.read<AiTutorController>().sendQuestion(prompt);
-        _scrollToBottom();
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark ? const Color(0xFF334155) : Colors.grey[300]!,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Text(
-          prompt,
-          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
         ),
       ),
     );
@@ -1009,33 +974,46 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
+          if (isUser) const SizedBox(width: 44),
           if (!isUser) ...[
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.auto_awesome, color: AppColors.primary, size: 18),
+              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 15),
             ),
             const SizedBox(width: 8),
           ],
           Flexible(
+            fit: isUser ? FlexFit.loose : FlexFit.tight,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isUser
-                    ? AppColors.primary
-                    : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                color: isUser ? AppColors.primary : AppColors.getSurface(isDark),
                 borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(isUser ? 16 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 16),
+                  topLeft: const Radius.circular(18),
+                  topRight: const Radius.circular(18),
+                  bottomLeft: Radius.circular(isUser ? 18 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 18),
+                ),
+                border: Border.all(
+                  color: isUser
+                      ? AppColors.primaryDark
+                      : AppColors.getBorder(isDark),
+                  width: 1.0,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -1075,25 +1053,31 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                             child: const Icon(Icons.mic_rounded, color: Colors.white, size: 16),
                           ),
                           const SizedBox(width: 8),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Spoken Voice Doubt',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Spoken Voice Doubt',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              Text(
-                                'Audio analyzed by AI Tutor',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 10.5,
+                                Text(
+                                  'Audio analyzed by AI Tutor',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10.5,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           if (!controller.isLoading)
                             IconButton(
@@ -1107,61 +1091,44 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                         ],
                       ),
                     ] else ...[
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              msg.content,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
-                            ),
-                          ),
-                          if (controller.canEditLastQuestion(msg.id))
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                              padding: EdgeInsets.zero,
-                              tooltip: 'Edit last question',
-                              onPressed: () {
-                                controller.beginEditingLastQuestion(msg.id);
-                                _textController.text = msg.content;
-                                _textController.selection = TextSelection.collapsed(offset: _textController.text.length);
-                                _inputFocusNode.requestFocus();
-                              },
-                              icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.white70),
-                            ),
-                          if (!controller.isLoading)
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                              padding: EdgeInsets.zero,
-                              tooltip: 'Delete question and response',
-                              onPressed: () => _confirmDeleteChatTurn(context, controller, msg),
-                              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.white70),
-                            ),
-                        ],
+                      _ExpandableUserQuestionContent(
+                        content: msg.content,
+                        canEdit: controller.canEditLastQuestion(msg.id),
+                        isLoading: controller.isLoading,
+                        onEdit: () {
+                          controller.beginEditingLastQuestion(msg.id);
+                          _textController.text = msg.content;
+                          _textController.selection = TextSelection.collapsed(offset: _textController.text.length);
+                          _inputFocusNode.requestFocus();
+                        },
+                        onDelete: () => _confirmDeleteChatTurn(context, controller, msg),
                       ),
                     ],
                   ]
                   else ...[
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.psychology_rounded, size: 12, color: Color(0xFF6366F1)),
-                              const SizedBox(width: 4),
-                              Text(
-                                controller.tutorMode.label,
-                                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF6366F1)),
-                              ),
-                            ],
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.psychology_rounded, size: 12, color: Color(0xFF6366F1)),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    controller.tutorMode.label,
+                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF6366F1)),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                         const Spacer(),
@@ -1216,6 +1183,10 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                         controller.sendQuestion('Give a practice question on this concept with step-by-step solution');
                         _scrollToBottom();
                       },
+                      onSummarize: () {
+                        controller.sendQuestion('Summarize this concept in 3 key bullet points with high-yield exam takeaways');
+                        _scrollToBottom();
+                      },
                       onRegenerate: controller.canRegenerateAnswer(msg.id)
                           ? () {
                               controller.regenerateLastAnswer(msg.id);
@@ -1223,32 +1194,35 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                             }
                           : null,
                     ),
+
+                    // Smart Follow-Up Chips (1-tap next-step learning)
                     if (msg.followUpQuestions.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      const Row(
-                        children: [
-                          Icon(Icons.explore_rounded, size: 14, color: AppColors.primary),
-                          SizedBox(width: 4),
-                          Text(
-                            'Suggested Follow-ups:',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 10),
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
-                        children: msg.followUpQuestions.map((q) {
+                        children: msg.followUpQuestions.map((chipText) {
                           return ActionChip(
-                            label: Text(q, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
-                            backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                            avatar: const Icon(Icons.arrow_forward_rounded, size: 12, color: AppColors.primary),
+                            label: Text(
+                              chipText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? const Color(0xFFC7D2FE) : const Color(0xFF3730A3),
+                              ),
+                            ),
+                            backgroundColor: isDark
+                                ? const Color(0xFF1E1B4B).withValues(alpha: 0.6)
+                                : const Color(0xFFEEF2FF),
                             side: BorderSide(
-                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                              color: isDark
+                                  ? const Color(0xFF4338CA).withValues(alpha: 0.4)
+                                  : const Color(0xFFC7D2FE),
                             ),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             onPressed: () {
-                              controller.sendQuestion(q);
+                              controller.sendQuestion(chipText);
                               _scrollToBottom();
                             },
                           );
@@ -1281,26 +1255,32 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
             child: const Icon(Icons.auto_awesome, color: AppColors.primary, size: 18),
           ),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Thinking in ${controller.tutorMode.shortTag} mode with ${controller.selectedModel.modelName}...',
-                  style: const TextStyle(fontSize: 12.5),
-                ),
-              ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.grey[100],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      'Thinking in ${controller.tutorMode.shortTag} mode with ${controller.selectedModel.modelName}...',
+                      style: const TextStyle(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -1360,7 +1340,143 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
         ),
       ),
     );
-  }}
+  }
+}
+
+/// Compact, Expandable User Question Bubble
+/// If the question is longer than 2 lines, it collapses with an ellipsis
+/// and shows a toggle arrow button to expand/collapse on demand.
+class _ExpandableUserQuestionContent extends StatefulWidget {
+  final String content;
+  final bool canEdit;
+  final bool isLoading;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  const _ExpandableUserQuestionContent({
+    required this.content,
+    required this.canEdit,
+    required this.isLoading,
+    this.onEdit,
+    this.onDelete,
+  });
+
+  @override
+  State<_ExpandableUserQuestionContent> createState() => _ExpandableUserQuestionContentState();
+}
+
+class _ExpandableUserQuestionContentState extends State<_ExpandableUserQuestionContent> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Measure whether the text exceeds 2 lines with the available bubble width
+        final span = TextSpan(
+          text: widget.content,
+          style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+        );
+        final tp = TextPainter(
+          text: span,
+          textDirection: Directionality.of(context),
+          maxLines: 2,
+        )..layout(maxWidth: constraints.maxWidth > 70 ? constraints.maxWidth - 65 : constraints.maxWidth);
+
+        final isLong = tp.didExceedMaxLines || widget.content.contains('\n') || widget.content.length > 90;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: InkWell(
+                    onTap: isLong ? () => setState(() => _isExpanded = !_isExpanded) : null,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Text(
+                      widget.content,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+                      maxLines: _isExpanded ? null : (isLong ? 2 : null),
+                      overflow: _isExpanded ? TextOverflow.visible : (isLong ? TextOverflow.ellipsis : TextOverflow.visible),
+                    ),
+                  ),
+                ),
+                if (isLong) ...[
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () => setState(() => _isExpanded = !_isExpanded),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+                if (widget.canEdit)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Edit last question',
+                    onPressed: widget.onEdit,
+                    icon: const Icon(Icons.edit_rounded, size: 15, color: Colors.white70),
+                  ),
+                if (!widget.isLoading)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Delete question and response',
+                    onPressed: widget.onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded, size: 15, color: Colors.white70),
+                  ),
+              ],
+            ),
+            if (isLong)
+              InkWell(
+                onTap: () => setState(() => _isExpanded = !_isExpanded),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _isExpanded ? 'Collapse' : 'Show full question',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        _isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                        size: 13,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
 
 
 /// --- ChatGPT-Style Chat History Sidebar / Drawer ---

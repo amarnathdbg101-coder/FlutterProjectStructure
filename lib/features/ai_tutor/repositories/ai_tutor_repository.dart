@@ -65,6 +65,41 @@ class AiTutorRepository {
       if (customKey.isNotEmpty) 'X-Gemini-API-Key': customKey,
     };
 
+    int attempts = 0;
+    while (true) {
+      attempts++;
+      try {
+        return await _sendDoubtRequest(
+          requestData: requestData,
+          headers: headers,
+          effectiveSessionId: effectiveSessionId,
+          onChunk: onChunk,
+          cancelToken: cancelToken,
+        );
+      } catch (e) {
+        final isColdStart = (e is DioException &&
+                (e.response?.statusCode == 502 ||
+                    e.response?.statusCode == 503 ||
+                    e.response?.statusCode == 504)) ||
+            (e.toString().contains('502') || e.toString().contains('503'));
+
+        if (isColdStart && attempts < 2 && (cancelToken == null || !cancelToken.isCancelled)) {
+          // Wait 4 seconds for Render server container to finish starting up, then retry
+          await Future.delayed(const Duration(milliseconds: 4000));
+          continue;
+        }
+        rethrow;
+      }
+    }
+  }
+
+  Future<ChatMessageModel> _sendDoubtRequest({
+    required Map<String, dynamic> requestData,
+    required Map<String, String> headers,
+    required String? effectiveSessionId,
+    required void Function(String chunk)? onChunk,
+    required CancelToken? cancelToken,
+  }) async {
     if (onChunk != null) {
       final content = StringBuffer();
       final followUpQuestions = <String>[];
@@ -144,27 +179,27 @@ class AiTutorRepository {
           return buildStreamMessage();
         }
       } else {
-      try {
-        final streamedResponse = await _dio.post<ResponseBody>(
-          ApiConstants.aiDoubtStream,
-          data: requestData,
-          options: Options(
-            headers: headers,
-            responseType: ResponseType.stream,
-            receiveTimeout: const Duration(seconds: 90),
-          ),
-          cancelToken: cancelToken,
-        );
-        final stream = streamedResponse.data?.stream;
-        if (stream == null) throw Exception('AI stream returned no response body');
-        await for (final line in stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
-          processSseLine(line);
+        try {
+          final streamedResponse = await _dio.post<ResponseBody>(
+            ApiConstants.aiDoubtStream,
+            data: requestData,
+            options: Options(
+              headers: headers,
+              responseType: ResponseType.stream,
+              receiveTimeout: const Duration(seconds: 90),
+            ),
+            cancelToken: cancelToken,
+          );
+          final stream = streamedResponse.data?.stream;
+          if (stream == null) throw Exception('AI stream returned no response body');
+          await for (final line in stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
+            processSseLine(line);
+          }
+          if (pendingSseText.isNotEmpty) processSseLine(pendingSseText);
+          return buildStreamMessage();
+        } on DioException catch (error) {
+          if (error.response?.statusCode != 404 && error.response?.statusCode != 405) rethrow;
         }
-        if (pendingSseText.isNotEmpty) processSseLine(pendingSseText);
-        return buildStreamMessage();
-      } on DioException catch (error) {
-        if (error.response?.statusCode != 404 && error.response?.statusCode != 405) rethrow;
-      }
       }
     }
 
@@ -198,7 +233,8 @@ class AiTutorRepository {
         sessionId: returnedSessionId,
       );
     }
-    throw Exception('Failed to get answer from AI Tutor');
+
+    throw Exception('Failed to get response from AI server');
   }
 
   // --- Multi-Session ChatGPT-Style History APIs ---

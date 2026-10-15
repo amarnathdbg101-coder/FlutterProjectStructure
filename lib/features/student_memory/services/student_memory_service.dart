@@ -112,6 +112,120 @@ class StudentMemoryService {
     return updated;
   }
 
+  /// Run an on-demand AI Cognitive Diagnosis
+  Future<StudentMemoryProfile> diagnoseProfile() async {
+    try {
+      final response = await _dio.post(ApiConstants.cognitiveDiagnose);
+      if (response.statusCode == 200 && response.data != null && response.data['data'] != null) {
+        // Diagnosis returned, now fetch the refreshed full profile
+        final refreshed = await _syncFromBackend();
+        if (refreshed != null) {
+          await _saveToLocal(refreshed);
+          return refreshed;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback: refresh profile
+    return getProfile(forceRemote: true);
+  }
+
+  /// Promote topic to Mastered
+  Future<StudentMemoryProfile> promoteTopic(String topic) async {
+    final trimmed = topic.trim();
+    if (trimmed.isEmpty) return getProfile();
+
+    try {
+      final response = await _dio.post(
+        ApiConstants.cognitivePromote,
+        data: {'topic': trimmed},
+      );
+      if (response.statusCode == 200 && response.data != null && response.data['data'] != null) {
+        final data = Map<String, dynamic>.from(response.data['data'] as Map);
+        final profile = StudentMemoryProfile.fromJson(data);
+        await _saveToLocal(profile);
+        return profile;
+      }
+    } catch (_) {}
+
+    // Local fallback
+    return moveToMastered(trimmed);
+  }
+
+  /// Demote topic to Weak / Needs Focus
+  Future<StudentMemoryProfile> demoteTopic(String topic) async {
+    final trimmed = topic.trim();
+    if (trimmed.isEmpty) return getProfile();
+
+    try {
+      final response = await _dio.post(
+        ApiConstants.cognitiveDemote,
+        data: {'topic': trimmed},
+      );
+      if (response.statusCode == 200 && response.data != null && response.data['data'] != null) {
+        final data = Map<String, dynamic>.from(response.data['data'] as Map);
+        final profile = StudentMemoryProfile.fromJson(data);
+        await _saveToLocal(profile);
+        return profile;
+      }
+    } catch (_) {}
+
+    // Local fallback
+    return moveToWeak(trimmed);
+  }
+
+  /// Delete topic from profile completely
+  Future<StudentMemoryProfile> deleteTopic(String topic) async {
+    final trimmed = topic.trim();
+    if (trimmed.isEmpty) return getProfile();
+
+    try {
+      final response = await _dio.delete(
+        ApiConstants.cognitiveTopics,
+        data: {'topic': trimmed},
+      );
+      if (response.statusCode == 200 && response.data != null && response.data['data'] != null) {
+        final data = Map<String, dynamic>.from(response.data['data'] as Map);
+        final profile = StudentMemoryProfile.fromJson(data);
+        await _saveToLocal(profile);
+        return profile;
+      }
+    } catch (_) {}
+
+    final current = await getProfile();
+    final target = trimmed.toLowerCase();
+    final updatedWeak = List<String>.from(current.weakTopics)..removeWhere((w) => w.trim().toLowerCase() == target);
+    final updatedStrong = List<String>.from(current.strongTopics)..removeWhere((s) => s.trim().toLowerCase() == target);
+    final updatedMastery = Map<String, int>.from(current.topicMastery)..remove(trimmed);
+
+    final updated = current.copyWith(
+      weakTopics: updatedWeak,
+      strongTopics: updatedStrong,
+      topicMastery: updatedMastery,
+      updatedAt: DateTime.now(),
+    );
+    await saveProfile(updated);
+    return updated;
+  }
+
+  /// Record activity
+  Future<void> recordActivity({
+    required String activityType,
+    String topic = '',
+    int durationMinutes = 2,
+  }) async {
+    try {
+      await _dio.post(
+        ApiConstants.cognitiveActivity,
+        data: {
+          'activity_type': activityType,
+          'topic': topic,
+          'duration_minutes': durationMinutes,
+        },
+      );
+    } catch (_) {}
+  }
+
   /// Add single or multiple weak topics
   Future<StudentMemoryProfile> addWeakTopic(String topic) async {
     final current = await getProfile();
@@ -124,7 +238,6 @@ class StudentMemoryService {
     if (items.isEmpty) return current;
 
     final updatedWeak = List<String>.from(current.weakTopics);
-    // Also remove from strongTopics if student marked it weak
     final updatedStrong = List<String>.from(current.strongTopics);
 
     for (final item in items) {
@@ -145,17 +258,7 @@ class StudentMemoryService {
 
   /// Remove weak topic
   Future<StudentMemoryProfile> removeWeakTopic(String topic) async {
-    final current = await getProfile();
-    final target = topic.trim().toLowerCase();
-    final updatedWeak = List<String>.from(current.weakTopics)
-      ..removeWhere((w) => w.trim().toLowerCase() == target);
-
-    final updated = current.copyWith(
-      weakTopics: updatedWeak,
-      updatedAt: DateTime.now(),
-    );
-    await saveProfile(updated);
-    return updated;
+    return deleteTopic(topic);
   }
 
   /// Add single or multiple strong topics
@@ -170,7 +273,6 @@ class StudentMemoryService {
     if (items.isEmpty) return current;
 
     final updatedStrong = List<String>.from(current.strongTopics);
-    // Also remove from weakTopics if student marked it mastered
     final updatedWeak = List<String>.from(current.weakTopics);
 
     for (final item in items) {
@@ -191,17 +293,7 @@ class StudentMemoryService {
 
   /// Remove strong topic
   Future<StudentMemoryProfile> removeStrongTopic(String topic) async {
-    final current = await getProfile();
-    final target = topic.trim().toLowerCase();
-    final updatedStrong = List<String>.from(current.strongTopics)
-      ..removeWhere((s) => s.trim().toLowerCase() == target);
-
-    final updated = current.copyWith(
-      strongTopics: updatedStrong,
-      updatedAt: DateTime.now(),
-    );
-    await saveProfile(updated);
-    return updated;
+    return deleteTopic(topic);
   }
 
   /// Move weak topic to mastered / strong

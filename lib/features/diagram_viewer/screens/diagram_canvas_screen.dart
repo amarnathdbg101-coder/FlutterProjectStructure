@@ -25,30 +25,27 @@ class DiagramCanvasScreen extends StatefulWidget {
 class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
   final Size _canvasSize = const Size(1400, 1000);
   final TextEditingController _topicController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   bool _isOutlineView = false;
-
-  final List<String> _suggestedTopics = const [
-    'Computer Architecture',
-    'Thermodynamics & Heat Transfer',
-    'Organic Chemistry Mechanisms',
-    'Cell Division & Genetics',
-    'Quantum Mechanics',
-    'Calculus & Integration',
-  ];
+  bool _isSearchOpen = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = context.read<DiagramController>();
-      final topic = widget.initialTopic ?? 'Thermodynamics & Heat Transfer';
-      _topicController.text = topic;
-      if (controller.diagram == null) {
-        controller.generateDiagram(
-          topic,
-          noteId: widget.noteId,
-          canvasSize: _canvasSize,
-        );
+      controller.loadSavedMindMaps();
+      // Only generate if an explicit initialTopic was passed from a specific note/screen
+      if (widget.initialTopic != null && widget.initialTopic!.trim().isNotEmpty) {
+        final topic = widget.initialTopic!.trim();
+        _topicController.text = topic;
+        if (controller.diagram == null || controller.diagram!.title.toLowerCase() != topic.toLowerCase()) {
+          controller.generateDiagram(
+            topic,
+            noteId: widget.noteId,
+            canvasSize: _canvasSize,
+          );
+        }
       }
     });
   }
@@ -56,6 +53,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
   @override
   void dispose() {
     _topicController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -65,6 +63,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
 
     DiagramNodeModel? hitNode;
     for (final node in diagram.nodes) {
+      if (!node.isVisible) continue;
       final rect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
       if (rect.contains(localPos)) {
         hitNode = node;
@@ -80,6 +79,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
 
   void _showNodeDetailsSheet(DiagramNodeModel node) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final controller = context.read<DiagramController>();
 
     Color nodeColor;
     try {
@@ -90,70 +90,298 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        minChildSize: 0.35,
+        maxChildSize: 0.88,
+        expand: false,
+        builder: (_, scrollController) => SafeArea(
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Header: Title & Badges
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
+                    margin: const EdgeInsets.only(top: 4),
                     width: 14,
                     height: 14,
                     decoration: BoxDecoration(color: nodeColor, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      node.label,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          node.label,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              '★' * node.importance + '☆' * (5 - node.importance),
+                              style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 13),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              node.importance >= 4 ? 'High Yield' : 'Standard Yield',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: node.importance >= 4 ? const Color(0xFF10B981) : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: nodeColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
+                  if (node.badge.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: nodeColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        node.badge.toUpperCase(),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: nodeColor),
+                      ),
                     ),
-                    child: Text(
-                      node.nodeType.toUpperCase(),
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: nodeColor),
-                    ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
+
+              // Description
               if (node.description.isNotEmpty) ...[
                 Text(
                   node.description,
                   style: TextStyle(
                     fontSize: 14,
                     color: isDark ? Colors.grey[300] : Colors.grey[700],
-                    height: 1.4,
+                    height: 1.45,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
               ],
+
+              // ⚡ Technical Metrics Grid (Big-O, Space, Stability, SI Units)
+              if (node.metrics.isNotEmpty) ...[
+                const Text(
+                  'Technical Specifications & Metrics:',
+                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: node.metrics.entries.map((entry) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${entry.key}: ',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                          ),
+                          Text(
+                            entry.value,
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: nodeColor),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              // 💻 Code Snippet / Algorithm Invariant Box
+              if (node.codeSnippet.isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF020617) : const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.code_rounded, size: 14, color: Colors.cyanAccent),
+                          const SizedBox(width: 6),
+                          Text(
+                            'ALGORITHM INVARIANT / PSEUDOCODE',
+                            style: TextStyle(
+                              color: Colors.cyanAccent.withValues(alpha: 0.9),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SelectableText(
+                          node.codeSnippet,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11.5,
+                            color: Colors.white,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // 💡 Key Takeaway Card
+              if (node.keyTakeaway.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.lightbulb_rounded, color: Color(0xFF6366F1), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'KEY ACADEMIC TAKEAWAY',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF6366F1),
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              node.keyTakeaway,
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: isDark ? Colors.grey[200] : Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ⚠️ Exam Trap Card
+              if (node.examTrap.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'COMMON EXAM TRAP & GOTCHAS',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFF59E0B),
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              node.examTrap,
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: isDark ? Colors.grey[200] : Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // LaTeX Formulas
               if (node.formulas.isNotEmpty) ...[
                 const Text(
-                  'Associated Formulas:',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.accent),
+                  'Associated Formulas & Theorems:',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.accent),
                 ),
                 const SizedBox(height: 6),
                 for (final formula in node.formulas)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Math.tex(
                         formula,
                         textStyle: TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           color: isDark ? Colors.white : Colors.black87,
                         ),
                       ),
@@ -161,8 +389,52 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                   ),
                 const SizedBox(height: 16),
               ],
+
+              // Action Buttons
               Row(
                 children: [
+                  if (node.isBranch) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: Icon(node.isCollapsed ? Icons.unfold_more : Icons.unfold_less, size: 18),
+                      label: Text(node.isCollapsed ? 'Unfold' : 'Fold'),
+                      onPressed: () {
+                        controller.toggleCollapse(node.id, canvasSize: _canvasSize);
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (!node.isRoot) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: controller.isExpandingNode
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.add_circle_outline_rounded, size: 18),
+                      label: Text(controller.isExpandingNode ? 'Expanding...' : 'Expand Concept (+)'),
+                      onPressed: controller.isExpandingNode
+                          ? null
+                          : () async {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Deepening concept "${node.label}" with AI...')),
+                              );
+                              final ok = await controller.expandNode(node, canvasSize: _canvasSize);
+                              if (ok && mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('"${node.label}" expanded with deep-dive sub-branches!')),
+                                );
+                              }
+                            },
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -172,11 +444,31 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       icon: const Icon(Icons.psychology, size: 18),
-                      label: const Text('Explain with AI Tutor'),
+                      label: const Text('AI Deep Dive'),
                       onPressed: () {
                         Navigator.pop(ctx);
+                        final promptBuilder = StringBuffer()
+                          ..writeln('Please provide a deep-dive academic tutorial on: "${node.label}"')
+                          ..writeln()
+                          ..writeln('Context: ${node.description}');
+                        if (node.metrics.isNotEmpty) {
+                          promptBuilder.writeln('Metrics: ${node.metrics.entries.map((e) => "${e.key}: ${e.value}").join(", ")}');
+                        }
+                        if (node.codeSnippet.isNotEmpty) {
+                          promptBuilder.writeln('Code / Logic:\n${node.codeSnippet}');
+                        }
+                        if (node.keyTakeaway.isNotEmpty) {
+                          promptBuilder.writeln('Key Principle: ${node.keyTakeaway}');
+                        }
+                        if (node.examTrap.isNotEmpty) {
+                          promptBuilder.writeln('Exam Trap: ${node.examTrap}');
+                        }
+                        if (node.formulas.isNotEmpty) {
+                          promptBuilder.writeln('Formulas: ${node.formulas.join(', ')}');
+                        }
+
                         context.push(AppRoutes.aiChat, extra: {
-                          'initialQuery': 'Deeply explain the concept: ${node.label}\n\nContext:\n${node.description}',
+                          'initialQuery': promptBuilder.toString(),
                           'noteTitle': node.label,
                         });
                       },
@@ -204,29 +496,11 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
               TextField(
                 controller: _topicController,
                 decoration: const InputDecoration(
-                  labelText: 'Topic or Concept',
-                  hintText: 'e.g. Organic Chemistry, Calculus, Cell Division',
+                  labelText: 'Topic or Academic Concept',
+                  hintText: 'Enter concept or topic to map...',
                   border: OutlineInputBorder(),
                 ),
                 autofocus: true,
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'High-Yield Topics:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: _suggestedTopics.map((t) {
-                  return ActionChip(
-                    label: Text(t, style: const TextStyle(fontSize: 11)),
-                    onPressed: () {
-                      _topicController.text = t;
-                    },
-                  );
-                }).toList(),
               ),
             ],
           ),
@@ -254,10 +528,307 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
     );
   }
 
+  void _showSaveMindMapDialog() {
+    final controller = context.read<DiagramController>();
+    if (controller.diagram == null) return;
+
+    final titleController = TextEditingController(text: controller.diagram!.title);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Save Mind Map to Cloud'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Save this concept canvas so you can review or expand it anytime from any device.',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                labelText: 'Mind Map Title',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.cloud_upload_rounded, size: 18),
+            label: const Text('Save'),
+            onPressed: () async {
+              final newTitle = titleController.text.trim();
+              Navigator.pop(ctx);
+              final success = await controller.saveCurrentMindMap(customTitle: newTitle);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? 'Mind Map "$newTitle" saved successfully!'
+                          : (controller.errorMessage ?? 'Failed to save mind map'),
+                    ),
+                    backgroundColor: success ? AppColors.success : AppColors.error,
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSavedMindMapsSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final controller = context.read<DiagramController>();
+    controller.loadSavedMindMaps();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Consumer<DiagramController>(
+        builder: (context, ctrl, _) {
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 10, bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.collections_bookmark_rounded, color: AppColors.primary, size: 24),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Saved Mind Maps Library',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded),
+                        tooltip: 'Refresh List',
+                        onPressed: () => ctrl.loadSavedMindMaps(),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ctrl.isLoadingSaved
+                      ? const Center(child: CircularProgressIndicator())
+                      : ctrl.savedMindMaps.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey[400]),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'No saved mind maps yet',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'Generate any concept map and click Save to store it here.',
+                                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: ctrl.savedMindMaps.length,
+                              separatorBuilder: (_, _) => const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final item = ctrl.savedMindMaps[index];
+                                return _buildSavedMapCard(item, isDark, ctrl, inSheet: true);
+                              },
+                            ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSavedMapCard(
+    SavedMindMapSummaryModel item,
+    bool isDark,
+    DiagramController ctrl, {
+    bool inSheet = false,
+  }) {
+    return Material(
+      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: item.isPinned
+                ? AppColors.primary.withValues(alpha: 0.6)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            width: item.isPinned ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          leading: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: (item.isPinned ? AppColors.primary : Colors.indigo).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              item.isPinned ? Icons.push_pin : Icons.hub_rounded,
+              color: item.isPinned ? AppColors.primary : Colors.indigo,
+              size: 19,
+            ),
+          ),
+          title: Text(
+            item.title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  item.domainType.toUpperCase(),
+                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue),
+                ),
+              ),
+              Text(
+                '${item.updatedAt.day}/${item.updatedAt.month}/${item.updatedAt.year}',
+                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(),
+                icon: Icon(
+                  item.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  size: 18,
+                  color: item.isPinned ? AppColors.primary : Colors.grey,
+                ),
+                tooltip: item.isPinned ? 'Unpin' : 'Pin to top',
+                onPressed: () => ctrl.togglePinSavedMindMap(item.id),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                tooltip: 'Delete Mind Map',
+                onPressed: () => _confirmDeleteSavedMap(item, ctrl),
+              ),
+            ],
+          ),
+          onTap: () {
+            if (inSheet) {
+              Navigator.pop(context);
+            }
+            ctrl.loadMindMapById(item.id, canvasSize: _canvasSize);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteSavedMap(SavedMindMapSummaryModel item, DiagramController ctrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Mind Map?'),
+        content: Text('Are you sure you want to permanently delete "${item.title}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await ctrl.deleteSavedMindMap(item.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success ? 'Mind Map deleted' : 'Failed to delete mind map'),
+                    backgroundColor: success ? AppColors.success : AppColors.error,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildOutlineView(DiagramModel diagram, bool isDark) {
     final root = diagram.nodes.firstWhere((n) => n.isRoot, orElse: () => diagram.nodes.first);
     final branches = diagram.nodes.where((n) => n.isBranch).toList();
-    final leaves = diagram.nodes.where((n) => n.isLeaf).toList();
 
     // Map parent to children
     final Map<String, List<DiagramNodeModel>> childrenMap = {};
@@ -336,7 +907,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
         const SizedBox(height: 8),
 
         // Branch Cards
-        for (final branch in branches.isNotEmpty ? branches : leaves) ...[
+        for (final branch in branches) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
@@ -356,9 +927,27 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                   shape: BoxShape.circle,
                 ),
               ),
-              title: Text(
-                branch.label,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      branch.label,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ),
+                  if (branch.badge.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        branch.badge,
+                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue),
+                      ),
+                    ),
+                ],
               ),
               subtitle: branch.description.isNotEmpty
                   ? Text(
@@ -400,14 +989,32 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                 for (final leaf in childrenMap[branch.id] ?? []) ...[
                   ListTile(
                     dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
                     leading: const Icon(Icons.arrow_right_rounded, color: AppColors.primary, size: 20),
-                    title: Text(leaf.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(leaf.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                        ),
+                        if (leaf.examTrap.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFF59E0B)),
+                          ),
+                        if (leaf.formulas.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.functions_rounded, size: 14, color: Color(0xFF06B6D4)),
+                          ),
+                      ],
+                    ),
                     subtitle: leaf.description.isNotEmpty
-                        ? Text(leaf.description, style: TextStyle(fontSize: 11.5, color: isDark ? Colors.grey[400] : Colors.grey[600]))
-                        : null,
-                    trailing: leaf.formulas.isNotEmpty
-                        ? const Icon(Icons.functions_rounded, size: 16, color: AppColors.accent)
+                        ? Text(
+                            leaf.description,
+                            style: TextStyle(fontSize: 11.5, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          )
                         : null,
                     onTap: () => _showNodeDetailsSheet(leaf),
                   ),
@@ -427,36 +1034,172 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
     final diagram = controller.diagram;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          diagram != null ? diagram.title : 'AI Mind Map & Concept Canvas',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          IconButton(
-            tooltip: _isOutlineView ? 'Switch to Vector Canvas' : 'Switch to Concept Tree Outline',
-            icon: Icon(_isOutlineView ? Icons.grain_rounded : Icons.list_alt_rounded),
-            onPressed: () {
-              setState(() {
-                _isOutlineView = !_isOutlineView;
-              });
-            },
-          ),
-          IconButton(
-            tooltip: 'New Mind Map Topic',
-            icon: const Icon(Icons.add_chart_rounded),
-            onPressed: _showNewDiagramDialog,
-          ),
-          if (!_isOutlineView)
-            IconButton(
-              tooltip: 'Reset Canvas Position',
-              icon: const Icon(Icons.center_focus_strong_rounded),
-              onPressed: () => controller.resetView(),
+      backgroundColor: AppColors.getBackground(isDark),
+      appBar: _isSearchOpen
+          ? AppBar(
+              backgroundColor: AppColors.getSurface(isDark),
+              elevation: 0,
+              shape: Border(
+                bottom: BorderSide(color: AppColors.getBorder(isDark), width: 1),
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back to Canvas',
+                onPressed: () {
+                  setState(() {
+                    _isSearchOpen = false;
+                    _searchController.clear();
+                    controller.setSearchQuery('');
+                  });
+                },
+              ),
+              title: TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: TextStyle(fontSize: 15, color: AppColors.getTextPrimary(isDark)),
+                decoration: InputDecoration(
+                  hintText: 'Search concepts, laws, traps...',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: AppColors.getTextSecondary(isDark)),
+                ),
+                onChanged: (val) => controller.setSearchQuery(val),
+              ),
+              actions: [
+                if (_searchController.text.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear, size: 20),
+                    tooltip: 'Clear query',
+                    onPressed: () {
+                      _searchController.clear();
+                      controller.setSearchQuery('');
+                    },
+                  ),
+              ],
+            )
+          : AppBar(
+              backgroundColor: AppColors.getSurface(isDark),
+              elevation: 0,
+              shape: Border(
+                bottom: BorderSide(color: AppColors.getBorder(isDark), width: 1),
+              ),
+              title: Text(
+                diagram != null ? diagram.title : 'Concept Mind Maps',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16.5,
+                  color: AppColors.getTextPrimary(isDark),
+                  letterSpacing: -0.3,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              actions: [
+                if (diagram != null)
+                  IconButton(
+                    tooltip: controller.isSaving
+                        ? 'Saving...'
+                        : (diagram.id != null ? 'Update Mind Map' : 'Save Mind Map'),
+                    icon: controller.isSaving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(diagram.id != null ? Icons.bookmark_added_rounded : Icons.bookmark_add_outlined),
+                    onPressed: controller.isSaving ? null : _showSaveMindMapDialog,
+                  ),
+                IconButton(
+                  tooltip: 'Saved Maps',
+                  icon: const Icon(Icons.collections_bookmark_rounded),
+                  onPressed: _showSavedMindMapsSheet,
+                ),
+                IconButton(
+                  tooltip: 'Search Concepts',
+                  icon: const Icon(Icons.search_rounded),
+                  onPressed: () {
+                    setState(() {
+                      _isSearchOpen = true;
+                    });
+                  },
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert_rounded),
+                  tooltip: 'More Actions',
+                  onSelected: (val) {
+                    switch (val) {
+                      case 'toggle_view':
+                        setState(() => _isOutlineView = !_isOutlineView);
+                        break;
+                      case 'collapse_all':
+                        controller.toggleCollapseAll(canvasSize: _canvasSize);
+                        break;
+                      case 'recenter':
+                        controller.resetView();
+                        break;
+                      case 'new_map':
+                        _showNewDiagramDialog();
+                        break;
+                      case 'close':
+                        controller.clearDiagram();
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'new_map',
+                      child: Row(
+                        children: [
+                          Icon(Icons.add_chart_rounded, size: 20, color: AppColors.primary),
+                          SizedBox(width: 10),
+                          Text('New Mind Map'),
+                        ],
+                      ),
+                    ),
+                    if (diagram != null) ...[
+                      PopupMenuItem(
+                        value: 'toggle_view',
+                        child: Row(
+                          children: [
+                            Icon(_isOutlineView ? Icons.grain_rounded : Icons.list_alt_rounded, size: 20),
+                            const SizedBox(width: 10),
+                            Text(_isOutlineView ? 'Vector Canvas View' : 'Outline Tree View'),
+                          ],
+                        ),
+                      ),
+                      if (!_isOutlineView) ...[
+                        const PopupMenuItem(
+                          value: 'collapse_all',
+                          child: Row(
+                            children: [
+                              Icon(Icons.account_tree_outlined, size: 20),
+                              SizedBox(width: 10),
+                              Text('Fold / Unfold All'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'recenter',
+                          child: Row(
+                            children: [
+                              Icon(Icons.center_focus_strong_rounded, size: 20),
+                              SizedBox(width: 10),
+                              Text('Recenter View'),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'close',
+                        child: Row(
+                          children: [
+                            Icon(Icons.close_rounded, size: 20, color: Colors.redAccent),
+                            SizedBox(width: 10),
+                            Text('Close Canvas'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
-        ],
-      ),
       floatingActionButton: (!_isOutlineView && diagram != null && !controller.isLoading)
           ? Column(
               mainAxisSize: MainAxisSize.min,
@@ -477,7 +1220,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                 const SizedBox(height: 8),
                 FloatingActionButton.small(
                   heroTag: 'recenter_fab',
-                  tooltip: 'Recenter',
+                  tooltip: 'Recenter Canvas',
                   onPressed: () => controller.resetView(),
                   child: const Icon(Icons.filter_center_focus),
                 ),
@@ -497,7 +1240,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Synthesizing conceptual hierarchy, branches, and vector layout',
+                    'Synthesizing conceptual hierarchy, key takeaways, and academic traps',
                     style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                 ],
@@ -542,29 +1285,127 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
               : diagram == null
                   ? Center(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.account_tree_outlined, size: 64, color: AppColors.primary),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'No Mind Map Loaded',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Generate a high-yield concept tree with formulas and visual branches',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              icon: const Icon(Icons.auto_awesome),
-                              label: const Text('Generate Mind Map'),
-                              onPressed: _showNewDiagramDialog,
-                            ),
-                          ],
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 520),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.account_tree_rounded, size: 52, color: AppColors.primary),
+                              ),
+                              const SizedBox(height: 18),
+                              const Text(
+                                'Concept Mind Maps',
+                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Visualize concepts, branches, and formulas interactively.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Topic Input Card
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    TextField(
+                                      controller: _topicController,
+                                      decoration: InputDecoration(
+                                        hintText: 'Enter concept or academic topic...',
+                                        prefixIcon: const Icon(Icons.psychology_rounded, color: AppColors.primary),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                                      ),
+                                      onSubmitted: (val) {
+                                        final topic = val.trim();
+                                        if (topic.isNotEmpty) {
+                                          controller.generateDiagram(topic, canvasSize: _canvasSize);
+                                        }
+                                      },
+                                    ),
+                                    const SizedBox(height: 14),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        icon: const Icon(Icons.auto_awesome, size: 20),
+                                        label: const Text('Generate Mind Map', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                        onPressed: () {
+                                          final topic = _topicController.text.trim();
+                                          if (topic.isNotEmpty) {
+                                            controller.generateDiagram(topic, canvasSize: _canvasSize);
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Please enter a concept or topic first')),
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+
+                              if (controller.savedMindMaps.isNotEmpty) ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'YOUR SAVED MIND MAPS:',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textSecondary,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _showSavedMindMapsSheet,
+                                      child: const Text('View All', style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                for (final savedItem in controller.savedMindMaps.take(3)) ...[
+                                  _buildSavedMapCard(savedItem, isDark, controller),
+                                  const SizedBox(height: 8),
+                                ],
+                                const SizedBox(height: 16),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                     )
@@ -588,6 +1429,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                                   diagram: diagram,
                                   isDark: isDark,
                                   selectedNode: controller.selectedNode,
+                                  searchQuery: controller.searchQuery,
                                 ),
                               ),
                             ),
