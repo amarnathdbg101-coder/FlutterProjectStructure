@@ -196,5 +196,74 @@ void main() {
       expect(b1Before.x, closeTo(b1InitialX + 50, 0.01));
       expect(l1Before.x, closeTo(l1InitialX + 50, 0.01));
     });
+
+    test('Nodes and sub-branches never overlap in Horizontal, Vertical, or Radial layouts', () {
+      final json = {
+        'title': 'Operating Systems Architecture',
+        'diagram_type': 'mindmap',
+        'nodes': [
+          {'id': 'root', 'label': 'OS Architecture', 'node_type': 'root'},
+          {'id': 'b1', 'label': 'Process Management', 'node_type': 'branch'},
+          {'id': 'b2', 'label': 'Memory Management', 'node_type': 'branch'},
+          {'id': 'b3', 'label': 'Storage & File Systems', 'node_type': 'branch'},
+          {'id': 'b4', 'label': 'Virtualization & Hypervisors', 'node_type': 'branch'},
+          // Branch 1 leaves & sub-leaves
+          {'id': 'l1_1', 'label': 'Scheduling Algorithms', 'node_type': 'leaf'},
+          {'id': 'l1_2', 'label': 'Deadlocks & Bank Algorithm', 'node_type': 'leaf'},
+          {'id': 's1_1', 'label': 'Round Robin Preemption', 'node_type': 'leaf'},
+          {'id': 's1_2', 'label': 'Multilevel Feedback Queue', 'node_type': 'leaf'},
+          {'id': 's1_3', 'label': 'Resource Allocation Graph', 'node_type': 'leaf'},
+          // Branch 2 leaves & sub-leaves
+          {'id': 'l2_1', 'label': 'Virtual Memory & Paging', 'node_type': 'leaf'},
+          {'id': 'l2_2', 'label': 'Page Replacement Policies', 'node_type': 'leaf'},
+          {'id': 's2_1', 'label': 'Translation Lookaside Buffer', 'node_type': 'leaf'},
+          {'id': 's2_2', 'label': 'LRU & Clock Algorithm', 'node_type': 'leaf'},
+        ],
+        'edges': [
+          {'from_id': 'root', 'to_id': 'b1'},
+          {'from_id': 'root', 'to_id': 'b2'},
+          {'from_id': 'root', 'to_id': 'b3'},
+          {'from_id': 'root', 'to_id': 'b4'},
+          {'from_id': 'b1', 'to_id': 'l1_1'},
+          {'from_id': 'b1', 'to_id': 'l1_2'},
+          {'from_id': 'l1_1', 'to_id': 's1_1'},
+          {'from_id': 'l1_1', 'to_id': 's1_2'},
+          {'from_id': 'l1_2', 'to_id': 's1_3'},
+          {'from_id': 'b2', 'to_id': 'l2_1'},
+          {'from_id': 'b2', 'to_id': 'l2_2'},
+          {'from_id': 'l2_1', 'to_id': 's2_1'},
+          {'from_id': 'l2_2', 'to_id': 's2_2'},
+        ],
+      };
+
+      final diagram = DiagramModel.fromJson(json);
+      const canvasSize = Size(1600, 1200);
+
+      void assertNoOverlaps(MindMapLayoutStyle style) {
+        diagram.calculateLayout(canvasSize, style: style);
+        final visible = diagram.nodes.where((n) => n.isVisible).toList();
+
+        for (int i = 0; i < visible.length; i++) {
+          final a = visible[i];
+          final rectA = Rect.fromLTWH(a.x, a.y, a.width, a.height);
+
+          for (int j = i + 1; j < visible.length; j++) {
+            final b = visible[j];
+            final rectB = Rect.fromLTWH(b.x, b.y, b.width, b.height);
+
+            final overlaps = rectA.overlaps(rectB);
+            expect(
+              overlaps,
+              isFalse,
+              reason: 'Overlap detected in style $style between "${a.label}" ($rectA) and "${b.label}" ($rectB)',
+            );
+          }
+        }
+      }
+
+      assertNoOverlaps(MindMapLayoutStyle.horizontal);
+      assertNoOverlaps(MindMapLayoutStyle.vertical);
+      assertNoOverlaps(MindMapLayoutStyle.radial);
+    });
   });
 }

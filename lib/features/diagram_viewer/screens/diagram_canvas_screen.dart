@@ -29,7 +29,8 @@ class DiagramCanvasScreen extends StatefulWidget {
 }
 
 class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
-  final Size _canvasSize = const Size(1400, 1000);
+  // Doubled canvas dimensions (2800 x 2000) to ensure zero cutoff even with deep multi-level sub-branches
+  final Size _canvasSize = const Size(2800, 2000);
   final TextEditingController _topicController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   bool _isOutlineView = false;
@@ -157,50 +158,94 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
       final boundary = _repaintBoundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
 
-      final image = await boundary.toImage(pixelRatio: 2.0);
+      final controller = context.read<DiagramController>();
+
+      // 1-Tap HD PNG Poster Export: pixelRatio 2.5 for crystal-clear wall-poster print quality
+      final image = await boundary.toImage(pixelRatio: 2.5);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
 
       final pngBytes = byteData.buffer.asUint8List();
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/mindmap_${DateTime.now().millisecondsSinceEpoch}.png');
+      final docsDir = await getApplicationDocumentsDirectory();
+      final safeTitle = (controller.diagram?.title ?? 'mindmap')
+          .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final fileName = 'StudySilo_HD_Poster_${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File('${docsDir.path}/$fileName');
       await file.writeAsBytes(pngBytes);
+
+      // Efficiently sync mind map state to PostgreSQL database
+      if (controller.diagram != null) {
+        await controller.saveCurrentMindMap();
+      }
 
       if (!mounted) return;
       HapticFeedback.selectionClick();
-      _showExportSuccessDialog(file.path, pngBytes);
+      _showExportSuccessDialog(file.path, pngBytes, isSyncedToDb: controller.diagram?.id != null);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to export image: $e')),
+        SnackBar(content: Text('Failed to export HD PNG poster: $e')),
       );
     }
   }
 
-  void _showExportSuccessDialog(String filePath, Uint8List imageBytes) {
+  void _showExportSuccessDialog(String filePath, Uint8List imageBytes, {bool isSyncedToDb = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Row(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
           children: [
-            Icon(Icons.check_circle_rounded, color: Color(0xFF10B981)),
-            SizedBox(width: 8),
-            Text('Mind Map Exported', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 24),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('1-Tap HD PNG Poster', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  Text('Exported @ pixelRatio: 2.5', style: TextStyle(fontSize: 11.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'High-resolution PNG image has been generated:',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text('📐 Ultra-HD 2.5x Resolution', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
+                const SizedBox(width: 6),
+                if (isSyncedToDb)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('💾 PostgreSQL Synced', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
             ClipRRect(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               child: Container(
                 constraints: const BoxConstraints(maxHeight: 180),
                 decoration: BoxDecoration(
@@ -209,21 +254,113 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                 child: Image.memory(imageBytes, fit: BoxFit.contain),
               ),
             ),
-            const SizedBox(height: 12),
-            SelectableText(
-              filePath,
-              style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppColors.primary),
+            const SizedBox(height: 10),
+            const Text(
+              'Saved to device storage for easy printing & sharing:',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                filePath,
+                style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppColors.primary),
+              ),
             ),
           ],
         ),
         actions: [
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Done'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _generateQuizFromMap(DiagramController controller) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('⚡ Compiling 4D Mind Map into Active Recall Quiz...')),
+    );
+    final quiz = await controller.generateQuizFromMindMap(numQuestions: 5);
+    if (quiz != null && mounted) {
+      final quizId = quiz['id']?.toString();
+      if (quizId != null && quizId.isNotEmpty && !quizId.startsWith('quiz_')) {
+        context.push(AppRoutes.quizTake, extra: quizId);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚡ Active Recall Quiz generated with ${quiz['questions']?.length ?? 5} questions!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to generate quiz. Please check network connection.'), backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  Future<void> _generateFlashcardsFromMap(DiagramController controller) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('🃏 Generating 3D Flip Flashcards from Mind Map...')),
+    );
+    final deck = await controller.generateFlashcardsFromMindMap(cardCount: 6);
+    if (deck != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deck "${deck['title']}" created with ${deck['total_cards'] ?? 6} active recall cards!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to generate flashcards.'), backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  Future<void> _exportMindMapPDFPoster(DiagramController controller) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('🖨️ Compiling High-Res Printable Wall Poster PDF...')),
+    );
+    final pdfBytes = await controller.exportMindMapPDF(paperSize: 'A4');
+    if (pdfBytes != null && pdfBytes.isNotEmpty && mounted) {
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final file = File('${dir.path}/StudySilo_MindMap_${DateTime.now().millisecondsSinceEpoch}.pdf');
+        await file.writeAsBytes(pdfBytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Printable Poster PDF exported (${(pdfBytes.length / 1024).toStringAsFixed(1)} KB)!'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('PDF compiled (${pdfBytes.length} bytes)!'), backgroundColor: AppColors.success),
+          );
+        }
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to export PDF poster.'), backgroundColor: AppColors.error),
+      );
+    }
   }
 
   void _showNodeDetailsSheet(DiagramNodeModel node) {
@@ -557,33 +694,31 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                     ),
                     const SizedBox(width: 8),
                   ],
-                  if (!node.isRoot) ...[
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: controller.isExpandingNode
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.add_circle_outline_rounded, size: 18),
-                      label: Text(controller.isExpandingNode ? 'Expanding...' : 'Expand Concept (+)'),
-                      onPressed: controller.isExpandingNode
-                          ? null
-                          : () async {
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Deepening concept "${node.label}" with AI...')),
-                              );
-                              final ok = await controller.expandNode(node, canvasSize: _canvasSize);
-                              if (ok && mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('"${node.label}" expanded with deep-dive sub-branches!')),
-                                );
-                              }
-                            },
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    const SizedBox(width: 8),
-                  ],
+                    icon: controller.isExpandingNode
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.account_tree_outlined, size: 18),
+                    label: Text(controller.isExpandingNode ? 'Expanding...' : '⚡ Expand Sub-Branch (+)'),
+                    onPressed: controller.isExpandingNode
+                        ? null
+                        : () async {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Attaching 3-4 deep-dive sub-topics to "${node.label}" with AI...')),
+                            );
+                            final ok = await controller.expandNode(node, canvasSize: _canvasSize);
+                            if (ok && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('"${node.label}" expanded with 3-4 sub-topics & saved to database!')),
+                              );
+                            }
+                          },
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -1231,6 +1366,17 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
               shape: Border(
                 bottom: BorderSide(color: AppColors.getBorder(isDark), width: 1),
               ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back',
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go(AppRoutes.dashboard);
+                  }
+                },
+              ),
               title: Text(
                 diagram != null ? diagram.title : 'Concept Mind Maps',
                 style: TextStyle(
@@ -1243,21 +1389,45 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
               actions: [
+                // ➕ Create New Mind Map (Direct 1-Tap Access in AppBar)
+                IconButton(
+                  tooltip: 'Create New Mind Map',
+                  icon: const Icon(Icons.add_chart_rounded, color: AppColors.primary),
+                  onPressed: _showNewDiagramDialog,
+                ),
+                // 🔄 Live Refresh Mind Map
+                IconButton(
+                  tooltip: 'Live Refresh',
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    controller.refreshDiagram(canvasSize: _canvasSize);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('⚡ Mind Map refreshed live!'),
+                        duration: Duration(milliseconds: 900),
+                      ),
+                    );
+                  },
+                ),
+                // 💾 Save / Update Mind Map in Database
                 if (diagram != null)
                   IconButton(
                     tooltip: controller.isSaving
                         ? 'Saving...'
-                        : (diagram.id != null ? 'Update Mind Map' : 'Save Mind Map'),
+                        : (diagram.id != null ? 'Update in Database' : 'Save Mind Map'),
                     icon: controller.isSaving
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                         : Icon(diagram.id != null ? Icons.bookmark_added_rounded : Icons.bookmark_add_outlined),
                     onPressed: controller.isSaving ? null : _showSaveMindMapDialog,
                   ),
+                // 📁 Saved Maps Library
                 IconButton(
-                  tooltip: 'Saved Maps',
+                  tooltip: 'Saved Maps Library',
                   icon: const Icon(Icons.collections_bookmark_rounded),
                   onPressed: _showSavedMindMapsSheet,
                 ),
+                // 🔍 Search Concepts
                 IconButton(
                   tooltip: 'Search Concepts',
                   icon: const Icon(Icons.search_rounded),
@@ -1267,6 +1437,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                     });
                   },
                 ),
+                // ⋮ More Tools & Actions
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert_rounded),
                   tooltip: 'More Actions',
@@ -1280,6 +1451,15 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                         break;
                       case 'recenter':
                         controller.resetView();
+                        break;
+                      case 'generate_quiz':
+                        _generateQuizFromMap(controller);
+                        break;
+                      case 'generate_flashcards':
+                        _generateFlashcardsFromMap(controller);
+                        break;
+                      case 'export_pdf':
+                        _exportMindMapPDFPoster(controller);
                         break;
                       case 'export_png':
                         _exportMindMapImage();
@@ -1304,6 +1484,37 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                       ),
                     ),
                     if (diagram != null) ...[
+                      const PopupMenuItem(
+                        value: 'generate_quiz',
+                        child: Row(
+                          children: [
+                            Icon(Icons.bolt_rounded, size: 20, color: Color(0xFFF59E0B)),
+                            SizedBox(width: 10),
+                            Text('⚡ Test Me on This Map (Quiz)'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'generate_flashcards',
+                        child: Row(
+                          children: [
+                            Icon(Icons.flip_to_back_rounded, size: 20, color: Color(0xFF6366F1)),
+                            SizedBox(width: 10),
+                            Text('🃏 3D Flip Flashcards'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'export_pdf',
+                        child: Row(
+                          children: [
+                            Icon(Icons.picture_as_pdf_rounded, size: 20, color: Color(0xFFEC4899)),
+                            SizedBox(width: 10),
+                            Text('🖨️ Printable Wall Poster (PDF)'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
                       PopupMenuItem(
                         value: 'toggle_view',
                         child: Row(
@@ -1341,7 +1552,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                             children: [
                               Icon(Icons.photo_camera_back_outlined, size: 20, color: AppColors.primary),
                               SizedBox(width: 10),
-                              Text('Export High-Res PNG'),
+                              Text('📸 1-Tap HD PNG Poster (2.5x)'),
                             ],
                           ),
                         ),
@@ -1582,8 +1793,8 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                                   transformationController: controller.transformController,
                                   constrained: false,
                                   panEnabled: controller.draggedNode == null,
-                                  boundaryMargin: const EdgeInsets.all(800),
-                                  minScale: 0.3,
+                                  boundaryMargin: const EdgeInsets.all(1200),
+                                  minScale: 0.15,
                                   maxScale: 3.5,
                                   child: GestureDetector(
                                     onTapUp: (details) => _handleCanvasTap(details, diagram),
@@ -1598,6 +1809,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                                         height: _canvasSize.height,
                                         color: isDark ? const Color(0xFF090D16) : const Color(0xFFF8FAFC),
                                         child: CustomPaint(
+                                          key: ValueKey('mindmap_canvas_${controller.version}'),
                                           size: _canvasSize,
                                           painter: MindMapPainter(
                                             diagram: diagram,
@@ -1605,6 +1817,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                                             selectedNode: controller.selectedNode,
                                             draggedNode: controller.draggedNode,
                                             searchQuery: controller.searchQuery,
+                                            repaintVersion: controller.version,
                                           ),
                                         ),
                                       ),
@@ -1800,12 +2013,25 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
             },
           ),
 
-          // Export Image
+          // Live Refresh Button
           IconButton(
             iconSize: 18,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            tooltip: 'Export PNG Image',
+            tooltip: 'Live Refresh Layout',
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              controller.refreshDiagram(canvasSize: _canvasSize);
+            },
+          ),
+
+          // 1-Tap HD PNG Poster Export (pixelRatio: 2.5)
+          IconButton(
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: '1-Tap HD PNG Poster (pixelRatio: 2.5)',
             icon: const Icon(Icons.camera_alt_outlined, color: AppColors.textSecondary),
             onPressed: _exportMindMapImage,
           ),

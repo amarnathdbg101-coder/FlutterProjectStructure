@@ -8,6 +8,7 @@ class MindMapPainter extends CustomPainter {
   final DiagramNodeModel? selectedNode;
   final DiagramNodeModel? draggedNode;
   final String searchQuery;
+  final int repaintVersion;
 
   MindMapPainter({
     required this.diagram,
@@ -15,6 +16,7 @@ class MindMapPainter extends CustomPainter {
     this.selectedNode,
     this.draggedNode,
     this.searchQuery = '',
+    this.repaintVersion = 0,
   });
 
   @override
@@ -128,23 +130,44 @@ class MindMapPainter extends CustomPainter {
         canvas.drawPath(path, edgePaint);
       }
 
-      // Edge label (if present and not dimmed)
+      // Edge label (if present and not dimmed, with padded rounded pill to avoid cutting through)
       if (edge.label.isNotEmpty && opacity > 0.3) {
         final mid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
-        final tp = TextPainter(
-          text: TextSpan(
-            text: edge.label,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w500,
-              color: (edge.isCrossLink ? const Color(0xFFA855F7) : (isDark ? Colors.grey[400] : Colors.grey[600]))!
-                  .withValues(alpha: opacity),
-              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        final distP1 = (mid - p1).distance;
+        final distP2 = (mid - p2).distance;
+
+        // Skip label if edge is too short (< 65px) to prevent overlapping node boxes
+        if (distP1 > 32.0 && distP2 > 32.0) {
+          final tp = TextPainter(
+            text: TextSpan(
+              text: edge.label,
+              style: TextStyle(
+                fontSize: 9.2,
+                fontWeight: FontWeight.w600,
+                color: (edge.isCrossLink ? const Color(0xFFA855F7) : (isDark ? Colors.grey[300] : Colors.grey[700]))!
+                    .withValues(alpha: opacity),
+              ),
             ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        tp.paint(canvas, Offset(mid.dx - tp.width / 2, mid.dy - tp.height / 2));
+            textDirection: TextDirection.ltr,
+          )..layout();
+
+          final labelRect = RRect.fromRectAndRadius(
+            Rect.fromLTWH(mid.dx - tp.width / 2 - 5, mid.dy - tp.height / 2 - 2, tp.width + 10, tp.height + 4),
+            const Radius.circular(5),
+          );
+          final labelBgPaint = Paint()
+            ..color = isDark ? const Color(0xFF0F172A) : Colors.white
+            ..style = PaintingStyle.fill;
+          canvas.drawRRect(labelRect, labelBgPaint);
+
+          final labelBorderPaint = Paint()
+            ..color = (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)).withValues(alpha: opacity)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.8;
+          canvas.drawRRect(labelRect, labelBorderPaint);
+
+          tp.paint(canvas, Offset(mid.dx - tp.width / 2, mid.dy - tp.height / 2));
+        }
       }
     }
   }
@@ -273,6 +296,7 @@ class MindMapPainter extends CustomPainter {
           : (isDark ? Colors.white : AppColors.textPrimary).withValues(alpha: nodeOpacity);
 
       final hasMetricPill = node.metrics.isNotEmpty && !node.isRoot;
+      final hasTopIndicators = (node.examTrap.isNotEmpty || node.formulas.isNotEmpty || node.codeSnippet.isNotEmpty);
 
       final textSpan = TextSpan(
         text: node.label,
@@ -284,20 +308,25 @@ class MindMapPainter extends CustomPainter {
         ),
       );
 
+      final double textPaddingRight = node.isRoot ? 20.0 : (hasTopIndicators ? 42.0 : 24.0);
+      final double textPaddingLeft = node.isRoot ? 20.0 : 20.0;
+      final double maxTextWidth = (node.width - textPaddingLeft - textPaddingRight).clamp(50.0, 300.0);
+
       final textPainter = TextPainter(
         text: textSpan,
         textDirection: TextDirection.ltr,
         maxLines: hasMetricPill ? 1 : 2,
         ellipsis: '...',
         textAlign: TextAlign.center,
-      )..layout(maxWidth: node.width - (node.isRoot ? 24 : 32));
+      )..layout(maxWidth: maxTextWidth);
 
+      // Separate vertical zones: Top indicator zone (0-11px), Text zone (11px to height-18px), Metric pill zone (height-16px to height-3px)
       final textOffsetY = hasMetricPill
-          ? node.y + (node.height - textPainter.height) / 2 - 6
+          ? node.y + 11.0 + ((node.height - 28.0) - textPainter.height) / 2
           : node.y + (node.height - textPainter.height) / 2;
 
       final textOffset = Offset(
-        node.x + (node.isRoot ? (node.width - textPainter.width) / 2 : 12 + (node.width - 24 - textPainter.width) / 2),
+        node.x + textPaddingLeft + (maxTextWidth - textPainter.width) / 2,
         textOffsetY,
       );
       textPainter.paint(canvas, textOffset);
@@ -334,10 +363,10 @@ class MindMapPainter extends CustomPainter {
 
         final pillRect = RRect.fromRectAndRadius(
           Rect.fromLTWH(
-            node.x + (node.width - metricPainter.width - 8) / 2,
-            node.y + node.height - 15,
-            metricPainter.width + 8,
-            11,
+            node.x + (node.width - metricPainter.width - 10) / 2,
+            node.y + node.height - 16,
+            metricPainter.width + 10,
+            12,
           ),
           const Radius.circular(3),
         );
@@ -347,7 +376,7 @@ class MindMapPainter extends CustomPainter {
         canvas.drawRRect(pillRect, pillPaint);
         metricPainter.paint(
           canvas,
-          Offset(node.x + (node.width - metricPainter.width) / 2, node.y + node.height - 15),
+          Offset(node.x + (node.width - metricPainter.width) / 2, node.y + node.height - 16),
         );
       }
 
@@ -418,11 +447,5 @@ class MindMapPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant MindMapPainter oldDelegate) {
-    return oldDelegate.diagram != diagram ||
-        oldDelegate.selectedNode != selectedNode ||
-        oldDelegate.draggedNode != draggedNode ||
-        oldDelegate.isDark != isDark ||
-        oldDelegate.searchQuery != searchQuery;
-  }
+  bool shouldRepaint(covariant MindMapPainter oldDelegate) => true;
 }

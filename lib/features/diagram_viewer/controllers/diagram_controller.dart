@@ -30,6 +30,18 @@ class DiagramController extends ChangeNotifier {
   MindMapLayoutStyle get layoutStyle => _diagram?.layoutStyle ?? MindMapLayoutStyle.radial;
   bool get isCustomPositions => _diagram?.isCustomPositions ?? false;
 
+  int _version = 0;
+  int get version => _version;
+
+  void refreshDiagram({Size canvasSize = const Size(2800, 2000)}) {
+    if (_diagram == null) return;
+    _diagram!.calculateLayout(canvasSize);
+    _diagram!.resolveCollisions();
+    resetView();
+    _version++;
+    notifyListeners();
+  }
+
   void selectNode(DiagramNodeModel? node) {
     _selectedNode = node;
     notifyListeners();
@@ -43,24 +55,31 @@ class DiagramController extends ChangeNotifier {
 
   void stopDraggingNode() {
     _draggedNode = null;
+    if (_diagram != null) {
+      _diagram!.resolveCollisions();
+    }
+    _version++;
     notifyListeners();
   }
 
   void moveNode(String nodeId, Offset delta, {bool moveSubtree = true}) {
     if (_diagram == null) return;
     _diagram!.moveNode(nodeId, delta, moveSubtree: moveSubtree);
+    _version++;
     notifyListeners();
   }
 
-  void changeLayoutStyle(MindMapLayoutStyle style, {Size canvasSize = const Size(1400, 1000)}) {
+  void changeLayoutStyle(MindMapLayoutStyle style, {Size canvasSize = const Size(2800, 2000)}) {
     if (_diagram == null) return;
     _diagram!.calculateLayout(canvasSize, style: style);
+    _version++;
     notifyListeners();
   }
 
-  void resetToAutoLayout({Size canvasSize = const Size(1400, 1000)}) {
+  void resetToAutoLayout({Size canvasSize = const Size(2800, 2000)}) {
     if (_diagram == null) return;
     _diagram!.calculateLayout(canvasSize);
+    _version++;
     notifyListeners();
   }
 
@@ -83,7 +102,7 @@ class DiagramController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleCollapse(String branchId, {Size canvasSize = const Size(1400, 1000)}) {
+  void toggleCollapse(String branchId, {Size canvasSize = const Size(2800, 2000)}) {
     if (_diagram == null) return;
     final branch = _diagram!.nodes.firstWhere(
       (n) => n.id == branchId,
@@ -92,11 +111,12 @@ class DiagramController extends ChangeNotifier {
     if (branch.id.isNotEmpty && branch.isBranch) {
       branch.isCollapsed = !branch.isCollapsed;
       _diagram!.calculateLayout(canvasSize);
+      _version++;
       notifyListeners();
     }
   }
 
-  void toggleCollapseAll({Size canvasSize = const Size(1400, 1000)}) {
+  void toggleCollapseAll({Size canvasSize = const Size(2800, 2000)}) {
     if (_diagram == null) return;
     final branches = _diagram!.nodes.where((n) => n.isBranch).toList();
     if (branches.isEmpty) return;
@@ -105,6 +125,7 @@ class DiagramController extends ChangeNotifier {
       b.isCollapsed = anyExpanded;
     }
     _diagram!.calculateLayout(canvasSize);
+    _version++;
     notifyListeners();
   }
 
@@ -128,7 +149,7 @@ class DiagramController extends ChangeNotifier {
     String topic, {
     String? noteId,
     String diagramType = 'mindmap',
-    Size canvasSize = const Size(1200, 900),
+    Size canvasSize = const Size(2800, 2000),
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -151,7 +172,7 @@ class DiagramController extends ChangeNotifier {
     }
   }
 
-  void setDiagramDirect(DiagramModel model, {Size canvasSize = const Size(1200, 900)}) {
+  void setDiagramDirect(DiagramModel model, {Size canvasSize = const Size(2800, 2000)}) {
     model.calculateLayout(canvasSize);
     _diagram = model;
     resetView();
@@ -165,18 +186,19 @@ class DiagramController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> expandNode(DiagramNodeModel node, {Size canvasSize = const Size(1400, 1000)}) async {
+  Future<bool> expandNode(DiagramNodeModel node, {Size canvasSize = const Size(2800, 2000)}) async {
     if (_diagram == null) return false;
     _isExpandingNode = true;
     notifyListeners();
 
     try {
       final res = await _repository.expandNode(
-        concept: _diagram!.title,
+        concept: _diagram!.concept,
         nodeId: node.id,
         nodeLabel: node.label,
         nodeDetails: node.description,
         branchColor: node.colorHex,
+        mindMapId: _diagram!.id,
       );
 
       final rawNodes = res['new_nodes'];
@@ -205,12 +227,19 @@ class DiagramController extends ChangeNotifier {
       }
 
       _diagram!.calculateLayout(canvasSize);
+
+      // Auto-persist expanded sub-branches in PostgreSQL database
+      if (_diagram!.id != null && _diagram!.id!.isNotEmpty) {
+        await saveCurrentMindMap();
+      }
+
       return true;
     } catch (e) {
       _errorMessage = e.toString();
       return false;
     } finally {
       _isExpandingNode = false;
+      _version++;
       notifyListeners();
     }
   }
@@ -323,6 +352,72 @@ class DiagramController extends ChangeNotifier {
       _errorMessage = e.toString();
       notifyListeners();
       return false;
+    }
+  }
+
+  // ⚡ 1-Tap Mind Map to Active Recall Quiz
+  Future<Map<String, dynamic>?> generateQuizFromMindMap({int numQuestions = 5, String difficulty = 'medium'}) async {
+    if (_diagram == null) return null;
+    try {
+      final nodesData = _diagram!.nodes.map((n) => n.toJson()).toList();
+      final quizData = await _repository.generateQuizFromMindMap(
+        concept: _diagram!.concept,
+        title: _diagram!.title,
+        archetype: _diagram!.archetype,
+        nodes: nodesData,
+        numQuestions: numQuestions,
+        difficulty: difficulty,
+      );
+      return quizData;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  // ⚡ 1-Tap Mind Map to 3D Flip Flashcards
+  Future<Map<String, dynamic>?> generateFlashcardsFromMindMap({int cardCount = 6, String difficulty = 'medium', bool saveDeck = true}) async {
+    if (_diagram == null) return null;
+    try {
+      final nodesData = _diagram!.nodes.map((n) => n.toJson()).toList();
+      final deckData = await _repository.generateFlashcardsFromMindMap(
+        concept: _diagram!.concept,
+        title: _diagram!.title,
+        archetype: _diagram!.archetype,
+        nodes: nodesData,
+        cardCount: cardCount,
+        difficulty: difficulty,
+        saveDeck: saveDeck,
+      );
+      return deckData;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  // 🖨️ Export High-Res Printable Vector PDF Poster
+  Future<List<int>?> exportMindMapPDF({String paperSize = 'A4'}) async {
+    if (_diagram == null) return null;
+    try {
+      final nodesData = _diagram!.nodes.map((n) => n.toJson()).toList();
+      final edgesData = _diagram!.edges.map((e) => e.toJson()).toList();
+      final pdfBytes = await _repository.exportMindMapPDF(
+        title: _diagram!.title,
+        concept: _diagram!.concept,
+        archetype: _diagram!.archetype,
+        summary: _diagram!.summary,
+        nodes: nodesData,
+        edges: edgesData,
+        paperSize: paperSize,
+      );
+      return pdfBytes;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
     }
   }
 }

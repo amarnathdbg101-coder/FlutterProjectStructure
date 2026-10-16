@@ -78,14 +78,20 @@ class DiagramNodeModel {
       type = 'branch';
     }
 
-    double w = 165;
+    final labelStr = json['label']?.toString() ?? (json['title']?.toString() ?? 'Concept');
+    final parsedMetrics = parseMetrics(json['metrics']);
+
+    double w = 170;
     double h = 54;
     if (type == 'root') {
-      w = 195;
-      h = 62;
+      w = math.max(195.0, math.min(260.0, labelStr.length * 9.0 + 36));
+      h = 64;
     } else if (type == 'branch') {
-      w = 175;
-      h = 56;
+      w = math.max(175.0, math.min(235.0, labelStr.length * 8.5 + 40));
+      h = 58;
+    } else {
+      w = math.max(165.0, math.min(225.0, labelStr.length * 8.2 + 36));
+      h = parsedMetrics.isNotEmpty ? 62 : 54;
     }
 
     int imp = 3;
@@ -185,6 +191,9 @@ enum MindMapLayoutStyle {
 class DiagramModel {
   String? id;
   final String title;
+  final String concept;
+  final String archetype;
+  final String summary;
   final String diagramType;
   final String domainType;
   bool isPinned;
@@ -196,6 +205,9 @@ class DiagramModel {
   DiagramModel({
     this.id,
     required this.title,
+    String? concept,
+    this.archetype = 'tree',
+    this.summary = '',
     this.diagramType = 'mindmap',
     this.domainType = 'general',
     this.isPinned = false,
@@ -203,11 +215,13 @@ class DiagramModel {
     this.isCustomPositions = false,
     required this.nodes,
     required this.edges,
-  });
+  }) : concept = concept ?? title;
 
   Map<String, dynamic> toJson() => {
     'title': title,
-    'concept': title,
+    'concept': concept,
+    'archetype': archetype,
+    'summary': summary,
     'diagram_type': diagramType,
     'domain_type': domainType,
     'nodes': nodes.map((n) => n.toJson()).toList(),
@@ -225,6 +239,12 @@ class DiagramModel {
         (payload['title'] as String? ??
             (json['concept'] as String? ??
                 (payload['concept'] as String? ?? 'Mind Map')));
+    final concept = json['concept'] as String? ??
+        (payload['concept'] as String? ?? title);
+    final archetype = json['archetype'] as String? ??
+        (payload['archetype'] as String? ?? 'tree');
+    final summary = json['summary'] as String? ??
+        (payload['summary'] as String? ?? '');
     final diagramType = json['diagram_type'] as String? ??
         (payload['diagram_type'] as String? ?? 'mindmap');
     final domainType = json['domain_type'] as String? ??
@@ -292,6 +312,9 @@ class DiagramModel {
     return DiagramModel(
       id: id,
       title: title,
+      concept: concept,
+      archetype: archetype,
+      summary: summary,
       diagramType: diagramType,
       domainType: domainType,
       isPinned: isPinned,
@@ -359,8 +382,12 @@ class DiagramModel {
       metrics: metrics,
       codeSnippet: treeNode['code_snippet']?.toString() ?? '',
       crossLinks: crossLinks,
-      width: depth == 0 ? 195 : (depth == 1 ? 175 : 160),
-      height: depth == 0 ? 62 : (depth == 1 ? 56 : 50),
+      width: depth == 0
+          ? math.max(195.0, math.min(260.0, label.length * 9.0 + 36))
+          : (depth == 1
+              ? math.max(175.0, math.min(235.0, label.length * 8.5 + 40))
+              : math.max(165.0, math.min(225.0, label.length * 8.2 + 36))),
+      height: depth == 0 ? 64 : (depth == 1 ? 58 : (metrics.isNotEmpty ? 62 : 54)),
     ));
 
     if (parentId != null && parentId.isNotEmpty) {
@@ -438,6 +465,9 @@ class DiagramModel {
         _calculateVerticalLayout(canvasSize, root, childrenMap);
         break;
     }
+
+    // Automated Collision-Avoidance & Non-Overlap Relaxation Pass
+    resolveCollisions();
   }
 
   void _calculateRadialLayout(
@@ -452,10 +482,16 @@ class DiagramModel {
 
     final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
     final branchCount = branches.length;
-    const branchRadius = 280.0;
+    if (branchCount == 0) {
+      _placeUnconnectedNodes(canvasSize, root);
+      return;
+    }
+
+    final branchRadius = math.max(280.0, 190.0 + branchCount * 18.0);
+    final sectorStep = (2 * math.pi) / branchCount;
 
     for (int i = 0; i < branchCount; i++) {
-      final angle = (2 * math.pi * i) / (branchCount > 0 ? branchCount : 1);
+      final angle = sectorStep * i;
       final bx = centerX + branchRadius * math.cos(angle);
       final by = centerY + branchRadius * math.sin(angle);
       final branch = branches[i];
@@ -470,31 +506,37 @@ class DiagramModel {
         final leaf = leaves[j];
         if (branch.isCollapsed) {
           leaf.isVisible = false;
-          leaf.x = bx;
-          leaf.y = by;
+          _hideSubtree(leaf.id, childrenMap);
           continue;
         }
 
         leaf.isVisible = true;
-        final leafRadius = (j % 2 == 0) ? 180.0 : 240.0;
+        final leafRadius = (j % 2 == 0) ? 190.0 : 255.0;
+        final maxSpread = math.min(1.1, sectorStep * 0.85);
         final spreadAngle = leafCount > 1
-            ? angle - 0.50 + (1.0 * j / (leafCount - 1))
+            ? angle - (maxSpread / 2) + (maxSpread * j / (leafCount - 1))
             : angle;
+
         final lx = bx + leafRadius * math.cos(spreadAngle);
         final ly = by + leafRadius * math.sin(spreadAngle);
         leaf.x = lx - (leaf.width / 2);
         leaf.y = ly - (leaf.height / 2);
 
         final subLeaves = childrenMap[leaf.id] ?? [];
-        for (int k = 0; k < subLeaves.length; k++) {
+        final subCount = subLeaves.length;
+        for (int k = 0; k < subCount; k++) {
           final subLeaf = subLeaves[k];
           if (!leaf.isVisible) {
             subLeaf.isVisible = false;
+            _hideSubtree(subLeaf.id, childrenMap);
             continue;
           }
           subLeaf.isVisible = true;
-          final subAngle = spreadAngle - 0.40 + (0.80 * k / (subLeaves.length > 1 ? subLeaves.length - 1 : 1));
-          const subDist = 145.0;
+          const subDist = 155.0;
+          final subSpread = math.min(0.7, sectorStep * 0.45);
+          final subAngle = subCount > 1
+              ? spreadAngle - (subSpread / 2) + (subSpread * k / (subCount - 1))
+              : spreadAngle;
           subLeaf.x = lx + subDist * math.cos(subAngle) - (subLeaf.width / 2);
           subLeaf.y = ly + subDist * math.sin(subAngle) - (subLeaf.height / 2);
         }
@@ -516,7 +558,10 @@ class DiagramModel {
 
     final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
     final branchCount = branches.length;
-    if (branchCount == 0) return;
+    if (branchCount == 0) {
+      _placeUnconnectedNodes(canvasSize, root);
+      return;
+    }
 
     final rightBranches = <DiagramNodeModel>[];
     final leftBranches = <DiagramNodeModel>[];
@@ -552,6 +597,63 @@ class DiagramModel {
     _placeUnconnectedNodes(canvasSize, root);
   }
 
+  double _calculateSubtreeHeight(DiagramNodeModel node, Map<String, List<DiagramNodeModel>> childrenMap) {
+    if (node.isCollapsed) {
+      return node.height + 28.0;
+    }
+    final children = (childrenMap[node.id] ?? []).where((c) => c.isVisible).toList();
+    if (children.isEmpty) {
+      return node.height + 28.0;
+    }
+    double total = 0.0;
+    for (final child in children) {
+      total += _calculateSubtreeHeight(child, childrenMap);
+    }
+    return math.max(node.height + 28.0, total);
+  }
+
+  void _layoutHorizontalSubtree({
+    required DiagramNodeModel parent,
+    required bool isRight,
+    required double parentX,
+    required double startY,
+    required Map<String, List<DiagramNodeModel>> childrenMap,
+  }) {
+    if (parent.isCollapsed) {
+      _hideSubtree(parent.id, childrenMap);
+      return;
+    }
+
+    final children = childrenMap[parent.id] ?? [];
+    if (children.isEmpty) return;
+
+    double currentY = startY;
+    const horizontalGap = 85.0;
+
+    for (final child in children) {
+      child.isVisible = true;
+      final childSubtreeHeight = _calculateSubtreeHeight(child, childrenMap);
+
+      final cx = isRight
+          ? (parentX + parent.width + horizontalGap)
+          : (parentX - horizontalGap - child.width);
+      final cy = currentY + (childSubtreeHeight / 2) - (child.height / 2);
+
+      child.x = cx;
+      child.y = cy;
+
+      _layoutHorizontalSubtree(
+        parent: child,
+        isRight: isRight,
+        parentX: cx,
+        startY: currentY,
+        childrenMap: childrenMap,
+      );
+
+      currentY += childSubtreeHeight;
+    }
+  }
+
   void _layoutHorizontalSide({
     required List<DiagramNodeModel> branches,
     required bool isRight,
@@ -563,58 +665,93 @@ class DiagramModel {
     final count = branches.length;
     if (count == 0) return;
 
-    const verticalSpacing = 160.0;
-    final totalHeight = (count - 1) * verticalSpacing;
+    double totalHeight = 0.0;
+    final List<double> subtreeHeights = [];
+    for (final b in branches) {
+      final h = _calculateSubtreeHeight(b, childrenMap);
+      subtreeHeights.add(h);
+      totalHeight += h;
+    }
+
     final startY = centerY - (totalHeight / 2);
+    double currentY = startY;
+    const branchGapX = 85.0;
 
     for (int i = 0; i < count; i++) {
       final branch = branches[i];
       branch.isVisible = true;
+      final bHeight = subtreeHeights[i];
+
       final bx = isRight
-          ? (centerX + 190.0)
-          : (centerX - 190.0 - branch.width);
-      final by = startY + (i * verticalSpacing) - (branch.height / 2);
+          ? (centerX + (root.width / 2) + branchGapX)
+          : (centerX - (root.width / 2) - branchGapX - branch.width);
+      final by = currentY + (bHeight / 2) - (branch.height / 2);
+
       branch.x = bx;
       branch.y = by;
 
-      final leaves = childrenMap[branch.id] ?? [];
-      final leafCount = leaves.length;
+      _layoutHorizontalSubtree(
+        parent: branch,
+        isRight: isRight,
+        parentX: bx,
+        startY: currentY,
+        childrenMap: childrenMap,
+      );
 
-      for (int j = 0; j < leafCount; j++) {
-        final leaf = leaves[j];
-        if (branch.isCollapsed) {
-          leaf.isVisible = false;
-          leaf.x = bx;
-          leaf.y = by;
-          continue;
-        }
-        leaf.isVisible = true;
+      currentY += bHeight;
+    }
+  }
 
-        const leafSpacing = 72.0;
-        final leavesTotalHeight = (leafCount - 1) * leafSpacing;
-        final leafStartY = by + (branch.height / 2) - (leavesTotalHeight / 2) - (leaf.height / 2);
+  double _calculateSubtreeWidth(DiagramNodeModel node, Map<String, List<DiagramNodeModel>> childrenMap) {
+    if (node.isCollapsed) {
+      return node.width + 36.0;
+    }
+    final children = (childrenMap[node.id] ?? []).where((c) => c.isVisible).toList();
+    if (children.isEmpty) {
+      return node.width + 36.0;
+    }
+    double total = 0.0;
+    for (final child in children) {
+      total += _calculateSubtreeWidth(child, childrenMap);
+    }
+    return math.max(node.width + 36.0, total);
+  }
 
-        final lx = isRight
-            ? (bx + branch.width + 90.0)
-            : (bx - 90.0 - leaf.width);
-        final ly = leafStartY + (j * leafSpacing);
-        leaf.x = lx;
-        leaf.y = ly;
+  void _layoutVerticalSubtree({
+    required DiagramNodeModel parent,
+    required double startX,
+    required double parentY,
+    required Map<String, List<DiagramNodeModel>> childrenMap,
+  }) {
+    if (parent.isCollapsed) {
+      _hideSubtree(parent.id, childrenMap);
+      return;
+    }
 
-        final subLeaves = childrenMap[leaf.id] ?? [];
-        for (int k = 0; k < subLeaves.length; k++) {
-          final subLeaf = subLeaves[k];
-          if (!leaf.isVisible) {
-            subLeaf.isVisible = false;
-            continue;
-          }
-          subLeaf.isVisible = true;
-          final sx = isRight ? (lx + leaf.width + 70.0) : (lx - 70.0 - subLeaf.width);
-          final sy = ly + ((k - (subLeaves.length - 1) / 2) * 60.0);
-          subLeaf.x = sx;
-          subLeaf.y = sy;
-        }
-      }
+    final children = childrenMap[parent.id] ?? [];
+    if (children.isEmpty) return;
+
+    double currentX = startX;
+    const verticalGap = 72.0;
+
+    for (final child in children) {
+      child.isVisible = true;
+      final childWidth = _calculateSubtreeWidth(child, childrenMap);
+
+      final cx = currentX + (childWidth / 2) - (child.width / 2);
+      final cy = parentY + parent.height + verticalGap;
+
+      child.x = cx;
+      child.y = cy;
+
+      _layoutVerticalSubtree(
+        parent: child,
+        startX: currentX,
+        parentY: cy,
+        childrenMap: childrenMap,
+      );
+
+      currentX += childWidth;
     }
   }
 
@@ -629,44 +766,119 @@ class DiagramModel {
 
     final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
     final branchCount = branches.length;
-    if (branchCount == 0) return;
+    if (branchCount == 0) {
+      _placeUnconnectedNodes(canvasSize, root);
+      return;
+    }
 
-    final branchStep = canvasSize.width / (branchCount + 1);
+    double totalWidth = 0.0;
+    final List<double> branchWidths = [];
+    for (final b in branches) {
+      final w = _calculateSubtreeWidth(b, childrenMap);
+      branchWidths.add(w);
+      totalWidth += w;
+    }
+
+    final startX = math.max(60.0, centerX - (totalWidth / 2));
+    double currentX = startX;
 
     for (int i = 0; i < branchCount; i++) {
       final branch = branches[i];
       branch.isVisible = true;
-      final bx = (i + 1) * branchStep - (branch.width / 2);
+      final bWidth = branchWidths[i];
+
+      final bx = currentX + (bWidth / 2) - (branch.width / 2);
       const by = 260.0;
+
       branch.x = bx;
       branch.y = by;
 
-      final leaves = childrenMap[branch.id] ?? [];
-      final leafCount = leaves.length;
+      _layoutVerticalSubtree(
+        parent: branch,
+        startX: currentX,
+        parentY: by,
+        childrenMap: childrenMap,
+      );
 
-      for (int j = 0; j < leafCount; j++) {
-        final leaf = leaves[j];
-        if (branch.isCollapsed) {
-          leaf.isVisible = false;
-          leaf.x = bx;
-          leaf.y = by;
-          continue;
-        }
-        leaf.isVisible = true;
-        leaf.x = bx;
-        leaf.y = by + 120.0 + (j * 78.0);
-
-        final subLeaves = childrenMap[leaf.id] ?? [];
-        for (int k = 0; k < subLeaves.length; k++) {
-          final subLeaf = subLeaves[k];
-          subLeaf.isVisible = true;
-          subLeaf.x = bx + (k % 2 == 0 ? 110.0 : -110.0);
-          subLeaf.y = leaf.y + 40.0;
-        }
-      }
+      currentX += bWidth;
     }
 
     _placeUnconnectedNodes(canvasSize, root);
+  }
+
+  void _hideSubtree(String parentId, Map<String, List<DiagramNodeModel>> childrenMap) {
+    final children = childrenMap[parentId] ?? [];
+    for (final child in children) {
+      child.isVisible = false;
+      _hideSubtree(child.id, childrenMap);
+    }
+  }
+
+  /// Automated AABB collision solver that guarantees zero overlapping node boxes
+  void resolveCollisions({
+    int maxIterations = 25,
+    double horizontalGap = 28.0,
+    double verticalGap = 20.0,
+  }) {
+    final visibleNodes = nodes.where((n) => n.isVisible).toList();
+    if (visibleNodes.length <= 1) return;
+
+    for (int iter = 0; iter < maxIterations; iter++) {
+      bool anyCollision = false;
+
+      for (int i = 0; i < visibleNodes.length; i++) {
+        final a = visibleNodes[i];
+        final rectA = Rect.fromLTWH(
+          a.x - (horizontalGap / 2),
+          a.y - (verticalGap / 2),
+          a.width + horizontalGap,
+          a.height + verticalGap,
+        );
+
+        for (int j = i + 1; j < visibleNodes.length; j++) {
+          final b = visibleNodes[j];
+          final rectB = Rect.fromLTWH(
+            b.x - (horizontalGap / 2),
+            b.y - (verticalGap / 2),
+            b.width + horizontalGap,
+            b.height + verticalGap,
+          );
+
+          if (rectA.overlaps(rectB)) {
+            anyCollision = true;
+
+            final overlapX = math.min(rectA.right, rectB.right) - math.max(rectA.left, rectB.left);
+            final overlapY = math.min(rectA.bottom, rectB.bottom) - math.max(rectA.top, rectB.top);
+
+            if (overlapX < overlapY) {
+              final push = (overlapX / 2.0) + 1.0;
+              final aIsLeft = rectA.center.dx < rectB.center.dx;
+              if (a.isRoot) {
+                b.x += (aIsLeft ? push * 2 : -push * 2);
+              } else if (b.isRoot) {
+                a.x += (aIsLeft ? -push * 2 : push * 2);
+              } else {
+                a.x += (aIsLeft ? -push : push);
+                b.x += (aIsLeft ? push : -push);
+              }
+            } else {
+              final push = (overlapY / 2.0) + 1.0;
+              final aIsTop = rectA.center.dy < rectB.center.dy;
+              if (a.isRoot) {
+                b.y += (aIsTop ? push * 2 : -push * 2);
+              } else if (b.isRoot) {
+                a.y += (aIsTop ? -push * 2 : push * 2);
+              } else {
+                a.y += (aIsTop ? -push : push);
+                b.y += (aIsTop ? push : -push);
+              }
+            }
+          }
+        }
+      }
+
+      if (!anyCollision) break;
+    }
   }
 
   void _placeUnconnectedNodes(Size canvasSize, DiagramNodeModel root) {

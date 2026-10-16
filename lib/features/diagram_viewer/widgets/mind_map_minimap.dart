@@ -248,10 +248,5 @@ class _MinimapPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _MinimapPainter oldDelegate) {
-    return oldDelegate.diagram != diagram ||
-        oldDelegate.transformMatrix != transformMatrix ||
-        oldDelegate.viewportSize != viewportSize ||
-        oldDelegate.isDark != isDark;
-  }
+  bool shouldRepaint(covariant _MinimapPainter oldDelegate) => true;
 }

@@ -35,6 +35,7 @@ class DiagramRepository {
     required String nodeLabel,
     String? nodeDetails,
     String? branchColor,
+    String? mindMapId,
   }) async {
     final response = await _dio.post(
       ApiConstants.aiDiagramExpand,
@@ -44,6 +45,7 @@ class DiagramRepository {
         'node_label': nodeLabel,
         'node_details': nodeDetails ?? '',
         'branch_color': branchColor ?? '#0EA5E9',
+        if (mindMapId != null && mindMapId.isNotEmpty) 'mind_map_id': mindMapId,
       },
     );
 
@@ -161,5 +163,91 @@ class DiagramRepository {
       return DiagramModel.fromJson(resData);
     }
     throw Exception(response.data['message'] ?? 'Failed to toggle pin');
+  }
+
+  // 7. ⚡ 1-Tap Mind Map to Quiz Conversion
+  Future<Map<String, dynamic>> generateQuizFromMindMap({
+    required String concept,
+    String? title,
+    String? archetype,
+    required List<Map<String, dynamic>> nodes,
+    int numQuestions = 5,
+    String difficulty = 'medium',
+  }) async {
+    final response = await _dio.post(
+      ApiConstants.aiDiagramGenerateQuiz,
+      data: {
+        'concept': concept,
+        if (title != null) 'title': title,
+        if (archetype != null) 'archetype': archetype,
+        'nodes': nodes,
+        'num_questions': numQuestions,
+        'difficulty': difficulty,
+      },
+    );
+
+    if (response.statusCode == 200 && response.data['data'] != null) {
+      return Map<String, dynamic>.from(response.data['data'] as Map);
+    }
+    throw Exception(response.data['message'] ?? 'Failed to generate quiz from mind map');
+  }
+
+  // 8. ⚡ 1-Tap Mind Map to 3D Flip Flashcards
+  Future<Map<String, dynamic>> generateFlashcardsFromMindMap({
+    required String concept,
+    String? title,
+    String? archetype,
+    required List<Map<String, dynamic>> nodes,
+    int cardCount = 6,
+    String difficulty = 'medium',
+    bool saveDeck = false,
+  }) async {
+    final response = await _dio.post(
+      ApiConstants.aiDiagramGenerateFlashcards,
+      data: {
+        'concept': concept,
+        if (title != null) 'title': title,
+        if (archetype != null) 'archetype': archetype,
+        'nodes': nodes,
+        'card_count': cardCount,
+        'difficulty': difficulty,
+        'save_deck': saveDeck,
+      },
+    );
+
+    if (response.statusCode == 200 && response.data['data'] != null) {
+      return Map<String, dynamic>.from(response.data['data'] as Map);
+    }
+    throw Exception(response.data['message'] ?? 'Failed to generate flashcards from mind map');
+  }
+
+  // 9. 🖨️ High-Res Vector PDF Wall Poster Exporter
+  Future<List<int>> exportMindMapPDF({
+    required String title,
+    required String concept,
+    String? archetype,
+    String? summary,
+    required List<Map<String, dynamic>> nodes,
+    required List<Map<String, dynamic>> edges,
+    String paperSize = 'A4',
+  }) async {
+    final response = await _dio.post<List<int>>(
+      ApiConstants.aiDiagramExportPdf,
+      data: {
+        'title': title,
+        'concept': concept,
+        if (archetype != null) 'archetype': archetype,
+        if (summary != null) 'summary': summary,
+        'nodes': nodes,
+        'edges': edges,
+        'paper_size': paperSize,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+
+    if (response.statusCode == 200 && response.data != null) {
+      return response.data!;
+    }
+    throw Exception('Failed to export mind map PDF poster');
   }
 }
