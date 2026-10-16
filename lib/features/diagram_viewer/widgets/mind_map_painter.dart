@@ -6,12 +6,14 @@ class MindMapPainter extends CustomPainter {
   final DiagramModel diagram;
   final bool isDark;
   final DiagramNodeModel? selectedNode;
+  final DiagramNodeModel? draggedNode;
   final String searchQuery;
 
   MindMapPainter({
     required this.diagram,
     required this.isDark,
     this.selectedNode,
+    this.draggedNode,
     this.searchQuery = '',
   });
 
@@ -50,11 +52,30 @@ class MindMapPainter extends CustomPainter {
       // Skip if either endpoint is hidden (collapsed branch)
       if (!from.isVisible || !to.isVisible) continue;
 
-      final p1 = Offset(from.x + from.width / 2, from.y + from.height / 2);
-      final p2 = Offset(to.x + to.width / 2, to.y + to.height / 2);
+      // Smart dynamic port docking: dock to perimeter boundaries
+      Offset p1;
+      Offset p2;
+      if (from.x + from.width <= to.x) {
+        p1 = Offset(from.x + from.width, from.y + from.height / 2);
+        p2 = Offset(to.x, to.y + to.height / 2);
+      } else if (to.x + to.width <= from.x) {
+        p1 = Offset(from.x, from.y + from.height / 2);
+        p2 = Offset(to.x + to.width, to.y + to.height / 2);
+      } else if (from.y + from.height <= to.y) {
+        p1 = Offset(from.x + from.width / 2, from.y + from.height);
+        p2 = Offset(to.x + to.width / 2, to.y);
+      } else if (to.y + to.height <= from.y) {
+        p1 = Offset(from.x + from.width / 2, from.y);
+        p2 = Offset(to.x + to.width / 2, to.y + to.height);
+      } else {
+        p1 = Offset(from.x + from.width / 2, from.y + from.height / 2);
+        p2 = Offset(to.x + to.width / 2, to.y + to.height / 2);
+      }
 
       final isSelected = selectedNode != null &&
           (selectedNode!.id == from.id || selectedNode!.id == to.id);
+      final isDragged = draggedNode != null &&
+          (draggedNode!.id == from.id || draggedNode!.id == to.id);
 
       Color edgeColor;
       try {
@@ -74,30 +95,34 @@ class MindMapPainter extends CustomPainter {
       }
 
       if (edge.isCrossLink) {
-        // Semantic cross-branch link (e.g. Lomuto worst case -> Sorted array)
+        // Semantic cross-branch link
         final crossPaint = Paint()
-          ..color = const Color(0xFFA855F7).withValues(alpha: (isSelected ? 1.0 : 0.65) * opacity)
-          ..strokeWidth = isSelected ? 2.5 : 1.6
+          ..color = const Color(0xFFA855F7).withValues(alpha: (isSelected || isDragged ? 1.0 : 0.65) * opacity)
+          ..strokeWidth = (isSelected || isDragged) ? 2.8 : 1.6
           ..style = PaintingStyle.stroke;
         _drawDashedCubicPath(canvas, p1, p2, crossPaint);
       } else {
-        final strokeColor = isSelected
-            ? AppColors.primary.withValues(alpha: opacity)
-            : (from.isRoot
-                ? edgeColor.withValues(alpha: (isDark ? 0.65 : 0.45) * opacity)
-                : (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)).withValues(alpha: opacity));
+        final strokeColor = isDragged
+            ? const Color(0xFF06B6D4)
+            : (isSelected
+                ? AppColors.primary.withValues(alpha: opacity)
+                : (from.isRoot
+                    ? edgeColor.withValues(alpha: (isDark ? 0.65 : 0.45) * opacity)
+                    : (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)).withValues(alpha: opacity)));
 
         final edgePaint = Paint()
           ..color = strokeColor
-          ..strokeWidth = isSelected ? 3.5 : (from.isRoot ? 2.5 : 1.8)
+          ..strokeWidth = isDragged ? 3.5 : (isSelected ? 3.0 : (from.isRoot ? 2.5 : 1.8))
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round;
 
         // Draw smooth Bezier curve between nodes
         final path = Path();
         path.moveTo(p1.dx, p1.dy);
-        final controlPoint1 = Offset(p1.dx + (p2.dx - p1.dx) * 0.5, p1.dy);
-        final controlPoint2 = Offset(p1.dx + (p2.dx - p1.dx) * 0.5, p2.dy);
+        final dx = p2.dx - p1.dx;
+        final dy = p2.dy - p1.dy;
+        final controlPoint1 = Offset(p1.dx + dx * 0.5, p1.dy + (dx.abs() > dy.abs() ? 0 : dy * 0.3));
+        final controlPoint2 = Offset(p1.dx + dx * 0.5, p2.dy - (dx.abs() > dy.abs() ? 0 : dy * 0.3));
         path.cubicTo(controlPoint1.dx, controlPoint1.dy, controlPoint2.dx, controlPoint2.dy, p2.dx, p2.dy);
 
         canvas.drawPath(path, edgePaint);
@@ -153,6 +178,7 @@ class MindMapPainter extends CustomPainter {
       final rect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(12));
       final isSelected = selectedNode?.id == node.id;
+      final isDragged = draggedNode?.id == node.id;
 
       // Check search match
       final isMatch = isSearching &&
@@ -170,8 +196,18 @@ class MindMapPainter extends CustomPainter {
         nodeColor = node.isRoot ? AppColors.primary : AppColors.secondary;
       }
 
-      // 1. Draw Selected or Search Match Halo Ring
-      if (isSelected || isMatch) {
+      // 1. Draw Dragged, Selected or Search Match Halo Ring
+      if (isDragged) {
+        final dragHaloPaint = Paint()
+          ..color = const Color(0xFF06B6D4).withValues(alpha: 0.8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5;
+        final dragHaloRRect = RRect.fromRectAndRadius(
+          rect.inflate(6),
+          const Radius.circular(18),
+        );
+        canvas.drawRRect(dragHaloRRect, dragHaloPaint);
+      } else if (isSelected || isMatch) {
         final haloPaint = Paint()
           ..color = (isMatch ? const Color(0xFFF59E0B) : AppColors.primary)
               .withValues(alpha: 0.35 * nodeOpacity)
@@ -184,13 +220,15 @@ class MindMapPainter extends CustomPainter {
         canvas.drawRRect(haloRRect, haloPaint);
       }
 
-      // 2. Draw Soft Shadow
+      // 2. Draw Soft Shadow (elevated when dragged)
       final shadowPaint = Paint()
-        ..color = isSelected
-            ? nodeColor.withValues(alpha: 0.45 * nodeOpacity)
-            : Colors.black.withValues(alpha: (isDark ? 0.35 : 0.08) * nodeOpacity)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, isSelected ? 14 : 6);
-      canvas.drawRRect(rrect.shift(const Offset(0, 3)), shadowPaint);
+        ..color = isDragged
+            ? const Color(0xFF06B6D4).withValues(alpha: 0.5)
+            : (isSelected
+                ? nodeColor.withValues(alpha: 0.45 * nodeOpacity)
+                : Colors.black.withValues(alpha: (isDark ? 0.35 : 0.08) * nodeOpacity))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, isDragged ? 24 : (isSelected ? 14 : 6));
+      canvas.drawRRect(rrect.shift(Offset(0, isDragged ? 8 : 3)), shadowPaint);
 
       // 3. Draw Node Card Background
       final fillPaint = Paint()..style = PaintingStyle.fill;
@@ -383,6 +421,7 @@ class MindMapPainter extends CustomPainter {
   bool shouldRepaint(covariant MindMapPainter oldDelegate) {
     return oldDelegate.diagram != diagram ||
         oldDelegate.selectedNode != selectedNode ||
+        oldDelegate.draggedNode != draggedNode ||
         oldDelegate.isDark != isDark ||
         oldDelegate.searchQuery != searchQuery;
   }

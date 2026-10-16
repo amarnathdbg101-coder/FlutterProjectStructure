@@ -1,11 +1,17 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/routes/app_router.dart';
 import '../controllers/diagram_controller.dart';
 import '../models/diagram_model.dart';
+import '../widgets/mind_map_minimap.dart';
 import '../widgets/mind_map_painter.dart';
 
 class DiagramCanvasScreen extends StatefulWidget {
@@ -57,12 +63,16 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
     super.dispose();
   }
 
+  final GlobalKey _repaintBoundaryKey = GlobalKey();
+  bool _showMinimap = true;
+  Offset? _lastDragPosition;
+
   void _handleCanvasTap(TapUpDetails details, DiagramModel diagram) {
     final localPos = details.localPosition;
     final controller = context.read<DiagramController>();
 
     DiagramNodeModel? hitNode;
-    for (final node in diagram.nodes) {
+    for (final node in diagram.nodes.reversed) {
       if (!node.isVisible) continue;
       final rect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
       if (rect.contains(localPos)) {
@@ -73,8 +83,147 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
 
     controller.selectNode(hitNode);
     if (hitNode != null) {
+      HapticFeedback.selectionClick();
       _showNodeDetailsSheet(hitNode);
     }
+  }
+
+  void _handleLongPressStart(LongPressStartDetails details, DiagramModel diagram) {
+    final localPos = details.localPosition;
+    final controller = context.read<DiagramController>();
+
+    DiagramNodeModel? hitNode;
+    for (final node in diagram.nodes.reversed) {
+      if (!node.isVisible) continue;
+      final rect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
+      if (rect.contains(localPos)) {
+        hitNode = node;
+        break;
+      }
+    }
+
+    if (hitNode != null) {
+      HapticFeedback.heavyImpact();
+      _lastDragPosition = localPos;
+      controller.startDraggingNode(hitNode);
+    }
+  }
+
+  void _handleLongPressMoveUpdate(LongPressMoveUpdateDetails details, DiagramModel diagram) {
+    final controller = context.read<DiagramController>();
+    final dragged = controller.draggedNode;
+    if (dragged == null || _lastDragPosition == null) return;
+
+    final currentPos = details.localPosition;
+    final delta = currentPos - _lastDragPosition!;
+    _lastDragPosition = currentPos;
+
+    controller.moveNode(dragged.id, delta, moveSubtree: true);
+  }
+
+  void _handleLongPressEnd(LongPressEndDetails details) {
+    final controller = context.read<DiagramController>();
+    if (controller.draggedNode != null) {
+      HapticFeedback.lightImpact();
+      controller.stopDraggingNode();
+      _lastDragPosition = null;
+    }
+  }
+
+  void _handleDoubleTapDown(TapDownDetails details, DiagramModel diagram, Size viewportSize) {
+    final localPos = details.localPosition;
+    final controller = context.read<DiagramController>();
+
+    DiagramNodeModel? hitNode;
+    for (final node in diagram.nodes.reversed) {
+      if (!node.isVisible) continue;
+      final rect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
+      if (rect.contains(localPos)) {
+        hitNode = node;
+        break;
+      }
+    }
+
+    HapticFeedback.mediumImpact();
+    if (hitNode != null) {
+      controller.focusNode(hitNode, viewportSize, zoomLevel: 1.25);
+    } else {
+      controller.resetView();
+    }
+  }
+
+  Future<void> _exportMindMapImage() async {
+    try {
+      final boundary = _repaintBoundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      final image = await boundary.toImage(pixelRatio: 2.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+
+      final pngBytes = byteData.buffer.asUint8List();
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/mindmap_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(pngBytes);
+
+      if (!mounted) return;
+      HapticFeedback.selectionClick();
+      _showExportSuccessDialog(file.path, pngBytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to export image: $e')),
+      );
+    }
+  }
+
+  void _showExportSuccessDialog(String filePath, Uint8List imageBytes) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: Color(0xFF10B981)),
+            SizedBox(width: 8),
+            Text('Mind Map Exported', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'High-resolution PNG image has been generated:',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                ),
+                child: Image.memory(imageBytes, fit: BoxFit.contain),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              filePath,
+              style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppColors.primary),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showNodeDetailsSheet(DiagramNodeModel node) {
@@ -1132,6 +1281,9 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                       case 'recenter':
                         controller.resetView();
                         break;
+                      case 'export_png':
+                        _exportMindMapImage();
+                        break;
                       case 'new_map':
                         _showNewDiagramDialog();
                         break;
@@ -1157,7 +1309,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                         child: Row(
                           children: [
                             Icon(_isOutlineView ? Icons.grain_rounded : Icons.list_alt_rounded, size: 20),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             Text(_isOutlineView ? 'Vector Canvas View' : 'Outline Tree View'),
                           ],
                         ),
@@ -1180,6 +1332,16 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                               Icon(Icons.center_focus_strong_rounded, size: 20),
                               SizedBox(width: 10),
                               Text('Recenter View'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'export_png',
+                          child: Row(
+                            children: [
+                              Icon(Icons.photo_camera_back_outlined, size: 20, color: AppColors.primary),
+                              SizedBox(width: 10),
+                              Text('Export High-Res PNG'),
                             ],
                           ),
                         ),
@@ -1411,30 +1573,244 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                     )
                   : _isOutlineView
                       ? _buildOutlineView(diagram, isDark)
-                      : InteractiveViewer(
-                          transformationController: controller.transformController,
-                          constrained: false,
-                          boundaryMargin: const EdgeInsets.all(800),
-                          minScale: 0.3,
-                          maxScale: 3.5,
-                          child: GestureDetector(
-                            onTapUp: (details) => _handleCanvasTap(details, diagram),
-                            child: Container(
-                              width: _canvasSize.width,
-                              height: _canvasSize.height,
-                              color: isDark ? const Color(0xFF090D16) : const Color(0xFFF8FAFC),
-                              child: CustomPaint(
-                                size: _canvasSize,
-                                painter: MindMapPainter(
-                                  diagram: diagram,
-                                  isDark: isDark,
-                                  selectedNode: controller.selectedNode,
-                                  searchQuery: controller.searchQuery,
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+                            return Stack(
+                              children: [
+                                InteractiveViewer(
+                                  transformationController: controller.transformController,
+                                  constrained: false,
+                                  panEnabled: controller.draggedNode == null,
+                                  boundaryMargin: const EdgeInsets.all(800),
+                                  minScale: 0.3,
+                                  maxScale: 3.5,
+                                  child: GestureDetector(
+                                    onTapUp: (details) => _handleCanvasTap(details, diagram),
+                                    onDoubleTapDown: (details) => _handleDoubleTapDown(details, diagram, viewportSize),
+                                    onLongPressStart: (details) => _handleLongPressStart(details, diagram),
+                                    onLongPressMoveUpdate: (details) => _handleLongPressMoveUpdate(details, diagram),
+                                    onLongPressEnd: _handleLongPressEnd,
+                                    child: RepaintBoundary(
+                                      key: _repaintBoundaryKey,
+                                      child: Container(
+                                        width: _canvasSize.width,
+                                        height: _canvasSize.height,
+                                        color: isDark ? const Color(0xFF090D16) : const Color(0xFFF8FAFC),
+                                        child: CustomPaint(
+                                          size: _canvasSize,
+                                          painter: MindMapPainter(
+                                            diagram: diagram,
+                                            isDark: isDark,
+                                            selectedNode: controller.selectedNode,
+                                            draggedNode: controller.draggedNode,
+                                            searchQuery: controller.searchQuery,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ),
+
+                                // Top Floating Canvas Toolbar
+                                Positioned(
+                                  top: 14,
+                                  left: 16,
+                                  right: 16,
+                                  child: Center(
+                                    child: _buildCanvasFloatingToolbar(isDark, controller),
+                                  ),
+                                ),
+
+                                // Bottom Right Minimap Navigator
+                                if (_showMinimap)
+                                  Positioned(
+                                    bottom: 16,
+                                    right: 76,
+                                    child: MindMapMinimap(
+                                      diagram: diagram,
+                                      transformController: controller.transformController,
+                                      canvasSize: _canvasSize,
+                                      viewportSize: viewportSize,
+                                      isDark: isDark,
+                                      onToggleCollapse: () {
+                                        setState(() => _showMinimap = false);
+                                      },
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
                         ),
+    );
+  }
+
+  Widget _buildCanvasFloatingToolbar(bool isDark, DiagramController controller) {
+    String layoutLabel = 'Radial';
+    IconData layoutIcon = Icons.bubble_chart_outlined;
+    if (controller.layoutStyle == MindMapLayoutStyle.horizontal) {
+      layoutLabel = 'Horizontal';
+      layoutIcon = Icons.account_tree_outlined;
+    } else if (controller.layoutStyle == MindMapLayoutStyle.vertical) {
+      layoutLabel = 'Vertical';
+      layoutIcon = Icons.schema_outlined;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF1E293B).withValues(alpha: 0.94)
+            : Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Layout Selector Menu
+          PopupMenuButton<MindMapLayoutStyle>(
+            tooltip: 'Change Layout',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            initialValue: controller.layoutStyle,
+            onSelected: (style) {
+              HapticFeedback.selectionClick();
+              controller.changeLayoutStyle(style, canvasSize: _canvasSize);
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: MindMapLayoutStyle.radial,
+                child: Row(
+                  children: [
+                    Icon(Icons.bubble_chart_rounded, size: 18, color: AppColors.primary),
+                    SizedBox(width: 10),
+                    Text('Radial Orbit (360°)', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: MindMapLayoutStyle.horizontal,
+                child: Row(
+                  children: [
+                    Icon(Icons.account_tree_rounded, size: 18, color: Color(0xFF0EA5E9)),
+                    SizedBox(width: 10),
+                    Text('Horizontal Mind Map (2-Sided)', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: MindMapLayoutStyle.vertical,
+                child: Row(
+                  children: [
+                    Icon(Icons.schema_rounded, size: 18, color: Color(0xFF10B981)),
+                    SizedBox(width: 10),
+                    Text('Vertical Hierarchy Tree', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(layoutIcon, size: 15, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    layoutLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
+                ],
+              ),
+            ),
+          ),
+
+          // Auto-Tidy / Reset Layout button (shown when nodes have been dragged)
+          if (controller.isCustomPositions) ...[
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                controller.resetToAutoLayout(canvasSize: _canvasSize);
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_fix_high_rounded, size: 14, color: Color(0xFFF59E0B)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Tidy Layout',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFF59E0B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(width: 4),
+          const SizedBox(
+            height: 18,
+            child: VerticalDivider(width: 12, thickness: 1),
+          ),
+
+          // Minimap Toggle
+          IconButton(
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: _showMinimap ? 'Hide Navigator' : 'Show Navigator',
+            icon: Icon(
+              _showMinimap ? Icons.map_rounded : Icons.map_outlined,
+              color: _showMinimap ? AppColors.primary : AppColors.textSecondary,
+            ),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              setState(() => _showMinimap = !_showMinimap);
+            },
+          ),
+
+          // Export Image
+          IconButton(
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: 'Export PNG Image',
+            icon: const Icon(Icons.camera_alt_outlined, color: AppColors.textSecondary),
+            onPressed: _exportMindMapImage,
+          ),
+        ],
+      ),
     );
   }
 }

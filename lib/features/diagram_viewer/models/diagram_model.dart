@@ -176,12 +176,20 @@ class DiagramEdgeModel {
   };
 }
 
+enum MindMapLayoutStyle {
+  radial,
+  horizontal,
+  vertical,
+}
+
 class DiagramModel {
   String? id;
   final String title;
   final String diagramType;
   final String domainType;
   bool isPinned;
+  MindMapLayoutStyle layoutStyle;
+  bool isCustomPositions;
   final List<DiagramNodeModel> nodes;
   final List<DiagramEdgeModel> edges;
 
@@ -191,6 +199,8 @@ class DiagramModel {
     this.diagramType = 'mindmap',
     this.domainType = 'general',
     this.isPinned = false,
+    this.layoutStyle = MindMapLayoutStyle.radial,
+    this.isCustomPositions = false,
     required this.nodes,
     required this.edges,
   });
@@ -392,18 +402,12 @@ class DiagramModel {
   }
 
   /// Computes geometric layout coordinates and handles branch folding/expansion
-  void calculateLayout(Size canvasSize) {
+  void calculateLayout(Size canvasSize, {MindMapLayoutStyle? style}) {
     if (nodes.isEmpty) return;
-
-    final centerX = canvasSize.width / 2;
-    final centerY = canvasSize.height / 2;
-
-    // Find root node
-    final rootIndex = nodes.indexWhere((n) => n.isRoot);
-    final root = rootIndex != -1 ? nodes[rootIndex] : nodes.first;
-    root.isVisible = true;
-    root.x = centerX - (root.width / 2);
-    root.y = centerY - (root.height / 2);
+    if (style != null) {
+      layoutStyle = style;
+    }
+    isCustomPositions = false;
 
     // Map parent -> children (excluding cross-links)
     final Map<String, List<DiagramNodeModel>> childrenMap = {};
@@ -413,12 +417,39 @@ class DiagramModel {
         (n) => n.id == edge.toId,
         orElse: () => DiagramNodeModel(id: '', label: ''),
       );
-      if (child.id.isNotEmpty && child.id != root.id) {
+      if (child.id.isNotEmpty) {
         childrenMap.putIfAbsent(edge.fromId, () => []).add(child);
       }
     }
 
-    // Direct children of root (Branches)
+    // Find root node
+    final rootIndex = nodes.indexWhere((n) => n.isRoot);
+    final root = rootIndex != -1 ? nodes[rootIndex] : nodes.first;
+    root.isVisible = true;
+
+    switch (layoutStyle) {
+      case MindMapLayoutStyle.radial:
+        _calculateRadialLayout(canvasSize, root, childrenMap);
+        break;
+      case MindMapLayoutStyle.horizontal:
+        _calculateHorizontalLayout(canvasSize, root, childrenMap);
+        break;
+      case MindMapLayoutStyle.vertical:
+        _calculateVerticalLayout(canvasSize, root, childrenMap);
+        break;
+    }
+  }
+
+  void _calculateRadialLayout(
+    Size canvasSize,
+    DiagramNodeModel root,
+    Map<String, List<DiagramNodeModel>> childrenMap,
+  ) {
+    final centerX = canvasSize.width / 2;
+    final centerY = canvasSize.height / 2;
+    root.x = centerX - (root.width / 2);
+    root.y = centerY - (root.height / 2);
+
     final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
     final branchCount = branches.length;
     const branchRadius = 280.0;
@@ -432,7 +463,6 @@ class DiagramModel {
       branch.x = bx - (branch.width / 2);
       branch.y = by - (branch.height / 2);
 
-      // Leaves of this branch
       final leaves = childrenMap[branch.id] ?? [];
       final leafCount = leaves.length;
 
@@ -446,7 +476,6 @@ class DiagramModel {
         }
 
         leaf.isVisible = true;
-        // Staggered radial distance to completely avoid visual overlap between neighbor leaves
         final leafRadius = (j % 2 == 0) ? 180.0 : 240.0;
         final spreadAngle = leafCount > 1
             ? angle - 0.50 + (1.0 * j / (leafCount - 1))
@@ -456,7 +485,6 @@ class DiagramModel {
         leaf.x = lx - (leaf.width / 2);
         leaf.y = ly - (leaf.height / 2);
 
-        // Sub-leaves (if this leaf was expanded with deep-dive micro-nodes)
         final subLeaves = childrenMap[leaf.id] ?? [];
         for (int k = 0; k < subLeaves.length; k++) {
           final subLeaf = subLeaves[k];
@@ -473,13 +501,220 @@ class DiagramModel {
       }
     }
 
-    // Safety fallback for any unconnected nodes: place in an outer orbit
+    _placeUnconnectedNodes(canvasSize, root);
+  }
+
+  void _calculateHorizontalLayout(
+    Size canvasSize,
+    DiagramNodeModel root,
+    Map<String, List<DiagramNodeModel>> childrenMap,
+  ) {
+    final centerX = canvasSize.width / 2;
+    final centerY = canvasSize.height / 2;
+    root.x = centerX - (root.width / 2);
+    root.y = centerY - (root.height / 2);
+
+    final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
+    final branchCount = branches.length;
+    if (branchCount == 0) return;
+
+    final rightBranches = <DiagramNodeModel>[];
+    final leftBranches = <DiagramNodeModel>[];
+
+    for (int i = 0; i < branchCount; i++) {
+      if (i % 2 == 0) {
+        rightBranches.add(branches[i]);
+      } else {
+        leftBranches.add(branches[i]);
+      }
+    }
+
+    // Layout Right-hand side branches
+    _layoutHorizontalSide(
+      branches: rightBranches,
+      isRight: true,
+      root: root,
+      centerX: centerX,
+      centerY: centerY,
+      childrenMap: childrenMap,
+    );
+
+    // Layout Left-hand side branches
+    _layoutHorizontalSide(
+      branches: leftBranches,
+      isRight: false,
+      root: root,
+      centerX: centerX,
+      centerY: centerY,
+      childrenMap: childrenMap,
+    );
+
+    _placeUnconnectedNodes(canvasSize, root);
+  }
+
+  void _layoutHorizontalSide({
+    required List<DiagramNodeModel> branches,
+    required bool isRight,
+    required DiagramNodeModel root,
+    required double centerX,
+    required double centerY,
+    required Map<String, List<DiagramNodeModel>> childrenMap,
+  }) {
+    final count = branches.length;
+    if (count == 0) return;
+
+    const verticalSpacing = 160.0;
+    final totalHeight = (count - 1) * verticalSpacing;
+    final startY = centerY - (totalHeight / 2);
+
+    for (int i = 0; i < count; i++) {
+      final branch = branches[i];
+      branch.isVisible = true;
+      final bx = isRight
+          ? (centerX + 190.0)
+          : (centerX - 190.0 - branch.width);
+      final by = startY + (i * verticalSpacing) - (branch.height / 2);
+      branch.x = bx;
+      branch.y = by;
+
+      final leaves = childrenMap[branch.id] ?? [];
+      final leafCount = leaves.length;
+
+      for (int j = 0; j < leafCount; j++) {
+        final leaf = leaves[j];
+        if (branch.isCollapsed) {
+          leaf.isVisible = false;
+          leaf.x = bx;
+          leaf.y = by;
+          continue;
+        }
+        leaf.isVisible = true;
+
+        const leafSpacing = 72.0;
+        final leavesTotalHeight = (leafCount - 1) * leafSpacing;
+        final leafStartY = by + (branch.height / 2) - (leavesTotalHeight / 2) - (leaf.height / 2);
+
+        final lx = isRight
+            ? (bx + branch.width + 90.0)
+            : (bx - 90.0 - leaf.width);
+        final ly = leafStartY + (j * leafSpacing);
+        leaf.x = lx;
+        leaf.y = ly;
+
+        final subLeaves = childrenMap[leaf.id] ?? [];
+        for (int k = 0; k < subLeaves.length; k++) {
+          final subLeaf = subLeaves[k];
+          if (!leaf.isVisible) {
+            subLeaf.isVisible = false;
+            continue;
+          }
+          subLeaf.isVisible = true;
+          final sx = isRight ? (lx + leaf.width + 70.0) : (lx - 70.0 - subLeaf.width);
+          final sy = ly + ((k - (subLeaves.length - 1) / 2) * 60.0);
+          subLeaf.x = sx;
+          subLeaf.y = sy;
+        }
+      }
+    }
+  }
+
+  void _calculateVerticalLayout(
+    Size canvasSize,
+    DiagramNodeModel root,
+    Map<String, List<DiagramNodeModel>> childrenMap,
+  ) {
+    final centerX = canvasSize.width / 2;
+    root.x = centerX - (root.width / 2);
+    root.y = 80;
+
+    final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
+    final branchCount = branches.length;
+    if (branchCount == 0) return;
+
+    final branchStep = canvasSize.width / (branchCount + 1);
+
+    for (int i = 0; i < branchCount; i++) {
+      final branch = branches[i];
+      branch.isVisible = true;
+      final bx = (i + 1) * branchStep - (branch.width / 2);
+      const by = 260.0;
+      branch.x = bx;
+      branch.y = by;
+
+      final leaves = childrenMap[branch.id] ?? [];
+      final leafCount = leaves.length;
+
+      for (int j = 0; j < leafCount; j++) {
+        final leaf = leaves[j];
+        if (branch.isCollapsed) {
+          leaf.isVisible = false;
+          leaf.x = bx;
+          leaf.y = by;
+          continue;
+        }
+        leaf.isVisible = true;
+        leaf.x = bx;
+        leaf.y = by + 120.0 + (j * 78.0);
+
+        final subLeaves = childrenMap[leaf.id] ?? [];
+        for (int k = 0; k < subLeaves.length; k++) {
+          final subLeaf = subLeaves[k];
+          subLeaf.isVisible = true;
+          subLeaf.x = bx + (k % 2 == 0 ? 110.0 : -110.0);
+          subLeaf.y = leaf.y + 40.0;
+        }
+      }
+    }
+
+    _placeUnconnectedNodes(canvasSize, root);
+  }
+
+  void _placeUnconnectedNodes(Size canvasSize, DiagramNodeModel root) {
+    final centerX = canvasSize.width / 2;
+    final centerY = canvasSize.height / 2;
     for (final node in nodes) {
       if (node.x == 0 && node.y == 0 && node.id != root.id) {
         final randomAngle = math.Random(node.id.hashCode).nextDouble() * 2 * math.pi;
         node.isVisible = true;
         node.x = centerX + 440 * math.cos(randomAngle);
         node.y = centerY + 440 * math.sin(randomAngle);
+      }
+    }
+  }
+
+  /// Translates a node and optionally its whole subtree by [delta]
+  void moveNode(String nodeId, Offset delta, {bool moveSubtree = true}) {
+    final target = nodes.firstWhere(
+      (n) => n.id == nodeId,
+      orElse: () => DiagramNodeModel(id: '', label: ''),
+    );
+    if (target.id.isEmpty) return;
+
+    isCustomPositions = true;
+    target.x += delta.dx;
+    target.y += delta.dy;
+
+    if (moveSubtree) {
+      final Set<String> visited = {nodeId};
+      final List<String> queue = [nodeId];
+
+      while (queue.isNotEmpty) {
+        final currentId = queue.removeAt(0);
+        for (final edge in edges) {
+          if (edge.isCrossLink) continue;
+          if (edge.fromId == currentId && !visited.contains(edge.toId)) {
+            visited.add(edge.toId);
+            queue.add(edge.toId);
+            final child = nodes.firstWhere(
+              (n) => n.id == edge.toId,
+              orElse: () => DiagramNodeModel(id: '', label: ''),
+            );
+            if (child.id.isNotEmpty) {
+              child.x += delta.dx;
+              child.y += delta.dy;
+            }
+          }
+        }
       }
     }
   }

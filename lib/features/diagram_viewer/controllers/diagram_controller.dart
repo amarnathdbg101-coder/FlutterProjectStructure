@@ -14,6 +14,7 @@ class DiagramController extends ChangeNotifier {
   DiagramNodeModel? _selectedNode;
   String _searchQuery = '';
   bool _isExpandingNode = false;
+  DiagramNodeModel? _draggedNode;
   List<SavedMindMapSummaryModel> _savedMindMaps = [];
 
   DiagramModel? get diagram => _diagram;
@@ -23,10 +24,56 @@ class DiagramController extends ChangeNotifier {
   bool get isExpandingNode => _isExpandingNode;
   String? get errorMessage => _errorMessage;
   DiagramNodeModel? get selectedNode => _selectedNode;
+  DiagramNodeModel? get draggedNode => _draggedNode;
   String get searchQuery => _searchQuery;
   List<SavedMindMapSummaryModel> get savedMindMaps => _savedMindMaps;
+  MindMapLayoutStyle get layoutStyle => _diagram?.layoutStyle ?? MindMapLayoutStyle.radial;
+  bool get isCustomPositions => _diagram?.isCustomPositions ?? false;
 
   void selectNode(DiagramNodeModel? node) {
+    _selectedNode = node;
+    notifyListeners();
+  }
+
+  void startDraggingNode(DiagramNodeModel node) {
+    _draggedNode = node;
+    _selectedNode = node;
+    notifyListeners();
+  }
+
+  void stopDraggingNode() {
+    _draggedNode = null;
+    notifyListeners();
+  }
+
+  void moveNode(String nodeId, Offset delta, {bool moveSubtree = true}) {
+    if (_diagram == null) return;
+    _diagram!.moveNode(nodeId, delta, moveSubtree: moveSubtree);
+    notifyListeners();
+  }
+
+  void changeLayoutStyle(MindMapLayoutStyle style, {Size canvasSize = const Size(1400, 1000)}) {
+    if (_diagram == null) return;
+    _diagram!.calculateLayout(canvasSize, style: style);
+    notifyListeners();
+  }
+
+  void resetToAutoLayout({Size canvasSize = const Size(1400, 1000)}) {
+    if (_diagram == null) return;
+    _diagram!.calculateLayout(canvasSize);
+    notifyListeners();
+  }
+
+  void focusNode(DiagramNodeModel node, Size viewportSize, {double zoomLevel = 1.15}) {
+    final nodeCenterX = node.x + (node.width / 2);
+    final nodeCenterY = node.y + (node.height / 2);
+    final targetX = (viewportSize.width / 2) - (nodeCenterX * zoomLevel);
+    final targetY = (viewportSize.height / 2) - (nodeCenterY * zoomLevel);
+
+    final matrix = Matrix4.translationValues(targetX, targetY, 0.0)
+      ..scaleByDouble(zoomLevel, zoomLevel, 1.0, 1.0);
+
+    transformController.value = matrix;
     _selectedNode = node;
     notifyListeners();
   }

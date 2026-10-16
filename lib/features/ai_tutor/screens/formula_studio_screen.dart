@@ -991,8 +991,14 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
     MathStyle mathStyle = MathStyle.display,
   }) {
     final effectiveColor = color ?? (isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7));
+    var cleanLatex = latex.trim();
+    if (cleanLatex.startsWith(r'$$') && cleanLatex.endsWith(r'$$') && cleanLatex.length >= 4) {
+      cleanLatex = cleanLatex.substring(2, cleanLatex.length - 2).trim();
+    } else if (cleanLatex.startsWith(r'$') && cleanLatex.endsWith(r'$') && cleanLatex.length >= 2) {
+      cleanLatex = cleanLatex.substring(1, cleanLatex.length - 1).trim();
+    }
     return Math.tex(
-      latex,
+      cleanLatex,
       mathStyle: mathStyle,
       textStyle: TextStyle(
         fontSize: fontSize,
@@ -1000,7 +1006,7 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
         fontWeight: FontWeight.w600,
       ),
       onErrorFallback: (_) => SelectableText(
-        latex,
+        cleanLatex,
         style: TextStyle(
           fontFamily: 'monospace',
           fontSize: fontSize * 0.85,

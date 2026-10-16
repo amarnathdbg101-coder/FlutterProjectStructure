@@ -24,67 +24,16 @@ class ExamPlannerService extends ChangeNotifier {
       }
     } catch (_) {}
 
-    // Default intelligent baseline roadmap
-    return ExamStudyPlanModel(
-      examName: 'JEE / GATE / University Finals 2026',
+    // Dynamic baseline roadmap generated from target goals
+    return createAdaptiveRoadmap(
+      examName: 'Target Academic Exam Goal',
       examDate: DateTime.now().add(const Duration(days: 90)),
       dailyHoursGoal: 4.0,
-      overview: '4-Phase Adaptive Spaced Repetition study roadmap combining core concept mastery, formula derivations, and PYQ mock drills.',
-      syllabusTopics: [
-        'Calculus & Differential Equations',
-        'Thermodynamics & Heat Engines',
-        'Data Structures & Algorithms',
-        'Electromagnetic Theory',
-      ],
-      schedule: [
-        StudyPlanTaskModel(
-          id: 'task-1',
-          dayNumber: 1,
-          title: 'Calculus: Fundamental Theorem & Integration by Parts',
-          focusArea: 'Theory & Derivation',
-          priority: 'high',
-          subtasks: [
-            'Derive Integration by Parts formula via LIATE rule',
-            'Solve 5 definite integral questions with boundary traps',
-            'Create active recall flashcard for continuous integrand condition',
-          ],
-        ),
-        StudyPlanTaskModel(
-          id: 'task-2',
-          dayNumber: 2,
-          title: 'Thermodynamics: Carnot Cycle & Second Law',
-          focusArea: 'Problem Solving',
-          priority: 'high',
-          subtasks: [
-            'Calculate Carnot thermal efficiency across reservoir temperatures',
-            'Solve 8 previous year exam numericals on entropy change',
-            'Review examiner trap on Celsius vs Kelvin temperature conversions',
-          ],
-        ),
-        StudyPlanTaskModel(
-          id: 'task-3',
-          dayNumber: 3,
-          title: 'Algorithms: Master Theorem & Recurrence Relations',
-          focusArea: 'PYQ Active Recall',
-          priority: 'medium',
-          subtasks: [
-            'Prove the 3 cases of the Master Theorem',
-            'Analyze Divide & Conquer time complexity for Strassen and Merge Sort',
-            'Take a 5-question adaptive speed quiz in StudySilo',
-          ],
-        ),
-        StudyPlanTaskModel(
-          id: 'task-4',
-          dayNumber: 4,
-          title: 'Electrodynamics: Maxwell Equations & Flux Continuity',
-          focusArea: 'Concept & Proof',
-          priority: 'high',
-          subtasks: [
-            'Derive displacement current term in Ampere-Maxwell law',
-            'Calculate electric and magnetic flux through closed boundary',
-            'Review common boundary misconceptions with Socratic AI Tutor',
-          ],
-        ),
+      topics: const [
+        'Core Subject Fundamentals',
+        'Formula & Theorem Derivations',
+        'Problem Solving & Numericals',
+        'PYQ Mocks & Active Recall',
       ],
     );
   }
@@ -147,7 +96,7 @@ class ExamPlannerService extends ChangeNotifier {
         }
       }
     } catch (_) {}
-    
+
     // Resilient Adaptive Fallback: Generates tailored multi-phase roadmap from user's syllabus
     final adaptivePlan = createAdaptiveRoadmap(
       examName: examName,

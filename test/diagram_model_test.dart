@@ -128,5 +128,73 @@ void main() {
       expect(root.x, closeTo(1400 / 2 - root.width / 2, 1.0));
       expect(root.y, closeTo(1000 / 2 - root.height / 2, 1.0));
     });
+
+    test('Horizontal and Vertical Layouts position nodes cleanly', () {
+      final json = {
+        'title': 'Binary Trees',
+        'diagram_type': 'mindmap',
+        'nodes': [
+          {'id': 'root', 'label': 'Binary Tree', 'node_type': 'root'},
+          {'id': 'b1', 'label': 'AVL Tree', 'node_type': 'branch'},
+          {'id': 'b2', 'label': 'Red Black Tree', 'node_type': 'branch'},
+          {'id': 'l1', 'label': 'Rotations', 'node_type': 'leaf'},
+        ],
+        'edges': [
+          {'from_id': 'root', 'to_id': 'b1'},
+          {'from_id': 'root', 'to_id': 'b2'},
+          {'from_id': 'b1', 'to_id': 'l1'},
+        ],
+      };
+
+      final diagram = DiagramModel.fromJson(json);
+      const canvasSize = Size(1400, 1000);
+
+      // Horizontal layout
+      diagram.calculateLayout(canvasSize, style: MindMapLayoutStyle.horizontal);
+      expect(diagram.layoutStyle, MindMapLayoutStyle.horizontal);
+      final b1 = diagram.nodes.firstWhere((n) => n.id == 'b1');
+      final b2 = diagram.nodes.firstWhere((n) => n.id == 'b2');
+      // In horizontal layout with 2 branches, one is right side and one is left side
+      expect(b1.x, isNot(equals(b2.x)));
+
+      // Vertical layout
+      diagram.calculateLayout(canvasSize, style: MindMapLayoutStyle.vertical);
+      expect(diagram.layoutStyle, MindMapLayoutStyle.vertical);
+      final root = diagram.nodes.firstWhere((n) => n.id == 'root');
+      expect(root.y, 80);
+      expect(b1.y, 260.0);
+    });
+
+    test('moveNode shifts node and subtree descendants properly', () {
+      final json = {
+        'title': 'Operating Systems',
+        'diagram_type': 'mindmap',
+        'nodes': [
+          {'id': 'root', 'label': 'OS Kernel', 'node_type': 'root'},
+          {'id': 'b1', 'label': 'Process Scheduling', 'node_type': 'branch'},
+          {'id': 'l1', 'label': 'Round Robin', 'node_type': 'leaf'},
+        ],
+        'edges': [
+          {'from_id': 'root', 'to_id': 'b1'},
+          {'from_id': 'b1', 'to_id': 'l1'},
+        ],
+      };
+
+      final diagram = DiagramModel.fromJson(json);
+      const canvasSize = Size(1400, 1000);
+      diagram.calculateLayout(canvasSize);
+
+      final b1Before = diagram.nodes.firstWhere((n) => n.id == 'b1');
+      final l1Before = diagram.nodes.firstWhere((n) => n.id == 'l1');
+      final double b1InitialX = b1Before.x;
+      final double l1InitialX = l1Before.x;
+
+      // Translate branch b1 by (+50, +30)
+      diagram.moveNode('b1', const Offset(50, 30), moveSubtree: true);
+
+      expect(diagram.isCustomPositions, isTrue);
+      expect(b1Before.x, closeTo(b1InitialX + 50, 0.01));
+      expect(l1Before.x, closeTo(l1InitialX + 50, 0.01));
+    });
   });
 }
