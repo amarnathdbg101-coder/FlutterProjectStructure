@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_project_structure/features/auth/controllers/auth_controller.dart';
-import 'package:flutter_project_structure/core/theme/theme_controller.dart';
-import 'package:flutter_project_structure/features/dashboard/presentation/screens/study_dashboard_screen.dart';
-import 'package:flutter_project_structure/features/dashboard/presentation/widgets/omni_search_bar.dart';
-import 'package:flutter_project_structure/features/dashboard/presentation/widgets/active_sprint_card.dart';
-import 'package:flutter_project_structure/features/dashboard/presentation/widgets/study_engine_card.dart';
+import 'package:studysilo/features/auth/controllers/auth_controller.dart';
+import 'package:studysilo/core/theme/theme_controller.dart';
+import 'package:studysilo/features/dashboard/presentation/screens/study_dashboard_screen.dart';
+import 'package:studysilo/features/dashboard/presentation/widgets/omni_search_bar.dart';
+import 'package:studysilo/features/dashboard/presentation/widgets/study_engine_card.dart';
 
 void main() {
   testWidgets('StudyDashboardScreen renders clean UI without overflow or errors', (tester) async {
@@ -36,11 +35,8 @@ void main() {
     expect(find.text('Academic Workspace'), findsOneWidget);
     expect(find.text('Ready to learn today?'), findsOneWidget);
 
-    // Verify Omni Search Bar is rendered
+// Verify Omni Search Bar is rendered
     expect(find.byType(OmniSearchBar), findsOneWidget);
-
-    // Verify Active Sprint Hero Card
-    expect(find.byType(ActiveSprintCard), findsOneWidget);
 
     // Verify AI Study Engines grid
     expect(find.text('AI STUDY ENGINES'), findsOneWidget);

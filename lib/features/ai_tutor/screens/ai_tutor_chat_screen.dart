@@ -640,8 +640,6 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                 StudentMemorySheet.show(context);
               } else if (val == 'export') {
                 _exportChatAsStudyNotes(context, controller);
-              } else if (val == 'vault') {
-                ApiKeyVaultSheet.show(context);
               }
             },
             itemBuilder: (ctx) => [
@@ -694,16 +692,6 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                     Icon(Icons.school_outlined, size: 18, color: Color(0xFF6366F1)),
                     SizedBox(width: 8),
                     Text('Target Exam & Weak Topics'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'vault',
-                child: Row(
-                  children: [
-                    Icon(Icons.key_rounded, size: 18, color: Color(0xFFF59E0B)),
-                    SizedBox(width: 8),
-                    Text('Gemini API Key Vault'),
                   ],
                 ),
               ),
@@ -1195,40 +1183,6 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                           : null,
                     ),
 
-                    // Smart Follow-Up Chips (1-tap next-step learning)
-                    if (msg.followUpQuestions.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: msg.followUpQuestions.map((chipText) {
-                          return ActionChip(
-                            avatar: const Icon(Icons.arrow_forward_rounded, size: 12, color: AppColors.primary),
-                            label: Text(
-                              chipText,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? const Color(0xFFC7D2FE) : const Color(0xFF3730A3),
-                              ),
-                            ),
-                            backgroundColor: isDark
-                                ? const Color(0xFF1E1B4B).withValues(alpha: 0.6)
-                                : const Color(0xFFEEF2FF),
-                            side: BorderSide(
-                              color: isDark
-                                  ? const Color(0xFF4338CA).withValues(alpha: 0.4)
-                                  : const Color(0xFFC7D2FE),
-                            ),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            onPressed: () {
-                              controller.sendQuestion(chipText);
-                              _scrollToBottom();
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
                   ],
                 ],
               ),

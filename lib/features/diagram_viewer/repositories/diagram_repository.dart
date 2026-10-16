@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/ai_language_service.dart';
 import '../models/diagram_model.dart';
 
 class DiagramRepository {
@@ -11,6 +12,7 @@ class DiagramRepository {
     String? noteId,
     String diagramType = 'mindmap',
   }) async {
+    final selectedLang = AILanguageService.getSelectedLanguageSync();
     final response = await _dio.post(
       ApiConstants.aiDiagram,
       data: {
@@ -19,6 +21,8 @@ class DiagramRepository {
         'depth': 3,
         if (noteId != null && noteId.isNotEmpty) 'note_id': noteId,
         'diagram_type': diagramType,
+        if (selectedLang.isNotEmpty) 'ai_language': selectedLang,
+        if (selectedLang.isNotEmpty) 'language': selectedLang,
       },
     );
 
@@ -36,7 +40,10 @@ class DiagramRepository {
     String? nodeDetails,
     String? branchColor,
     String? mindMapId,
+    int nodeDepth = 0,
+    bool force = false,
   }) async {
+    final selectedLang = AILanguageService.getSelectedLanguageSync();
     final response = await _dio.post(
       ApiConstants.aiDiagramExpand,
       data: {
@@ -45,7 +52,11 @@ class DiagramRepository {
         'node_label': nodeLabel,
         'node_details': nodeDetails ?? '',
         'branch_color': branchColor ?? '#0EA5E9',
+        'node_depth': nodeDepth,
+        'force': force,
         if (mindMapId != null && mindMapId.isNotEmpty) 'mind_map_id': mindMapId,
+        if (selectedLang.isNotEmpty) 'ai_language': selectedLang,
+        if (selectedLang.isNotEmpty) 'language': selectedLang,
       },
     );
 

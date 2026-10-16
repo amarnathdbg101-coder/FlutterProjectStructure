@@ -4,6 +4,7 @@ import '../services/api_key_vault_service.dart';
 import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/ai_language_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../models/chat_message_model.dart';
 import '../models/chat_session_model.dart';
@@ -40,6 +41,8 @@ class AiTutorRepository {
     await keyVault.loadVault();
     final customKey = keyVault.activeApiKey;
 
+    final selectedLang = AILanguageService.getSelectedLanguageSync();
+
     final requestData = <String, dynamic>{
       'question': question,
       'scope_type': scopeType,
@@ -60,9 +63,12 @@ class AiTutorRepository {
       if (academicLevel != null && academicLevel.isNotEmpty) 'academic_level': academicLevel,
       if (weakTopics != null && weakTopics.isNotEmpty) 'weak_topics': weakTopics,
       if (customKey.isNotEmpty) 'api_key': customKey,
+      if (selectedLang.isNotEmpty) 'ai_language': selectedLang,
+      if (selectedLang.isNotEmpty) 'language': selectedLang,
     };
     final headers = <String, String>{
       if (customKey.isNotEmpty) 'X-Gemini-API-Key': customKey,
+      if (selectedLang.isNotEmpty) 'X-AI-Language': selectedLang,
     };
 
     int attempts = 0;

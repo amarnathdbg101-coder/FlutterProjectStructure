@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart' as legacy_provider;
 import '../../../../core/routes/app_router.dart';
+import '../../../../core/services/ai_language_service.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/responsive.dart';
@@ -13,7 +14,6 @@ import '../../../student_memory/services/student_memory_service.dart';
 import '../../../student_memory/widgets/flashcard_deck_sheet.dart';
 import '../../../student_memory/widgets/exam_study_planner_sheet.dart';
 import '../../controllers/dashboard_controller.dart';
-import '../widgets/active_sprint_card.dart';
 import '../widgets/omni_search_bar.dart';
 import '../widgets/study_engine_card.dart';
 
@@ -103,7 +103,7 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
     }
   }
 
-  Widget _buildDrawer(BuildContext context) {
+  Widget _buildDrawer(BuildContext context, String currentAiLang) {
     final auth = context.watch<AuthController>();
     final themeController = context.watch<ThemeController>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -219,6 +219,7 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                     onTap: () => themeController.setThemeMode(ThemeMode.system),
                     isDark: isDark,
                   ),
+
                   const Divider(height: 24),
                   ListTile(
                     leading: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
@@ -286,10 +287,128 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
     );
   }
 
+  Widget _buildAILanguageSelector(BuildContext context, bool isDark, String currentLang) {
+    final selectedOption = AILanguageService.getOption(currentLang);
+
+    return PopupMenuButton<String>(
+      tooltip: 'AI Response Language',
+      elevation: 6,
+      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      position: PopupMenuPosition.under,
+      onSelected: (String langId) {
+        ref.read(aiLanguageProvider.notifier).selectLanguage(langId);
+        final opt = AILanguageService.getOption(langId);
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Text(opt.icon, style: const TextStyle(fontSize: 16)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    langId == 'auto'
+                        ? 'AI will now automatically match your prompt language!'
+                        : 'AI will now respond strictly in ${opt.name} across all features!',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2563EB),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      },
+      itemBuilder: (BuildContext context) {
+        return AILanguageService.supportedLanguages.map((opt) {
+          final isSelected = opt.id.toLowerCase() == currentLang.toLowerCase();
+          return PopupMenuItem<String>(
+            value: opt.id,
+            height: 48,
+            child: Row(
+              children: [
+                Text(opt.icon, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        opt.name,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                          color: isSelected
+                              ? const Color(0xFF2563EB)
+                              : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                        ),
+                      ),
+                      Text(
+                        opt.nativeName,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF2563EB)),
+              ],
+            ),
+          );
+        }).toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(selectedOption.icon, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 4),
+            Text(
+              selectedOption.name.split(' ').first,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 15,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final engines = ref.watch(studyEnginesProvider);
+    final currentAiLang = ref.watch(aiLanguageProvider);
     final auth = context.watch<AuthController>();
     final user = auth.currentUser;
     final userName = user?.name ?? TokenStorage.getUserName() ?? 'Scholar';
@@ -305,7 +424,7 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0B0F17) : const Color(0xFFF8FAFC),
-      drawer: _buildDrawer(context),
+      drawer: _buildDrawer(context, currentAiLang),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -388,46 +507,7 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.all(6),
-                                icon: Icon(
-                                  isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                                  size: 19,
-                                  color: isDark ? const Color(0xFFFACC15) : const Color(0xFF64748B),
-                                ),
-                                tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-                                onPressed: () {
-                                  final nextMode = isDark ? ThemeMode.light : ThemeMode.dark;
-                                  context.read<ThemeController>().setThemeMode(nextMode);
-                                },
-                              ),
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.local_fire_department, size: 15, color: Color(0xFFEA580C)),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      '$streakDays Day${streakDays > 1 ? "s" : ""}',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              _buildAILanguageSelector(context, isDark, currentAiLang),
                             ],
                           ),
                         ],
@@ -479,24 +559,6 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                     ),
                   ),
 
-                  // 3. Active Sprint Hero Card (Direct Resume)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: ActiveSprintCard(
-                        trackName: activeSubject,
-                        activeTopic: activeTopic,
-                        progressPercent: activeProgress,
-                        isDark: isDark,
-                        onResume: () {
-                          context.push(AppRoutes.aiChat, extra: {
-                            'initialQuery': 'Resume deep study on $activeTopic ($activeSubject)',
-                            'noteTitle': activeTopic,
-                          });
-                        },
-                      ),
-                    ),
-                  ),
 
                   // 4. Modules Section Title
                   SliverToBoxAdapter(
@@ -505,15 +567,20 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'AI STUDY ENGINES',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                              letterSpacing: 0.8,
+                          Expanded(
+                            child: Text(
+                              'AI STUDY ENGINES',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                letterSpacing: 0.8,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Text(
                             '${engines.length} Modules',
                             style: TextStyle(
@@ -535,7 +602,9 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                         crossAxisCount: 2,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        childAspectRatio: Responsive.isMobile(context) ? 1.20 : 1.35,
+                        childAspectRatio: Responsive.isMobile(context)
+                            ? (MediaQuery.of(context).textScaler.scale(1) > 1.05 ? 1.08 : 1.18)
+                            : 1.35,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {

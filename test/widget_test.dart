@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/main.dart';
-import 'package:flutter_project_structure/features/ai_tutor/widgets/formatted_ai_text.dart';
-import 'package:flutter_project_structure/features/diagram_viewer/widgets/interactive_visual_diagram.dart';
+import 'package:studysilo/main.dart';
+import 'package:studysilo/features/ai_tutor/widgets/formatted_ai_text.dart';
+import 'package:studysilo/features/diagram_viewer/widgets/interactive_visual_diagram.dart';
 
 void main() {
   testWidgets('App smoke test - verifies MaterialApp initializes', (WidgetTester tester) async {

@@ -2,6 +2,20 @@ import 'package:flutter/material.dart';
 import '../models/diagram_model.dart';
 import '../repositories/diagram_repository.dart';
 
+class ExpandNodeResult {
+  final bool success;
+  final bool isSaturated;
+  final String? saturationReason;
+  final String? errorMessage;
+
+  const ExpandNodeResult({
+    required this.success,
+    this.isSaturated = false,
+    this.saturationReason,
+    this.errorMessage,
+  });
+}
+
 class DiagramController extends ChangeNotifier {
   final DiagramRepository _repository = DiagramRepository();
   final TransformationController transformController = TransformationController();
@@ -102,31 +116,78 @@ class DiagramController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleCollapse(String branchId, {Size canvasSize = const Size(2800, 2000)}) {
+  bool canWrapOrUnwrap(DiagramNodeModel node) {
+    if (_diagram == null || node.isRoot) return false;
+    return node.isCollapsed || _diagram!.hasChildren(node.id);
+  }
+
+  void toggleCollapse(String nodeId, {Size canvasSize = const Size(2800, 2000)}) {
     if (_diagram == null) return;
-    final branch = _diagram!.nodes.firstWhere(
-      (n) => n.id == branchId,
+    final node = _diagram!.nodes.firstWhere(
+      (n) => n.id == nodeId,
       orElse: () => DiagramNodeModel(id: '', label: ''),
     );
-    if (branch.id.isNotEmpty && branch.isBranch) {
-      branch.isCollapsed = !branch.isCollapsed;
-      _diagram!.calculateLayout(canvasSize);
-      _version++;
-      notifyListeners();
+    if (node.id.isNotEmpty && !node.isRoot) {
+      if (canWrapOrUnwrap(node)) {
+        node.isCollapsed = !node.isCollapsed;
+        _diagram!.calculateLayout(canvasSize);
+        _version++;
+        notifyListeners();
+      }
     }
   }
 
   void toggleCollapseAll({Size canvasSize = const Size(2800, 2000)}) {
     if (_diagram == null) return;
-    final branches = _diagram!.nodes.where((n) => n.isBranch).toList();
-    if (branches.isEmpty) return;
-    final anyExpanded = branches.any((b) => !b.isCollapsed);
-    for (final b in branches) {
-      b.isCollapsed = anyExpanded;
+    final collapsibleNodes = _diagram!.nodes.where((n) => canWrapOrUnwrap(n)).toList();
+    if (collapsibleNodes.isEmpty) return;
+    final anyExpanded = collapsibleNodes.any((n) => !n.isCollapsed);
+    for (final n in collapsibleNodes) {
+      n.isCollapsed = anyExpanded;
     }
     _diagram!.calculateLayout(canvasSize);
     _version++;
     notifyListeners();
+  }
+
+  /// Deletes a node and its entire subtree, recomputes the layout, and auto-syncs to database to reduce storage
+  Future<bool> deleteNode(String nodeId, {Size canvasSize = const Size(2800, 2000)}) async {
+    if (_diagram == null) return false;
+    final node = _diagram!.nodes.firstWhere(
+      (n) => n.id == nodeId,
+      orElse: () => DiagramNodeModel(id: '', label: ''),
+    );
+    if (node.id.isEmpty || node.isRoot) {
+      return false; // Root node cannot be deleted
+    }
+
+    // 1. Collect this node and all of its descendants recursively
+    final idsToRemove = _diagram!.getSubtreeNodeIds(nodeId);
+
+    // 2. Remove all gathered nodes from the diagram model
+    _diagram!.nodes.removeWhere((n) => idsToRemove.contains(n.id));
+
+    // 3. Remove all edges connected to any of the deleted nodes
+    _diagram!.edges.removeWhere(
+      (e) => idsToRemove.contains(e.fromId) || idsToRemove.contains(e.toId),
+    );
+
+    // 4. Reset selected node if it was in the deleted branch
+    if (_selectedNode != null && idsToRemove.contains(_selectedNode!.id)) {
+      _selectedNode = null;
+    }
+
+    // 5. Recompute the diagram layout with automated collision avoidance
+    _diagram!.calculateLayout(canvasSize);
+    _version++;
+    notifyListeners();
+
+    // 6. Auto-sync to PostgreSQL database to reduce stored size immediately
+    if (_diagram!.id != null && _diagram!.id!.isNotEmpty) {
+      await saveCurrentMindMap();
+    }
+
+    return true;
   }
 
   void zoomIn() {
@@ -186,12 +247,40 @@ class DiagramController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> expandNode(DiagramNodeModel node, {Size canvasSize = const Size(2800, 2000)}) async {
-    if (_diagram == null) return false;
+  int calculateNodeDepth(DiagramNodeModel targetNode) {
+    if (_diagram == null) return 0;
+    int depth = 0;
+    String currentId = targetNode.id;
+    final visited = <String>{currentId};
+    while (true) {
+      String? parentId;
+      for (final edge in _diagram!.edges) {
+        if (edge.toId == currentId) {
+          parentId = edge.fromId;
+          break;
+        }
+      }
+      if (parentId == null || visited.contains(parentId)) break;
+      visited.add(parentId);
+      depth++;
+      currentId = parentId;
+    }
+    return depth;
+  }
+
+  Future<ExpandNodeResult> expandNode(
+    DiagramNodeModel node, {
+    Size canvasSize = const Size(2800, 2000),
+    bool force = false,
+  }) async {
+    if (_diagram == null) {
+      return const ExpandNodeResult(success: false, errorMessage: 'Diagram not loaded');
+    }
     _isExpandingNode = true;
     notifyListeners();
 
     try {
+      final depth = calculateNodeDepth(node);
       final res = await _repository.expandNode(
         concept: _diagram!.concept,
         nodeId: node.id,
@@ -199,7 +288,21 @@ class DiagramController extends ChangeNotifier {
         nodeDetails: node.description,
         branchColor: node.colorHex,
         mindMapId: _diagram!.id,
+        nodeDepth: depth,
+        force: force,
       );
+
+      final isSaturated = res['is_saturated'] == true;
+      final canExpand = res['can_expand'] != false;
+      final saturationReason = res['saturation_reason'] as String?;
+
+      if (!force && (isSaturated || !canExpand)) {
+        return ExpandNodeResult(
+          success: false,
+          isSaturated: true,
+          saturationReason: saturationReason ?? 'AI Advisory: Yeh topic already atomic depth par hai. Aage expand karne se conceptual confusion badh sakta hai.',
+        );
+      }
 
       final rawNodes = res['new_nodes'];
       final rawEdges = res['new_edges'];
@@ -233,10 +336,10 @@ class DiagramController extends ChangeNotifier {
         await saveCurrentMindMap();
       }
 
-      return true;
+      return const ExpandNodeResult(success: true);
     } catch (e) {
       _errorMessage = e.toString();
-      return false;
+      return ExpandNodeResult(success: false, errorMessage: e.toString());
     } finally {
       _isExpandingNode = false;
       _version++;

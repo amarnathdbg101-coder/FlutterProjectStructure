@@ -1,11 +1,11 @@
 {
-    "name": "flutter_project_structure",
-    "short_name": "flutter_project_structure",
+    "name": "StudySilo",
+    "short_name": "StudySilo",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "StudySilo - AI Study Companion",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

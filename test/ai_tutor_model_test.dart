@@ -1,5 +1,5 @@
-﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/ai_tutor/models/chat_message_model.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:studysilo/features/ai_tutor/models/chat_message_model.dart';
 
 void main() {
   group('AI Tutor Model Tests', () {

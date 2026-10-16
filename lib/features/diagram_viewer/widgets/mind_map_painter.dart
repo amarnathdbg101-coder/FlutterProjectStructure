@@ -381,21 +381,22 @@ class MindMapPainter extends CustomPainter {
       }
 
       // 8. Badges & Indicators
-      // Branch Fold/Expand Indicator pill
-      if (node.isBranch) {
+      // Universal Card Fold/Expand (Wrap/Unwrap) Indicator pill
+      final hasSubNodes = diagram.hasChildren(node.id);
+      if ((hasSubNodes || node.isCollapsed) && !node.isRoot) {
         final foldPaint = Paint()
           ..color = (node.isCollapsed ? const Color(0xFFEF4444) : nodeColor)
-              .withValues(alpha: 0.9 * nodeOpacity)
+              .withValues(alpha: 0.95 * nodeOpacity)
           ..style = PaintingStyle.fill;
         final foldOffset = Offset(node.x + node.width - 8, node.y + node.height / 2);
-        canvas.drawCircle(foldOffset, 5.0, foldPaint);
+        canvas.drawCircle(foldOffset, 5.5, foldPaint);
 
         // Mini +/- sign
         final foldSymbol = node.isCollapsed ? '+' : '–';
         final foldTextPainter = TextPainter(
           text: TextSpan(
             text: foldSymbol,
-            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.bold),
           ),
           textDirection: TextDirection.ltr,
         )..layout();

@@ -73,13 +73,31 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
     final controller = context.read<DiagramController>();
 
     DiagramNodeModel? hitNode;
+    bool tappedFoldPill = false;
     for (final node in diagram.nodes.reversed) {
       if (!node.isVisible) continue;
       final rect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
       if (rect.contains(localPos)) {
         hitNode = node;
+        if (controller.canWrapOrUnwrap(node)) {
+          // Generous touch target (28x28) around the right-edge fold indicator pill
+          final pillRect = Rect.fromCenter(
+            center: Offset(node.x + node.width - 8, node.y + node.height / 2),
+            width: 28,
+            height: 28,
+          );
+          if (pillRect.contains(localPos)) {
+            tappedFoldPill = true;
+          }
+        }
         break;
       }
+    }
+
+    if (tappedFoldPill && hitNode != null) {
+      HapticFeedback.mediumImpact();
+      controller.toggleCollapse(hitNode.id, canvasSize: _canvasSize);
+      return;
     }
 
     controller.selectNode(hitNode);
@@ -363,6 +381,110 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
     }
   }
 
+  void _confirmDeleteNode(DiagramNodeModel node) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final controller = context.read<DiagramController>();
+    final childCount = controller.diagram?.edges.where((e) => e.fromId == node.id && !e.isCrossLink).length ?? 0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete Topic Card?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Kya aap "${node.label}" ${childCount > 0 ? "aur iske saare ($childCount) sub-topics" : ""} ko delete karna chahte hain?',
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.45,
+                color: isDark ? Colors.grey[200] : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.storage_rounded, size: 18, color: Color(0xFF10B981)),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Unwanted branches delete hone se unnecessary database storage reduce hogi aur canvas clean rahega.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.delete_forever_rounded, size: 18),
+            label: const Text('Delete & Save Storage'),
+            onPressed: () async {
+              Navigator.pop(ctx); // Close dialog
+              if (mounted && Navigator.canPop(context)) {
+                Navigator.pop(context); // Close bottom sheet
+              }
+              final success = await controller.deleteNode(node.id, canvasSize: _canvasSize);
+              if (mounted && success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: const Color(0xFF10B981),
+                    content: Text('"${node.label}" delete ho gaya & database storage update ho gayi!'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showNodeDetailsSheet(DiagramNodeModel node) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final controller = context.read<DiagramController>();
@@ -443,7 +565,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                       ],
                     ),
                   ),
-                  if (node.badge.isNotEmpty)
+                  if (node.badge.isNotEmpty) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -455,314 +577,472 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                         style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: nodeColor),
                       ),
                     ),
+                    const SizedBox(width: 4),
+                  ],
+                  if (!node.isRoot)
+                    IconButton(
+                      iconSize: 20,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      tooltip: 'Delete Card & Free Storage',
+                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                      onPressed: () => _confirmDeleteNode(node),
+                    ),
                 ],
               ),
               const SizedBox(height: 14),
 
-              // Description
+              // Description / AI Explanation (Point-by-Point, enjoyable, zero boring paragraphs)
               if (node.description.isNotEmpty) ...[
-                Text(
-                  node.description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? Colors.grey[300] : Colors.grey[700],
-                    height: 1.45,
-                  ),
-                ),
+                _buildPointByPointContent(node.description, nodeColor, isDark),
                 const SizedBox(height: 14),
               ],
 
-              // ⚡ Technical Metrics Grid (Big-O, Space, Stability, SI Units)
-              if (node.metrics.isNotEmpty) ...[
-                const Text(
-                  'Technical Specifications & Metrics:',
-                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: node.metrics.entries.map((entry) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              // Optional LaTeX formulas (clean, simple display only if mathematically relevant)
+              if (node.formulas.isNotEmpty) ...[
+                for (final formula in node.formulas)
+                  if (formula.trim().isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${entry.key}: ',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                          ),
-                          Text(
-                            entry.value,
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: nodeColor),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 14),
-              ],
-
-              // 💻 Code Snippet / Algorithm Invariant Box
-              if (node.codeSnippet.isNotEmpty) ...[
-                Container(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF020617) : const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.code_rounded, size: 14, color: Colors.cyanAccent),
-                          const SizedBox(width: 6),
-                          Text(
-                            'ALGORITHM INVARIANT / PSEUDOCODE',
-                            style: TextStyle(
-                              color: Colors.cyanAccent.withValues(alpha: 0.9),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      SingleChildScrollView(
+                      child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
-                        child: SelectableText(
-                          node.codeSnippet,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11.5,
-                            color: Colors.white,
-                            height: 1.35,
+                        child: Math.tex(
+                          formula,
+                          textStyle: TextStyle(
+                            fontSize: 14,
+                            color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // 💡 Key Takeaway Card
-              if (node.keyTakeaway.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.25)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.lightbulb_rounded, color: Color(0xFF6366F1), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'KEY ACADEMIC TAKEAWAY',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF6366F1),
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              node.keyTakeaway,
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.35,
-                                color: isDark ? Colors.grey[200] : Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
                 const SizedBox(height: 12),
               ],
 
-              // ⚠️ Exam Trap Card
-              if (node.examTrap.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'COMMON EXAM TRAP & GOTCHAS',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFF59E0B),
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              node.examTrap,
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.35,
-                                color: isDark ? Colors.grey[200] : Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // LaTeX Formulas
-              if (node.formulas.isNotEmpty) ...[
-                const Text(
-                  'Associated Formulas & Theorems:',
-                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.accent),
-                ),
-                const SizedBox(height: 6),
-                for (final formula in node.formulas)
-                  Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Math.tex(
-                        formula,
-                        textStyle: TextStyle(
-                          fontSize: 15,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
+              // --- SMART PROFESSIONAL ACTION BAR ---
+              Container(
+                padding: const EdgeInsets.only(top: 14),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                     ),
                   ),
-                const SizedBox(height: 16),
-              ],
-
-              // Action Buttons
-              Row(
-                children: [
-                  if (node.isBranch) ...[
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Row(
+                  children: [
+                    // 1. Expand Sub-Branch Button (Clean, modern secondary pill)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(
+                            color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                          ),
+                          backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        ),
+                        icon: controller.isExpandingNode
+                            ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.account_tree_outlined, size: 16, color: Color(0xFF6366F1)),
+                        label: Text(
+                          controller.isExpandingNode ? 'Expanding...' : 'Expand Branch',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: controller.isExpandingNode
+                            ? null
+                            : () {
+                                Navigator.pop(ctx);
+                                _handleNodeExpansion(node);
+                              },
                       ),
-                      icon: Icon(node.isCollapsed ? Icons.unfold_more : Icons.unfold_less, size: 18),
-                      label: Text(node.isCollapsed ? 'Unfold' : 'Fold'),
-                      onPressed: () {
-                        controller.toggleCollapse(node.id, canvasSize: _canvasSize);
-                        Navigator.pop(ctx);
-                      },
                     ),
                     const SizedBox(width: 8),
-                  ],
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    icon: controller.isExpandingNode
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.account_tree_outlined, size: 18),
-                    label: Text(controller.isExpandingNode ? 'Expanding...' : '⚡ Expand Sub-Branch (+)'),
-                    onPressed: controller.isExpandingNode
-                        ? null
-                        : () async {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Attaching 3-4 deep-dive sub-topics to "${node.label}" with AI...')),
-                            );
-                            final ok = await controller.expandNode(node, canvasSize: _canvasSize);
-                            if (ok && mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('"${node.label}" expanded with 3-4 sub-topics & saved to database!')),
-                              );
-                            }
-                          },
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.psychology, size: 18),
-                      label: const Text('AI Deep Dive'),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        final promptBuilder = StringBuffer()
-                          ..writeln('Please provide a deep-dive academic tutorial on: "${node.label}"')
-                          ..writeln()
-                          ..writeln('Context: ${node.description}');
-                        if (node.metrics.isNotEmpty) {
-                          promptBuilder.writeln('Metrics: ${node.metrics.entries.map((e) => "${e.key}: ${e.value}").join(", ")}');
-                        }
-                        if (node.codeSnippet.isNotEmpty) {
-                          promptBuilder.writeln('Code / Logic:\n${node.codeSnippet}');
-                        }
-                        if (node.keyTakeaway.isNotEmpty) {
-                          promptBuilder.writeln('Key Principle: ${node.keyTakeaway}');
-                        }
-                        if (node.examTrap.isNotEmpty) {
-                          promptBuilder.writeln('Exam Trap: ${node.examTrap}');
-                        }
-                        if (node.formulas.isNotEmpty) {
-                          promptBuilder.writeln('Formulas: ${node.formulas.join(', ')}');
-                        }
+                    // 2. AI Deep Dive Button (Sleek, high-contrast indigo primary)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4F46E5),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.auto_awesome_rounded, size: 16, color: Colors.white),
+                        label: const Text(
+                          'AI Deep Dive',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          final promptBuilder = StringBuffer()
+                            ..writeln('Please provide a crisp, point-by-point tutorial on: "${node.label}"')
+                            ..writeln()
+                            ..writeln('Context: ${node.description}');
+                          if (node.metrics.isNotEmpty) {
+                            promptBuilder.writeln('Metrics: ${node.metrics.entries.map((e) => "${e.key}: ${e.value}").join(", ")}');
+                          }
+                          if (node.codeSnippet.isNotEmpty) {
+                            promptBuilder.writeln('Code / Logic:\n${node.codeSnippet}');
+                          }
+                          if (node.keyTakeaway.isNotEmpty) {
+                            promptBuilder.writeln('Key Principle: ${node.keyTakeaway}');
+                          }
+                          if (node.examTrap.isNotEmpty) {
+                            promptBuilder.writeln('Exam Trap: ${node.examTrap}');
+                          }
+                          if (node.vivaInsight.isNotEmpty) {
+                            promptBuilder.writeln('Viva / Oral Drill: ${node.vivaInsight}');
+                          }
+                          if (node.crossSubject.isNotEmpty) {
+                            promptBuilder.writeln('Cross-Subject: ${node.crossSubject}');
+                          }
+                          if (node.formulas.isNotEmpty) {
+                            promptBuilder.writeln('Formulas: ${node.formulas.join(', ')}');
+                          }
 
-                        context.push(AppRoutes.aiChat, extra: {
-                          'initialQuery': promptBuilder.toString(),
-                          'noteTitle': node.label,
-                        });
-                      },
+                          context.push(AppRoutes.aiChat, extra: {
+                            'initialQuery': promptBuilder.toString(),
+                            'noteTitle': node.label,
+                          });
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                    if (controller.canWrapOrUnwrap(node)) ...[
+                      const SizedBox(width: 8),
+                      // Universal Wrap / Unwrap (Fold / Unfold) Button
+                      IconButton(
+                        tooltip: node.isCollapsed ? 'Unwrap Card (Show Sub-Topics)' : 'Wrap Card (Clean Canvas Space)',
+                        style: IconButton.styleFrom(
+                          backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.all(11),
+                        ),
+                        icon: Icon(
+                          node.isCollapsed ? Icons.unfold_more_rounded : Icons.unfold_less_rounded,
+                          size: 19,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                        onPressed: () {
+                          controller.toggleCollapse(node.id, canvasSize: _canvasSize);
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPointByPointContent(String rawText, Color accentColor, bool isDark) {
+    if (rawText.trim().isEmpty) return const SizedBox.shrink();
+
+    // Cleanly extract points (support \n, bullet •, emojis, numbers, or sentences)
+    List<String> points = [];
+
+    if (rawText.contains('\n')) {
+      points = rawText
+          .split('\n')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } else if (rawText.contains('•')) {
+      points = rawText
+          .split('•')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } else {
+      // Split on emojis or sentence ends
+      final regex = RegExp(r'(💡|⚙️|📌|🎯|⚠️|✅|❌)');
+      final matches = regex.allMatches(rawText).toList();
+      if (matches.length > 1) {
+        int lastIndex = 0;
+        for (int i = 0; i < matches.length; i++) {
+          final start = matches[i].start;
+          if (start > lastIndex && i > 0) {
+            final part = rawText.substring(lastIndex, start).trim();
+            if (part.isNotEmpty) points.add(part);
+          }
+          lastIndex = start;
+        }
+        if (lastIndex < rawText.length) {
+          final part = rawText.substring(lastIndex).trim();
+          if (part.isNotEmpty) points.add(part);
+        }
+      } else {
+        final sentences = rawText
+            .split(RegExp(r'\. (?=[A-Z0-9])'))
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (sentences.length > 1) {
+          points = sentences;
+        } else {
+          points = [rawText.trim()];
+        }
+      }
+    }
+
+    if (points.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.6) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          width: 1.1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < points.length; i++) ...[
+            Builder(
+              builder: (_) {
+                var cleanText = points[i].replaceAll(RegExp(r'^[•\-\*]\s*'), '').trim();
+                cleanText = cleanText.replaceAll(
+                  RegExp(r'^(Core Idea|Key Rule|How It Works|How it Operates|Mechanism|High-Yield Takeaway|Exam Takeaway|Key Takeaway|Takeaway):\s*', caseSensitive: false),
+                  '',
+                );
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 7, right: 10),
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: accentColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        cleanText,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.5,
+                          fontWeight: FontWeight.w400,
+                          color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            if (i < points.length - 1)
+              const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleNodeExpansion(DiagramNodeModel node, {bool force = false}) async {
+    final controller = context.read<DiagramController>();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(force
+            ? '⚡ Forcing microscopic deep-dive expansion for "${node.label}"...'
+            : 'Analyzing depth & expanding "${node.label}" with AI...'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    final result = await controller.expandNode(node, canvasSize: _canvasSize, force: force);
+    if (!mounted) return;
+
+    if (result.isSaturated && !force) {
+      _showSaturationAdvisoryDialog(node, result.saturationReason ?? 'Yeh topic already atomic depth par hai.');
+    } else if (result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF10B981),
+          content: Text('"${node.label}" successfully expanded & saved to database!'),
+        ),
+      );
+    } else if (result.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(result.errorMessage!),
+        ),
+      );
+    }
+  }
+
+  void _showSaturationAdvisoryDialog(DiagramNodeModel node, String reason) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.psychology_outlined, color: Color(0xFFF59E0B), size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'AI PEDAGOGICAL ADVISORY',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFF59E0B),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Atomic Depth Reached',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 16, color: Color(0xFF6366F1)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          node.label,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    reason,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.4,
+                      color: isDark ? Colors.grey[300] : Colors.grey[800],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.check_circle_outline, color: Color(0xFF10B981), size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'StudySilo AI Recommendation: Stop here for maximum active recall efficiency without confusion.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Agar aap phir bhi microscopic internal mechanics dekhna chahte hain, toh Force Expand kar sakte hain.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Samajh Gaya (Recommended)'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.bolt, size: 16),
+            label: const Text('Phir Bhi Expand Karein'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _handleNodeExpansion(node, force: true);
+            },
+          ),
+        ],
       ),
     );
   }
@@ -806,6 +1086,43 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
               }
             },
             child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRegenerateMindMap(DiagramController controller) {
+    if (controller.diagram == null) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Regenerate Mind Map?'),
+        content: const Text(
+          'This will reset your current canvas layout, zoom, and any expanded sub-branches. Are you sure you want to proceed?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              HapticFeedback.mediumImpact();
+              controller.refreshDiagram(canvasSize: _canvasSize);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('⚡ Mind Map regenerated!'),
+                  duration: Duration(milliseconds: 1200),
+                ),
+              );
+            },
+            child: const Text('Regenerate'),
           ),
         ],
       ),
@@ -1395,21 +1712,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                   icon: const Icon(Icons.add_chart_rounded, color: AppColors.primary),
                   onPressed: _showNewDiagramDialog,
                 ),
-                // 🔄 Live Refresh Mind Map
-                IconButton(
-                  tooltip: 'Live Refresh',
-                  icon: const Icon(Icons.refresh_rounded),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    controller.refreshDiagram(canvasSize: _canvasSize);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('⚡ Mind Map refreshed live!'),
-                        duration: Duration(milliseconds: 900),
-                      ),
-                    );
-                  },
-                ),
+
                 // 💾 Save / Update Mind Map in Database
                 if (diagram != null)
                   IconButton(
@@ -1467,6 +1770,9 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                       case 'new_map':
                         _showNewDiagramDialog();
                         break;
+                      case 'regenerate':
+                        _confirmRegenerateMindMap(controller);
+                        break;
                       case 'close':
                         controller.clearDiagram();
                         break;
@@ -1483,6 +1789,17 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                         ],
                       ),
                     ),
+                    if (diagram != null)
+                      const PopupMenuItem(
+                        value: 'regenerate',
+                        child: Row(
+                          children: [
+                            Icon(Icons.refresh_rounded, size: 20, color: Color(0xFFEF4444)),
+                            SizedBox(width: 10),
+                            Text('Regenerate Map...'),
+                          ],
+                        ),
+                      ),
                     if (diagram != null) ...[
                       const PopupMenuItem(
                         value: 'generate_quiz',
@@ -1859,15 +2176,9 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
   }
 
   Widget _buildCanvasFloatingToolbar(bool isDark, DiagramController controller) {
-    String layoutLabel = 'Radial';
-    IconData layoutIcon = Icons.bubble_chart_outlined;
-    if (controller.layoutStyle == MindMapLayoutStyle.horizontal) {
-      layoutLabel = 'Horizontal';
-      layoutIcon = Icons.account_tree_outlined;
-    } else if (controller.layoutStyle == MindMapLayoutStyle.vertical) {
-      layoutLabel = 'Vertical';
-      layoutIcon = Icons.schema_outlined;
-    }
+    final currentStyle = controller.layoutStyle;
+    final layoutLabel = currentStyle.label;
+    final layoutIcon = currentStyle.icon;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1891,9 +2202,9 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Layout Selector Menu
+          // 6 Domain Archetypes & Layout Selector Menu
           PopupMenuButton<MindMapLayoutStyle>(
-            tooltip: 'Change Layout',
+            tooltip: '6 Domain Archetypes & Layout',
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             initialValue: controller.layoutStyle,
             onSelected: (style) {
@@ -1902,32 +2213,62 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
             },
             itemBuilder: (ctx) => [
               const PopupMenuItem(
-                value: MindMapLayoutStyle.radial,
+                value: MindMapLayoutStyle.flow,
                 child: Row(
                   children: [
-                    Icon(Icons.bubble_chart_rounded, size: 18, color: AppColors.primary),
+                    Icon(Icons.alt_route_rounded, size: 18, color: Color(0xFF6366F1)),
                     SizedBox(width: 10),
-                    Text('Radial Orbit (360°)', style: TextStyle(fontSize: 13)),
+                    Text('➔ Flow Pipeline (Algorithms & Steps)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
               const PopupMenuItem(
-                value: MindMapLayoutStyle.horizontal,
+                value: MindMapLayoutStyle.cycle,
                 child: Row(
                   children: [
-                    Icon(Icons.account_tree_rounded, size: 18, color: Color(0xFF0EA5E9)),
+                    Icon(Icons.sync_rounded, size: 18, color: Color(0xFF0EA5E9)),
                     SizedBox(width: 10),
-                    Text('Horizontal Mind Map (2-Sided)', style: TextStyle(fontSize: 13)),
+                    Text('⟳ Closed Cycle (Orbit Loop)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
               const PopupMenuItem(
-                value: MindMapLayoutStyle.vertical,
+                value: MindMapLayoutStyle.comparison,
                 child: Row(
                   children: [
-                    Icon(Icons.schema_rounded, size: 18, color: Color(0xFF10B981)),
+                    Icon(Icons.compare_arrows_rounded, size: 18, color: Color(0xFFEC4899)),
                     SizedBox(width: 10),
-                    Text('Vertical Hierarchy Tree', style: TextStyle(fontSize: 13)),
+                    Text('⚔️ Versus Matrix (Side-by-Side)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: MindMapLayoutStyle.stack,
+                child: Row(
+                  children: [
+                    Icon(Icons.layers_rounded, size: 18, color: Color(0xFF8B5CF6)),
+                    SizedBox(width: 10),
+                    Text('📚 Layered Stack (Pyramid Tiers)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: MindMapLayoutStyle.tree,
+                child: Row(
+                  children: [
+                    Icon(Icons.account_tree_rounded, size: 18, color: Color(0xFF10B981)),
+                    SizedBox(width: 10),
+                    Text('🌳 Taxonomy Tree (Classification)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: MindMapLayoutStyle.hub,
+                child: Row(
+                  children: [
+                    Icon(Icons.hub_rounded, size: 18, color: Color(0xFFF59E0B)),
+                    SizedBox(width: 10),
+                    Text('🧠 Concept Hub (360° Radial Map)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),

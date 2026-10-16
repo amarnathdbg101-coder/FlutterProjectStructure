@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../services/ai_language_service.dart';
 import '../storage/token_storage.dart';
 
 class AuthInterceptor extends Interceptor {
@@ -7,6 +8,10 @@ class AuthInterceptor extends Interceptor {
     final token = TokenStorage.getToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
+    }
+    final aiLang = AILanguageService.getSelectedLanguageSync();
+    if (aiLang.isNotEmpty) {
+      options.headers['X-AI-Language'] = aiLang;
     }
     options.headers['Content-Type'] = 'application/json';
     options.headers['Accept'] = 'application/json';

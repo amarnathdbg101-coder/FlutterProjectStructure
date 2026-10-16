@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/ai_tutor/screens/formula_studio_screen.dart';
+import 'package:studysilo/features/ai_tutor/screens/formula_studio_screen.dart';
 
 void main() {
   testWidgets('FormulaStudioScreen renders, filters, and navigates without crashing or blank screens', (tester) async {

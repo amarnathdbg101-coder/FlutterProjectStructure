@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/student_memory/models/student_memory.dart';
-import 'package:flutter_project_structure/features/student_memory/services/smart_ai_context_helper.dart';
+import 'package:studysilo/features/student_memory/models/student_memory.dart';
+import 'package:studysilo/features/student_memory/services/smart_ai_context_helper.dart';
 
 void main() {
   group('SmartAiContextHelper Tests', () {

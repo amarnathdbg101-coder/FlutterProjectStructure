@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/student_memory/models/flashcard_model.dart';
+import 'package:studysilo/features/student_memory/models/flashcard_model.dart';
 
 void main() {
   group('FlashcardModel & FlashcardDeckModel Tests', () {

@@ -12,12 +12,14 @@ import 'features/auth/controllers/auth_controller.dart';
 import 'features/diagram_viewer/controllers/diagram_controller.dart';
 import 'features/health/controllers/health_controller.dart';
 import 'features/quiz/controllers/quiz_controller.dart';
+import 'core/services/ai_language_service.dart';
 import 'features/student_memory/controllers/cognitive_profile_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await TokenStorage.init();
   await HiveStorage.init();
+  await AILanguageService.init();
 
   runApp(
     const ProviderScope(
@@ -69,7 +71,7 @@ class StudySiloApp extends StatelessWidget {
     final themeController = context.watch<ThemeController>();
 
     return MaterialApp.router(
-      title: 'StudySilo.in - Autonomous AI Study Assistant',
+      title: 'StudySilo',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

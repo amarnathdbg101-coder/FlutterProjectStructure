@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/quiz/models/quiz_model.dart';
-import 'package:flutter_project_structure/features/quiz/widgets/quiz_card.dart';
-import 'package:flutter_project_structure/features/quiz/widgets/quiz_attempt_card.dart';
+import 'package:studysilo/features/quiz/models/quiz_model.dart';
+import 'package:studysilo/features/quiz/widgets/quiz_card.dart';
+import 'package:studysilo/features/quiz/widgets/quiz_attempt_card.dart';
 
 void main() {
   testWidgets('QuizCard and QuizAttemptCard render without pixel overflow on small phone', (tester) async {

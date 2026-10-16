@@ -1210,21 +1210,29 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.psychology, color: Colors.amber, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Active Recall Mode: ${_testedRecallCount == 0 ? "Test your memory" : "$_masteredRecallCount / $_testedRecallCount Mastered"}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
-                          ),
-                        ],
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.psychology, color: Colors.amber, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Active Recall Mode: ${_testedRecallCount == 0 ? "Test your memory" : "$_masteredRecallCount / $_testedRecallCount Mastered"}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      if (_testedRecallCount > 0)
+                      if (_testedRecallCount > 0) ...[
+                        const SizedBox(width: 8),
                         Text(
                           '${((_masteredRecallCount / _testedRecallCount) * 100).toStringAsFixed(0)}% Accuracy',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -1314,42 +1322,49 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
             // Previous Button (Piche)
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: canPrev ? () => _goToCard(safeIndex - 1) : null,
-              icon: const Icon(Icons.arrow_back_rounded, size: 18),
-              label: const Text('Previous', style: TextStyle(fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: const Text('Prev', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
             ),
 
             // Step Indicator: "Formula X of Y"
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Formula ${safeIndex + 1} of ${items.length}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                const SizedBox(height: 3),
-                Row(
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: List.generate(
-                    items.length > 8 ? 8 : items.length,
-                    (dotIdx) {
-                      final activeDot = (dotIdx == (safeIndex % (items.length > 8 ? 8 : items.length)));
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        width: activeDot ? 12 : 5,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: activeDot ? AppColors.primary : Colors.grey.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      );
-                    },
-                  ),
+                  children: [
+                    Text(
+                      'Formula ${safeIndex + 1} of ${items.length}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(
+                        items.length > 8 ? 8 : items.length,
+                        (dotIdx) {
+                          final activeDot = (dotIdx == (safeIndex % (items.length > 8 ? 8 : items.length)));
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            width: activeDot ? 10 : 4,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: activeDot ? AppColors.primary : Colors.grey.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
 
             // Next Button (Aage)
@@ -1357,12 +1372,12 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: canNext ? () => _goToCard(safeIndex + 1) : null,
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: const Text('Next', style: TextStyle(fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+              label: const Text('Next', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
             ),
           ],
         ),
@@ -1407,15 +1422,19 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    item.subject.toUpperCase(),
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item.subject.toUpperCase(),
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1433,20 +1452,26 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
                 ),
                 // Bookmark Toggle Button
                 IconButton(
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(5),
                   icon: Icon(
                     isBookmarked ? Icons.bookmark : Icons.bookmark_border_rounded,
                     color: isBookmarked ? Colors.amber : (isDark ? Colors.white60 : Colors.black54),
-                    size: 20,
+                    size: 19,
                   ),
                   tooltip: isBookmarked ? 'Remove Bookmark' : 'Save to Bookmarks',
                   onPressed: () => _toggleBookmark(item.id),
                 ),
+                const SizedBox(width: 4),
                 // Export / Copy Markdown
                 IconButton(
-                  icon: const Icon(Icons.share_outlined, size: 18),
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(5),
+                  icon: const Icon(Icons.share_outlined, size: 17),
                   tooltip: 'Export Markdown Summary',
                   onPressed: () => _copyFullFormulaMarkdown(item),
                 ),
+                const SizedBox(width: 6),
                 Text(
                   '#$currentNum of $totalCount',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[500]),
@@ -1952,13 +1977,23 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.auto_awesome, color: AppColors.primary, size: 18),
-                  SizedBox(width: 8),
-                  Text('AI Synthesized Formula Sheet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ],
+              const Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome, color: AppColors.primary, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'AI Synthesized Formula Sheet',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               TextButton.icon(
                 onPressed: () {
                   setState(() {
@@ -1966,7 +2001,7 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
                   });
                 },
                 icon: const Icon(Icons.close, size: 16),
-                label: const Text('Back to Vault'),
+                label: const Text('Back to Vault', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -2246,15 +2281,21 @@ class _FormulaInteractiveSolverModalState extends State<_FormulaInteractiveSolve
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.calculate_outlined, color: Color(0xFF0284C7)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Interactive Scientific Solver',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
+                const Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.calculate_outlined, color: Color(0xFF0284C7)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Interactive Scientific Solver',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),

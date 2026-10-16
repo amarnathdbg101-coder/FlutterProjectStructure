@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/student_memory/services/exam_planner_service.dart';
+import 'package:studysilo/features/student_memory/services/exam_planner_service.dart';
 
 void main() {
   group('ExamStudyPlanModel Tests', () {

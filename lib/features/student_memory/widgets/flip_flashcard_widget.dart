@@ -120,28 +120,34 @@ class _FlipFlashcardWidgetState extends State<FlipFlashcardWidget>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.psychology_rounded, size: 14, color: Color(0xFF6366F1)),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.flashcard.topic,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6366F1),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.psychology_rounded, size: 14, color: Color(0xFF6366F1)),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          widget.flashcard.topic,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6366F1),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               const Icon(Icons.style_rounded, size: 20, color: Color(0xFF6366F1)),
             ],
           ),
@@ -166,20 +172,23 @@ class _FlipFlashcardWidgetState extends State<FlipFlashcardWidget>
 
           // Flip Hint Footer
           Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.touch_app_rounded, size: 14, color: Color(0xFF6366F1)),
-                const SizedBox(width: 4),
-                Text(
-                  'Tap card to reveal answer 🔄',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4F46E5),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.touch_app_rounded, size: 14, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Tap card to reveal answer 🔄',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4F46E5),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -215,28 +224,34 @@ class _FlipFlashcardWidgetState extends State<FlipFlashcardWidget>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF10B981)),
-                    SizedBox(width: 4),
-                    Text(
-                      'Correct Concept & Solution',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF10B981),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF10B981)),
+                      SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Correct Concept & Solution',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF10B981),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               const Icon(Icons.flip_to_front_rounded, size: 18, color: Color(0xFF10B981)),
             ],
           ),

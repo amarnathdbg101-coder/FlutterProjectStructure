@@ -13,6 +13,8 @@ class DiagramNodeModel {
   final String domainType;
   final String keyTakeaway;
   final String examTrap;
+  final String vivaInsight;
+  final String crossSubject;
   final int importance; // 1 to 5
   final String badge;
   final Map<String, String> metrics;
@@ -38,6 +40,8 @@ class DiagramNodeModel {
     this.domainType = 'general',
     this.keyTakeaway = '',
     this.examTrap = '',
+    this.vivaInsight = '',
+    this.crossSubject = '',
     this.importance = 3,
     this.badge = '',
     this.metrics = const {},
@@ -102,17 +106,25 @@ class DiagramNodeModel {
       imp = rawImp.toInt().clamp(1, 5);
     }
 
+    final parsedFormulas = parseList(json['formulas']);
+    final latex = json['formula_latex']?.toString() ?? '';
+    if (latex.isNotEmpty && !parsedFormulas.contains(latex)) {
+      parsedFormulas.insert(0, latex);
+    }
+
     return DiagramNodeModel(
       id: json['id']?.toString() ?? '',
       label: json['label']?.toString() ?? (json['title']?.toString() ?? 'Concept'),
       description: json['description']?.toString() ?? (json['details']?.toString() ?? (json['subtitle']?.toString() ?? '')),
       nodeType: type,
       colorHex: json['color_hex']?.toString() ?? (type == 'root' ? '#4F46E5' : (type == 'branch' ? '#0EA5E9' : '#10B981')),
-      formulas: parseList(json['formulas']),
+      formulas: parsedFormulas,
       branchId: json['branch_id']?.toString() ?? '',
       domainType: json['domain_type']?.toString() ?? 'general',
       keyTakeaway: json['key_takeaway']?.toString() ?? '',
       examTrap: json['exam_trap']?.toString() ?? '',
+      vivaInsight: json['viva_insight']?.toString() ?? '',
+      crossSubject: json['cross_subject']?.toString() ?? '',
       importance: imp,
       badge: json['badge']?.toString() ?? '',
       metrics: parseMetrics(json['metrics']),
@@ -134,6 +146,8 @@ class DiagramNodeModel {
     'domain_type': domainType,
     'key_takeaway': keyTakeaway,
     'exam_trap': examTrap,
+    'viva_insight': vivaInsight,
+    'cross_subject': crossSubject,
     'importance': importance,
     'badge': badge,
     'metrics': metrics,
@@ -183,9 +197,83 @@ class DiagramEdgeModel {
 }
 
 enum MindMapLayoutStyle {
-  radial,
-  horizontal,
-  vertical,
+  hub,         // 360° Concept Hub (Radial)
+  flow,        // Sequential Step-by-Step Pipeline (Conveyor)
+  cycle,       // Closed-Loop Orbit Ring (Krebs/Carnot)
+  comparison,  // Dual-Column Side-by-Side Versus Matrix
+  stack,       // Layered Architectural Pyramid / Stack
+  tree,        // Hierarchical Classification Tree
+  radial,      // Backward compatibility alias for hub
+  horizontal,  // Backward compatibility alias for tree (horizontal)
+  vertical,    // Backward compatibility alias for tree (vertical)
+}
+
+extension MindMapLayoutStyleExt on MindMapLayoutStyle {
+  String get label {
+    switch (this) {
+      case MindMapLayoutStyle.flow:
+        return '➔ Flow Pipeline';
+      case MindMapLayoutStyle.cycle:
+        return '⟳ Closed Cycle';
+      case MindMapLayoutStyle.comparison:
+        return '⚔️ Versus Matrix';
+      case MindMapLayoutStyle.stack:
+        return '📚 Layered Stack';
+      case MindMapLayoutStyle.tree:
+        return '🌳 Taxonomy Tree';
+      case MindMapLayoutStyle.hub:
+      case MindMapLayoutStyle.radial:
+        return '🧠 Concept Hub';
+      case MindMapLayoutStyle.horizontal:
+        return '↔️ Horizontal Tree';
+      case MindMapLayoutStyle.vertical:
+        return '↕️ Vertical Tree';
+    }
+  }
+
+  String get shortName {
+    switch (this) {
+      case MindMapLayoutStyle.flow:
+        return 'Flow';
+      case MindMapLayoutStyle.cycle:
+        return 'Cycle';
+      case MindMapLayoutStyle.comparison:
+        return 'Compare';
+      case MindMapLayoutStyle.stack:
+        return 'Stack';
+      case MindMapLayoutStyle.tree:
+        return 'Tree';
+      case MindMapLayoutStyle.hub:
+      case MindMapLayoutStyle.radial:
+        return 'Hub';
+      case MindMapLayoutStyle.horizontal:
+        return 'Horizontal';
+      case MindMapLayoutStyle.vertical:
+        return 'Vertical';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case MindMapLayoutStyle.flow:
+        return Icons.alt_route_rounded;
+      case MindMapLayoutStyle.cycle:
+        return Icons.sync_rounded;
+      case MindMapLayoutStyle.comparison:
+        return Icons.compare_arrows_rounded;
+      case MindMapLayoutStyle.stack:
+        return Icons.layers_rounded;
+      case MindMapLayoutStyle.tree:
+        return Icons.account_tree_rounded;
+      case MindMapLayoutStyle.hub:
+      case MindMapLayoutStyle.radial:
+        return Icons.hub_rounded;
+      case MindMapLayoutStyle.horizontal:
+        return Icons.view_column_rounded;
+      case MindMapLayoutStyle.vertical:
+        return Icons.schema_rounded;
+    }
+  }
 }
 
 class DiagramModel {
@@ -211,7 +299,7 @@ class DiagramModel {
     this.diagramType = 'mindmap',
     this.domainType = 'general',
     this.isPinned = false,
-    this.layoutStyle = MindMapLayoutStyle.radial,
+    this.layoutStyle = MindMapLayoutStyle.hub,
     this.isCustomPositions = false,
     required this.nodes,
     required this.edges,
@@ -309,6 +397,23 @@ class DiagramModel {
       );
     }
 
+    // Automatically resolve initial layout style based on 6 Domain Archetypes
+    MindMapLayoutStyle initialStyle = MindMapLayoutStyle.hub;
+    final arch = archetype.toLowerCase().trim();
+    if (arch == 'flow') {
+      initialStyle = MindMapLayoutStyle.flow;
+    } else if (arch == 'cycle') {
+      initialStyle = MindMapLayoutStyle.cycle;
+    } else if (arch == 'comparison') {
+      initialStyle = MindMapLayoutStyle.comparison;
+    } else if (arch == 'stack') {
+      initialStyle = MindMapLayoutStyle.stack;
+    } else if (arch == 'tree') {
+      initialStyle = MindMapLayoutStyle.tree;
+    } else if (arch == 'hub') {
+      initialStyle = MindMapLayoutStyle.hub;
+    }
+
     return DiagramModel(
       id: id,
       title: title,
@@ -318,6 +423,7 @@ class DiagramModel {
       diagramType: diagramType,
       domainType: domainType,
       isPinned: isPinned,
+      layoutStyle: initialStyle,
       nodes: parsedNodes,
       edges: parsedEdges,
     );
@@ -456,9 +562,23 @@ class DiagramModel {
 
     switch (layoutStyle) {
       case MindMapLayoutStyle.radial:
+      case MindMapLayoutStyle.hub:
         _calculateRadialLayout(canvasSize, root, childrenMap);
         break;
+      case MindMapLayoutStyle.flow:
+        _calculateFlowLayout(canvasSize, root, childrenMap);
+        break;
+      case MindMapLayoutStyle.cycle:
+        _calculateCycleLayout(canvasSize, root, childrenMap);
+        break;
+      case MindMapLayoutStyle.comparison:
+        _calculateComparisonLayout(canvasSize, root, childrenMap);
+        break;
+      case MindMapLayoutStyle.stack:
+        _calculateStackLayout(canvasSize, root, childrenMap);
+        break;
       case MindMapLayoutStyle.horizontal:
+      case MindMapLayoutStyle.tree:
         _calculateHorizontalLayout(canvasSize, root, childrenMap);
         break;
       case MindMapLayoutStyle.vertical:
@@ -468,6 +588,279 @@ class DiagramModel {
 
     // Automated Collision-Avoidance & Non-Overlap Relaxation Pass
     resolveCollisions();
+  }
+
+  void _calculateFlowLayout(
+    Size canvasSize,
+    DiagramNodeModel root,
+    Map<String, List<DiagramNodeModel>> childrenMap,
+  ) {
+    final stages = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
+    if (stages.isEmpty) {
+      _calculateHorizontalLayout(canvasSize, root, childrenMap);
+      return;
+    }
+
+    final totalStages = stages.length;
+    const stageWidth = 240.0;
+    const stageSpacing = 420.0;
+    final totalWidth = stageWidth + (totalStages * stageSpacing);
+    final startX = math.max(120.0, (canvasSize.width - totalWidth) / 2);
+    final centerY = canvasSize.height / 2;
+
+    root.isVisible = true;
+    root.x = startX;
+    root.y = centerY - (root.height / 2);
+
+    for (int i = 0; i < totalStages; i++) {
+      final stage = stages[i];
+      stage.isVisible = true;
+      final stageX = startX + 280.0 + (i * stageSpacing);
+      stage.x = stageX;
+      stage.y = centerY - (stage.height / 2);
+
+      final leaves = childrenMap[stage.id] ?? [];
+      final leafCount = leaves.length;
+      const leafYSpacing = 78.0;
+
+      for (int j = 0; j < leafCount; j++) {
+        final leaf = leaves[j];
+        if (stage.isCollapsed) {
+          leaf.isVisible = false;
+          _hideSubtree(leaf.id, childrenMap);
+          continue;
+        }
+
+        leaf.isVisible = true;
+        leaf.x = stageX + 10.0;
+        if (j % 2 == 0) {
+          leaf.y = (centerY + (stage.height / 2) + 42.0) + (j ~/ 2) * leafYSpacing;
+        } else {
+          leaf.y = (centerY - (stage.height / 2) - 42.0 - leaf.height) - ((j - 1) ~/ 2) * leafYSpacing;
+        }
+
+        final subLeaves = childrenMap[leaf.id] ?? [];
+        for (int k = 0; k < subLeaves.length; k++) {
+          final subLeaf = subLeaves[k];
+          if (!leaf.isVisible || leaf.isCollapsed) {
+            subLeaf.isVisible = false;
+            _hideSubtree(subLeaf.id, childrenMap);
+            continue;
+          }
+          subLeaf.isVisible = true;
+          subLeaf.x = leaf.x + (k % 2 == 0 ? 190.0 : -190.0);
+          subLeaf.y = leaf.y + (k + 1) * 60.0;
+        }
+      }
+    }
+
+    _placeUnconnectedNodes(canvasSize, root);
+  }
+
+  void _calculateCycleLayout(
+    Size canvasSize,
+    DiagramNodeModel root,
+    Map<String, List<DiagramNodeModel>> childrenMap,
+  ) {
+    final centerX = canvasSize.width / 2;
+    final centerY = canvasSize.height / 2;
+
+    root.isVisible = true;
+    root.x = centerX - (root.width / 2);
+    root.y = centerY - (root.height / 2);
+
+    final phases = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
+    final count = phases.length;
+    if (count == 0) {
+      _calculateRadialLayout(canvasSize, root, childrenMap);
+      return;
+    }
+
+    final orbitRadius = math.max(440.0, 320.0 + count * 24.0);
+    final angleStep = (2 * math.pi) / count;
+
+    for (int i = 0; i < count; i++) {
+      final angle = (-math.pi / 2) + (i * angleStep);
+      final phaseX = centerX + orbitRadius * math.cos(angle);
+      final phaseY = centerY + orbitRadius * math.sin(angle);
+
+      final phase = phases[i];
+      phase.isVisible = true;
+      phase.x = phaseX - (phase.width / 2);
+      phase.y = phaseY - (phase.height / 2);
+
+      final leaves = childrenMap[phase.id] ?? [];
+      final leafCount = leaves.length;
+      final leafRadius = orbitRadius + 195.0;
+
+      for (int j = 0; j < leafCount; j++) {
+        final leaf = leaves[j];
+        if (phase.isCollapsed) {
+          leaf.isVisible = false;
+          _hideSubtree(leaf.id, childrenMap);
+          continue;
+        }
+
+        leaf.isVisible = true;
+        final leafAngle = angle + (j - (leafCount - 1) / 2.0) * 0.22;
+        leaf.x = (centerX + leafRadius * math.cos(leafAngle)) - (leaf.width / 2);
+        leaf.y = (centerY + leafRadius * math.sin(leafAngle)) - (leaf.height / 2);
+
+        final subLeaves = childrenMap[leaf.id] ?? [];
+        for (int k = 0; k < subLeaves.length; k++) {
+          final subLeaf = subLeaves[k];
+          if (!leaf.isVisible || leaf.isCollapsed) {
+            subLeaf.isVisible = false;
+            _hideSubtree(subLeaf.id, childrenMap);
+            continue;
+          }
+          subLeaf.isVisible = true;
+          final subRadius = leafRadius + 160.0;
+          subLeaf.x = (centerX + subRadius * math.cos(leafAngle)) - (subLeaf.width / 2);
+          subLeaf.y = (centerY + subRadius * math.sin(leafAngle)) - (subLeaf.height / 2) + (k * 60.0);
+        }
+      }
+    }
+
+    _placeUnconnectedNodes(canvasSize, root);
+  }
+
+  void _calculateComparisonLayout(
+    Size canvasSize,
+    DiagramNodeModel root,
+    Map<String, List<DiagramNodeModel>> childrenMap,
+  ) {
+    final centerX = canvasSize.width / 2;
+    final branches = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
+
+    root.isVisible = true;
+    root.x = centerX - (root.width / 2);
+    root.y = 140.0;
+
+    if (branches.isEmpty) {
+      _calculateVerticalLayout(canvasSize, root, childrenMap);
+      return;
+    }
+
+    const colSpacing = 480.0;
+    final leftColX = centerX - colSpacing;
+    final rightColX = centerX + colSpacing;
+    const startY = 290.0;
+    const rowHeight = 90.0;
+
+    final leftPillars = <DiagramNodeModel>[];
+    final rightPillars = <DiagramNodeModel>[];
+
+    for (int i = 0; i < branches.length; i++) {
+      if (i % 2 == 0) {
+        leftPillars.add(branches[i]);
+      } else {
+        rightPillars.add(branches[i]);
+      }
+    }
+
+    void layoutColumn(List<DiagramNodeModel> colBranches, double colX) {
+      double curY = startY;
+      for (final branch in colBranches) {
+        branch.isVisible = true;
+        branch.x = colX - (branch.width / 2);
+        branch.y = curY;
+        curY += rowHeight;
+
+        final leaves = childrenMap[branch.id] ?? [];
+        for (final leaf in leaves) {
+          if (branch.isCollapsed) {
+            leaf.isVisible = false;
+            _hideSubtree(leaf.id, childrenMap);
+            continue;
+          }
+          leaf.isVisible = true;
+          leaf.x = colX - (leaf.width / 2);
+          leaf.y = curY;
+          curY += rowHeight;
+
+          final subLeaves = childrenMap[leaf.id] ?? [];
+          for (final subLeaf in subLeaves) {
+            if (!leaf.isVisible || leaf.isCollapsed) {
+              subLeaf.isVisible = false;
+              _hideSubtree(subLeaf.id, childrenMap);
+              continue;
+            }
+            subLeaf.isVisible = true;
+            subLeaf.x = colX + 180.0;
+            subLeaf.y = curY;
+            curY += rowHeight;
+          }
+        }
+        curY += 24.0;
+      }
+    }
+
+    layoutColumn(leftPillars, leftColX);
+    layoutColumn(rightPillars, rightColX);
+
+    _placeUnconnectedNodes(canvasSize, root);
+  }
+
+  void _calculateStackLayout(
+    Size canvasSize,
+    DiagramNodeModel root,
+    Map<String, List<DiagramNodeModel>> childrenMap,
+  ) {
+    final centerX = canvasSize.width / 2;
+    final layers = childrenMap[root.id] ?? nodes.where((n) => n.id != root.id && n.isBranch).toList();
+
+    root.isVisible = true;
+    root.x = centerX - (root.width / 2);
+    root.y = 120.0;
+
+    if (layers.isEmpty) {
+      _calculateVerticalLayout(canvasSize, root, childrenMap);
+      return;
+    }
+
+    final layerCount = layers.length;
+    const layerSpacing = 160.0;
+    const startY = 260.0;
+
+    for (int i = 0; i < layerCount; i++) {
+      final layer = layers[i];
+      layer.isVisible = true;
+      final curY = startY + (i * layerSpacing);
+      layer.x = centerX - (layer.width / 2);
+      layer.y = curY;
+
+      final leaves = childrenMap[layer.id] ?? [];
+      final leafCount = leaves.length;
+      final leafStartX = centerX + (layer.width / 2) + 45.0;
+
+      for (int j = 0; j < leafCount; j++) {
+        final leaf = leaves[j];
+        if (layer.isCollapsed) {
+          leaf.isVisible = false;
+          _hideSubtree(leaf.id, childrenMap);
+          continue;
+        }
+        leaf.isVisible = true;
+        leaf.x = leafStartX + (j * 230.0);
+        leaf.y = curY + ((layer.height - leaf.height) / 2);
+
+        final subLeaves = childrenMap[leaf.id] ?? [];
+        for (int k = 0; k < subLeaves.length; k++) {
+          final subLeaf = subLeaves[k];
+          if (!leaf.isVisible || leaf.isCollapsed) {
+            subLeaf.isVisible = false;
+            _hideSubtree(subLeaf.id, childrenMap);
+            continue;
+          }
+          subLeaf.isVisible = true;
+          subLeaf.x = leaf.x + 220.0;
+          subLeaf.y = leaf.y + (k + 1) * 50.0;
+        }
+      }
+    }
+
+    _placeUnconnectedNodes(canvasSize, root);
   }
 
   void _calculateRadialLayout(
@@ -526,7 +919,7 @@ class DiagramModel {
         final subCount = subLeaves.length;
         for (int k = 0; k < subCount; k++) {
           final subLeaf = subLeaves[k];
-          if (!leaf.isVisible) {
+          if (!leaf.isVisible || leaf.isCollapsed) {
             subLeaf.isVisible = false;
             _hideSubtree(subLeaf.id, childrenMap);
             continue;
@@ -929,6 +1322,28 @@ class DiagramModel {
         }
       }
     }
+  }
+
+  /// Checks whether a given node has outgoing structural child edges
+  bool hasChildren(String nodeId) {
+    return edges.any((e) => e.fromId == nodeId && !e.isCrossLink);
+  }
+
+  /// Gathers the specified node ID and all descendant node IDs recursively
+  Set<String> getSubtreeNodeIds(String parentId) {
+    final result = <String>{parentId};
+    final queue = <String>[parentId];
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      for (final edge in edges) {
+        if (edge.fromId == current && !edge.isCrossLink) {
+          if (result.add(edge.toId)) {
+            queue.add(edge.toId);
+          }
+        }
+      }
+    }
+    return result;
   }
 }
 

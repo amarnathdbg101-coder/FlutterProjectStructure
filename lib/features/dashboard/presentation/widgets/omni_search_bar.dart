@@ -17,12 +17,7 @@ class OmniSearchBar extends StatelessWidget {
     this.onSubmitted,
     required this.onVoiceTap,
     this.onSuggestionTap,
-    this.suggestions = const [
-      'Ask AI Tutor',
-      '5-min Quiz',
-      'Formula Studio',
-      'Concept Map',
-    ],
+    this.suggestions = const [],
     this.isDark = false,
   });
 
@@ -117,63 +112,7 @@ class OmniSearchBar extends StatelessWidget {
             ],
           ),
         ),
-        if (suggestions.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: suggestions.map((s) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: InkWell(
-                    onTap: () {
-                      if (onSuggestionTap != null) {
-                        onSuggestionTap!(s);
-                      } else if (onSubmitted != null) {
-                        onSubmitted!(s);
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: chipBg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: chipBorder),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            s.contains('Quiz')
-                                ? Icons.quiz_outlined
-                                : s.contains('Map')
-                                    ? Icons.account_tree_outlined
-                                    : s.contains('Formula')
-                                        ? Icons.functions_outlined
-                                        : Icons.bolt_outlined,
-                            size: 13,
-                            color: textSecondary,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            s,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
+
       ],
     );
   }

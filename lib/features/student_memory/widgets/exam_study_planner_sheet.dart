@@ -589,10 +589,15 @@ class _ExamStudyPlannerSheetState extends State<ExamStudyPlannerSheet> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    'Roadmap Progress: ${_plan.completedTaskCount} of ${_plan.schedule.length} Goals',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                  Expanded(
+                                    child: Text(
+                                      'Roadmap Progress: ${_plan.completedTaskCount} of ${_plan.schedule.length} Goals',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
                                     '$completionPct%',
                                     style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
@@ -617,11 +622,11 @@ class _ExamStudyPlannerSheetState extends State<ExamStudyPlannerSheet> {
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.white,
                                         foregroundColor: const Color(0xFF4F46E5),
-                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                       ),
-                                      icon: const Icon(Icons.auto_awesome, size: 16),
-                                      label: const Text('AI Re-Plan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      icon: const Icon(Icons.auto_awesome, size: 15),
+                                      label: const Text('AI Re-Plan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5), maxLines: 1, overflow: TextOverflow.ellipsis),
                                       onPressed: _showAiGeneratorDialog,
                                     ),
                                   ),
@@ -631,13 +636,15 @@ class _ExamStudyPlannerSheetState extends State<ExamStudyPlannerSheet> {
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: Colors.white,
                                         side: const BorderSide(color: Colors.white54),
-                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                       ),
-                                      icon: Icon(_isTimerActive ? Icons.stop_rounded : Icons.timer_outlined, size: 16),
+                                      icon: Icon(_isTimerActive ? Icons.stop_rounded : Icons.timer_outlined, size: 15),
                                       label: Text(
                                         _isTimerActive ? timerDisplay : '25m Focus Block',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                       onPressed: () {
                                         if (_isTimerActive) {

@@ -1,4 +1,4 @@
-package com.starter.flutter_project_structure
+package in.studysilo.app
 
 import io.flutter.embedding.android.FlutterActivity
 

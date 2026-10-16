@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/ai_tutor/screens/formula_studio_screen.dart';
+import 'package:studysilo/features/ai_tutor/screens/formula_studio_screen.dart';
 
 void main() {
   group('Formula Studio & Scientific Solver Tests', () {

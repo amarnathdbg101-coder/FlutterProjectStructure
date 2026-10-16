@@ -241,7 +241,7 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
 
   Widget _buildStatPill(String label, String value, Color color, bool isDark, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: isDark ? 0.12 : 0.06),
         borderRadius: BorderRadius.circular(12),
@@ -250,19 +250,21 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
         ),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 4),
+              Icon(icon, size: 13, color: color),
+              const SizedBox(width: 3),
               Flexible(
                 child: Text(
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: color,
                   ),
@@ -276,7 +278,7 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
             ),

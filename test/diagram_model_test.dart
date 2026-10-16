@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_project_structure/features/diagram_viewer/models/diagram_model.dart';
+import 'package:studysilo/features/diagram_viewer/models/diagram_model.dart';
 
 void main() {
   group('Diagram Model & Layout Tests', () {
@@ -264,6 +264,132 @@ void main() {
       assertNoOverlaps(MindMapLayoutStyle.horizontal);
       assertNoOverlaps(MindMapLayoutStyle.vertical);
       assertNoOverlaps(MindMapLayoutStyle.radial);
+      assertNoOverlaps(MindMapLayoutStyle.flow);
+      assertNoOverlaps(MindMapLayoutStyle.cycle);
+      assertNoOverlaps(MindMapLayoutStyle.comparison);
+      assertNoOverlaps(MindMapLayoutStyle.stack);
+    });
+
+    test('6 Domain Archetypes layout distinctly based on archetype metadata', () {
+      final flowJson = {
+        'title': 'Merge Sort Pipeline',
+        'archetype': 'flow',
+        'nodes': [
+          {'id': 'root', 'label': 'Merge Sort Algorithm', 'node_type': 'root'},
+          {'id': 'b1', 'label': 'Phase 1: Divide', 'node_type': 'branch'},
+          {'id': 'b2', 'label': 'Phase 2: Conquer', 'node_type': 'branch'},
+          {'id': 'b3', 'label': 'Phase 3: Two-Pointer Merge', 'node_type': 'branch'},
+        ],
+        'edges': [
+          {'from_id': 'root', 'to_id': 'b1'},
+          {'from_id': 'root', 'to_id': 'b2'},
+          {'from_id': 'root', 'to_id': 'b3'},
+        ],
+      };
+
+      final flowDiagram = DiagramModel.fromJson(flowJson);
+      expect(flowDiagram.layoutStyle, MindMapLayoutStyle.flow);
+      const canvasSize = Size(2800, 2000);
+      flowDiagram.calculateLayout(canvasSize);
+
+      final b1 = flowDiagram.nodes.firstWhere((n) => n.id == 'b1');
+      final b2 = flowDiagram.nodes.firstWhere((n) => n.id == 'b2');
+      final b3 = flowDiagram.nodes.firstWhere((n) => n.id == 'b3');
+      // In flow layout, stages flow sequentially left-to-right (b1.x < b2.x < b3.x)
+      expect(b1.x, lessThan(b2.x));
+      expect(b2.x, lessThan(b3.x));
+    });
+
+    test('Universal Wrap / Unwrap: Collapsing an expanded card hides all its sub-branches and cleans space', () {
+      final json = {
+        'title': 'Operating Systems Architecture',
+        'archetype': 'tree',
+        'nodes': [
+          {'id': 'root', 'label': 'OS Core', 'node_type': 'root'},
+          {'id': 'b1', 'label': 'Process Management', 'node_type': 'branch'},
+          {'id': 'leaf1', 'label': 'Scheduling Algorithms', 'node_type': 'leaf'},
+          {'id': 'sub1', 'label': 'Round Robin', 'node_type': 'leaf'},
+          {'id': 'sub2', 'label': 'Shortest Job First', 'node_type': 'leaf'},
+        ],
+        'edges': [
+          {'from_id': 'root', 'to_id': 'b1'},
+          {'from_id': 'b1', 'to_id': 'leaf1'},
+          {'from_id': 'leaf1', 'to_id': 'sub1'},
+          {'from_id': 'leaf1', 'to_id': 'sub2'},
+        ],
+      };
+
+      final diagram = DiagramModel.fromJson(json);
+      const canvasSize = Size(2800, 2000);
+      diagram.calculateLayout(canvasSize);
+
+      final leafNode = diagram.nodes.firstWhere((n) => n.id == 'leaf1');
+      final sub1 = diagram.nodes.firstWhere((n) => n.id == 'sub1');
+      final sub2 = diagram.nodes.firstWhere((n) => n.id == 'sub2');
+
+      // Initially all sub-nodes are visible
+      expect(sub1.isVisible, isTrue);
+      expect(sub2.isVisible, isTrue);
+
+      // Now student wraps (collapses) the card
+      leafNode.isCollapsed = true;
+      diagram.calculateLayout(canvasSize);
+
+      // Sub-branches must now be hidden, freeing up canvas space
+      expect(sub1.isVisible, isFalse);
+      expect(sub2.isVisible, isFalse);
+
+      // Now student unwraps (expands) the card to inspect it
+      leafNode.isCollapsed = false;
+      diagram.calculateLayout(canvasSize);
+
+      // Sub-branches must become visible again
+      expect(sub1.isVisible, isTrue);
+      expect(sub2.isVisible, isTrue);
+    });
+
+    test('Node Deletion: Pruning a branch recursively deletes all descendants and dangling edges', () {
+      final json = {
+        'title': 'Sorting Algorithms',
+        'archetype': 'hub',
+        'nodes': [
+          {'id': 'root', 'label': 'Sorting', 'node_type': 'root'},
+          {'id': 'b1', 'label': 'Comparison Sorts', 'node_type': 'branch'},
+          {'id': 'b2', 'label': 'Non-Comparison Sorts', 'node_type': 'branch'},
+          {'id': 'leaf1', 'label': 'Quick Sort', 'node_type': 'leaf'},
+          {'id': 'sub1', 'label': 'Partitioning Logic', 'node_type': 'leaf'},
+          {'id': 'sub2', 'label': 'Hoare vs Lomuto', 'node_type': 'leaf'},
+        ],
+        'edges': [
+          {'from_id': 'root', 'to_id': 'b1'},
+          {'from_id': 'root', 'to_id': 'b2'},
+          {'from_id': 'b1', 'to_id': 'leaf1'},
+          {'from_id': 'leaf1', 'to_id': 'sub1'},
+          {'from_id': 'sub1', 'to_id': 'sub2'},
+        ],
+      };
+
+      final diagram = DiagramModel.fromJson(json);
+      expect(diagram.nodes.length, 6);
+      expect(diagram.edges.length, 5);
+
+      // Recursive subtree collection for 'leaf1'
+      final idsToRemove = diagram.getSubtreeNodeIds('leaf1');
+      expect(idsToRemove, containsAll(['leaf1', 'sub1', 'sub2']));
+      expect(idsToRemove.contains('root'), isFalse);
+      expect(idsToRemove.contains('b1'), isFalse);
+
+      // Remove gathered nodes and their edges
+      diagram.nodes.removeWhere((n) => idsToRemove.contains(n.id));
+      diagram.edges.removeWhere(
+        (e) => idsToRemove.contains(e.fromId) || idsToRemove.contains(e.toId),
+      );
+
+      expect(diagram.nodes.length, 3); // root, b1, b2 remain
+      expect(diagram.edges.length, 2); // only root->b1 and root->b2 remain
+      expect(diagram.nodes.any((n) => n.id == 'leaf1'), isFalse);
+      expect(diagram.nodes.any((n) => n.id == 'sub1'), isFalse);
+      expect(diagram.nodes.any((n) => n.id == 'sub2'), isFalse);
     });
   });
 }
