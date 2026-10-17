@@ -24,6 +24,30 @@ class ChatMessageModel {
   bool get isUser => role == 'user';
   bool get isAssistant => role == 'assistant';
 
+  ChatMessageModel copyWith({
+    String? id,
+    String? role,
+    String? content,
+    String? imageUrl,
+    List<String>? latexFormulas,
+    List<String>? followUpQuestions,
+    List<String>? keyConcepts,
+    DateTime? createdAt,
+    String? sessionId,
+  }) {
+    return ChatMessageModel(
+      id: id ?? this.id,
+      role: role ?? this.role,
+      content: content ?? this.content,
+      imageUrl: imageUrl ?? this.imageUrl,
+      latexFormulas: latexFormulas ?? this.latexFormulas,
+      followUpQuestions: followUpQuestions ?? this.followUpQuestions,
+      keyConcepts: keyConcepts ?? this.keyConcepts,
+      createdAt: createdAt ?? this.createdAt,
+      sessionId: sessionId ?? this.sessionId,
+    );
+  }
+
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) {
     List<String> parseList(dynamic raw) {
       if (raw is List) {

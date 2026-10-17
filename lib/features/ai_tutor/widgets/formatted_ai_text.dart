@@ -90,13 +90,12 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     final theme = Theme.of(context);
     final blocks = _getBlocks();
     final visibleBlockCount = _visibleBlockCount < blocks.length ? _visibleBlockCount : blocks.length;
+    final tts = AiTtsService();
 
-    final content = ListenableBuilder(
-      listenable: AiTtsService(),
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    Widget buildBody() => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
         // Grounding Badge (if source note provided)
         if (sourceNoteTitle != null && sourceNoteTitle!.isNotEmpty) ...[
           Container(
@@ -296,7 +295,21 @@ class _FormattedAiTextState extends State<FormattedAiText> {
           ),
         ],
       ],
-      ),
+    );
+
+    final initialBody = buildBody();
+    final content = ListenableBuilder(
+      listenable: tts,
+      builder: (context, child) {
+        // ⚡ Performance optimization: Only rebuild block tree if this specific message
+        // is currently playing audio! If audio is playing for another message or stopped,
+        // instantly return the cached child without re-rendering math/diagrams!
+        if (tts.currentText != text) {
+          return child!;
+        }
+        return buildBody();
+      },
+      child: initialBody,
     );
 
     // ⚡ Performance optimization: do NOT wrap in SelectionArea while actively streaming

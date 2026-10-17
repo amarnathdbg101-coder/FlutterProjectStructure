@@ -553,7 +553,15 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final controller = context.watch<AiTutorController>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _handleScrollPosition();
+      if (mounted) {
+        _handleScrollPosition();
+        if (controller.isStreaming && _scrollController.hasClients) {
+          final pos = _scrollController.position;
+          if (pos.maxScrollExtent - pos.pixels < 120) {
+            _scrollController.jumpTo(pos.maxScrollExtent);
+          }
+        }
+      }
     });
 
     return Scaffold(
@@ -754,12 +762,13 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                           ? _buildEmptyState(context, controller, isDark)
                           : ListView.builder(
                               controller: _scrollController,
-                              addAutomaticKeepAlives: true,
+                              cacheExtent: 280,
+                              addAutomaticKeepAlives: false,
                               addRepaintBoundaries: true,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              itemCount: controller.messages.length + (controller.isLoading ? 1 : 0),
+                              itemCount: controller.messages.length + (controller.isLoading && controller.streamingAssistantMessageId == null ? 1 : 0),
                               itemBuilder: (context, index) {
-                                if (index == controller.messages.length && controller.isLoading) {
+                                if (index == controller.messages.length && controller.isLoading && controller.streamingAssistantMessageId == null) {
                                   return _buildTypingIndicator(isDark);
                                 }
                                 final msg = controller.messages[index];
@@ -1158,6 +1167,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                     FormattedAiText(
                       text: msg.content,
                       isDark: isDark,
+                      isStreaming: controller.isStreaming && msg.id == controller.streamingAssistantMessageId,
                       sourceNoteTitle: controller.activeNoteTitle,
                       onSwitchMode: (mode) {
                         controller.switchModeByName(mode);
@@ -1170,29 +1180,31 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                     ),
 
                     // Quick Action Bar for AI Response (Reusable Component)
-                    const SizedBox(height: 10),
-                    AiResponseActionBar(
-                      solutionContent: msg.content,
-                      isDark: isDark,
-                      onSimplify: () {
-                        controller.sendQuestion('Explain this in simpler words using Feynman Technique with a simple analogy');
-                        _scrollToBottom();
-                      },
-                      onPractice: () {
-                        controller.sendQuestion('Give a practice question on this concept with step-by-step solution');
-                        _scrollToBottom();
-                      },
-                      onSummarize: () {
-                        controller.sendQuestion('Summarize this concept in 3 key bullet points with high-yield exam takeaways');
-                        _scrollToBottom();
-                      },
-                      onRegenerate: controller.canRegenerateAnswer(msg.id)
-                          ? () {
-                              controller.regenerateLastAnswer(msg.id);
-                              _scrollToBottom();
-                            }
-                          : null,
-                    ),
+                    if (!(controller.isStreaming && msg.id == controller.streamingAssistantMessageId)) ...[
+                      const SizedBox(height: 10),
+                      AiResponseActionBar(
+                        solutionContent: msg.content,
+                        isDark: isDark,
+                        onSimplify: () {
+                          controller.sendQuestion('Explain this in simpler words using Feynman Technique with a simple analogy');
+                          _scrollToBottom();
+                        },
+                        onPractice: () {
+                          controller.sendQuestion('Give a practice question on this concept with step-by-step solution');
+                          _scrollToBottom();
+                        },
+                        onSummarize: () {
+                          controller.sendQuestion('Summarize this concept in 3 key bullet points with high-yield exam takeaways');
+                          _scrollToBottom();
+                        },
+                        onRegenerate: controller.canRegenerateAnswer(msg.id)
+                            ? () {
+                                controller.regenerateLastAnswer(msg.id);
+                                _scrollToBottom();
+                              }
+                            : null,
+                      ),
+                    ],
 
                   ],
                 ],
@@ -1206,7 +1218,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
   }
 
   Widget _buildTypingIndicator(bool isDark) {
-    final controller = context.watch<AiTutorController>();
+    final controller = context.read<AiTutorController>();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(

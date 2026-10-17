@@ -41,5 +41,20 @@ void main() {
       expect(userMsg.isUser, true);
       expect(userMsg.imageUrl, '/storage/photo.jpg');
     });
+
+    test('ChatMessageModel copyWith updates fields immutably', () {
+      final original = ChatMessageModel(
+        id: 'msg-stream-1',
+        role: 'assistant',
+        content: 'Hello',
+        createdAt: DateTime.now(),
+      );
+
+      final updated = original.copyWith(content: 'Hello World! How are you?');
+      expect(updated.id, original.id);
+      expect(updated.role, 'assistant');
+      expect(updated.content, 'Hello World! How are you?');
+      expect(original.content, 'Hello');
+    });
   });
 }
