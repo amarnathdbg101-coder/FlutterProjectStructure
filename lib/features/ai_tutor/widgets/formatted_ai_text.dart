@@ -9,6 +9,7 @@ import '../../voice_doubt/services/ai_tts_service.dart';
 import 'collapsible_derivation_card.dart';
 import '../../diagram_viewer/widgets/interactive_visual_diagram.dart';
 import '../../diagram_viewer/widgets/interactive_graph_plotter.dart';
+import '../models/chat_message_model.dart' show AiBlockModel;
 
 /// Professional academic markdown & rich visual renderer for AI responses.
 /// Supports:
@@ -29,6 +30,7 @@ class FormattedAiText extends StatefulWidget {
   final Function(String topic)? onGeneratePracticeProblem;
   final String? sourceNoteTitle;
   final bool isStreaming;
+  final List<AiBlockModel>? precomputedBlocks;
 
   const FormattedAiText({
     super.key,
@@ -41,6 +43,7 @@ class FormattedAiText extends StatefulWidget {
     this.onGeneratePracticeProblem,
     this.sourceNoteTitle,
     this.isStreaming = false,
+    this.precomputedBlocks,
   });
 
   @override
@@ -55,23 +58,86 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   List<_AiBlock>? _cachedBlocks;
   String? _cachedText;
   int _visibleBlockCount = _initialBlockCount;
+  int _lastParseTimeMs = 0;
+  int _lastSpokenBlockIndex = 0;
+  int _lastChunkIndex = -1;
 
   @override
   void didUpdateWidget(covariant FormattedAiText oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text) {
+    if (oldWidget.isStreaming != widget.isStreaming || oldWidget.precomputedBlocks != widget.precomputedBlocks) {
       _cachedText = null;
       _cachedBlocks = null;
+      _visibleBlockCount = _initialBlockCount;
+    } else if (oldWidget.text != widget.text) {
+      _lastSpokenBlockIndex = 0;
+      _lastChunkIndex = -1;
+      if (!widget.isStreaming) {
+        _cachedText = null;
+        _cachedBlocks = null;
+      }
       _visibleBlockCount = _initialBlockCount;
     }
   }
 
   List<_AiBlock> _getBlocks() {
+    // ⚡ Server-Side Pre-Parsed AST Blocks: Skip heavy multi-pass regex scanning on phone
+    if (widget.precomputedBlocks != null && widget.precomputedBlocks!.isNotEmpty) {
+      if (_cachedBlocks != null && _cachedText == widget.text) {
+        return _cachedBlocks!;
+      }
+      _cachedText = widget.text;
+      _cachedBlocks = widget.precomputedBlocks!
+          .map((b) => _AiBlock(
+                type: _blockTypeFromString(b.type),
+                text: b.text,
+                extra: b.extra,
+              ))
+          .toList();
+      return _cachedBlocks!;
+    }
     if (_cachedText != widget.text || _cachedBlocks == null) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      // ⚡ Smooth 60 FPS Streaming Throttler:
+      // While active streaming is ongoing without server precomputed blocks, avoid re-parsing
+      // 50+ times per second on micro-token arrivals. Throttle to ~50ms intervals unless a newline occurs.
+      final shouldThrottle = widget.isStreaming &&
+          _cachedBlocks != null &&
+          _cachedBlocks!.isNotEmpty &&
+          (now - _lastParseTimeMs < 50) &&
+          !widget.text.endsWith('\n');
+
+      if (shouldThrottle) {
+        return _cachedBlocks!;
+      }
+
+      _lastParseTimeMs = now;
       _cachedText = widget.text;
       _cachedBlocks = _parseTextIntoBlocks(widget.text);
     }
     return _cachedBlocks!;
+  }
+
+  static _BlockType _blockTypeFromString(String t) {
+    switch (t) {
+      case 'heading1': return _BlockType.heading1;
+      case 'heading2': return _BlockType.heading2;
+      case 'heading3': return _BlockType.heading3;
+      case 'bullet': return _BlockType.bullet;
+      case 'numbered': return _BlockType.numbered;
+      case 'checklist': return _BlockType.checklist;
+      case 'table': return _BlockType.table;
+      case 'diagram': return _BlockType.diagram;
+      case 'graph': return _BlockType.graph;
+      case 'visualFlow': return _BlockType.visualFlow;
+      case 'formula': return _BlockType.formula;
+      case 'derivation': return _BlockType.derivation;
+      case 'code': return _BlockType.code;
+      case 'callout': return _BlockType.callout;
+      case 'comparison': return _BlockType.comparison;
+      case 'divider': return _BlockType.divider;
+      default: return _BlockType.paragraph;
+    }
   }
 
   // Expose widget fields as local getters for ergonomic access in helper methods
@@ -89,8 +155,26 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final blocks = _getBlocks();
-    final visibleBlockCount = _visibleBlockCount < blocks.length ? _visibleBlockCount : blocks.length;
     final tts = AiTtsService();
+
+    final isSpeakingThis = tts.isPlaying && tts.currentText == text;
+    final currentSentence = tts.currentRawSentence.trim();
+    final currentChunk = tts.currentChunkIndex;
+
+    int activeBlockIndex = -1;
+    if (isSpeakingThis && currentSentence.isNotEmpty && blocks.isNotEmpty) {
+      activeBlockIndex = _resolveSequentialSpokenBlock(
+        blocks: blocks,
+        currentSentence: currentSentence,
+        currentChunkIndex: currentChunk,
+        totalChunks: tts.totalChunks,
+      );
+      if (activeBlockIndex >= _visibleBlockCount) {
+        _visibleBlockCount = (activeBlockIndex + 1 + _blocksPerPage).clamp(0, blocks.length);
+      }
+    }
+
+    final visibleBlockCount = _visibleBlockCount < blocks.length ? _visibleBlockCount : blocks.length;
 
     Widget buildBody() => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,8 +208,11 @@ class _FormattedAiTextState extends State<FormattedAiText> {
           ),
         ],
 
-        // Render Parsed Blocks
-        ...blocks.take(visibleBlockCount).map((b) => _renderBlock(context, b, theme)),
+        // Render Parsed Blocks with Strict Sequential Highlighting
+        ...List.generate(
+          visibleBlockCount,
+          (index) => _renderBlock(context, blocks[index], theme, index: index, isSpokenActive: index == activeBlockIndex),
+        ),
 
         if (visibleBlockCount < blocks.length)
           Align(
@@ -322,32 +409,86 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     return SelectionArea(child: content);
   }
 
-  Widget _renderBlock(BuildContext context, _AiBlock block, ThemeData theme) {
+  int _resolveSequentialSpokenBlock({
+    required List<_AiBlock> blocks,
+    required String currentSentence,
+    required int currentChunkIndex,
+    required int totalChunks,
+  }) {
+    if (blocks.isEmpty) return -1;
+
+    // If user tapped a prior section or navigated back, allow moving back
+    if (currentChunkIndex < _lastChunkIndex) {
+      _lastSpokenBlockIndex = 0;
+    }
+    _lastChunkIndex = currentChunkIndex;
+
+    // 1. First priority: Check if currentSentence is still inside the current active block
+    // (A single block or explanation paragraph often contains 2 to 4 spoken sentences)
+    if (_lastSpokenBlockIndex >= 0 && _lastSpokenBlockIndex < blocks.length) {
+      final currentBlockText = blocks[_lastSpokenBlockIndex].text.trim();
+      if (_matchesBlock(currentBlockText, currentSentence)) {
+        return _lastSpokenBlockIndex;
+      }
+    }
+
+    // 2. Second priority: Search forward in a strictly localized window (+1, +2, +3 blocks)
+    // This PREVENTS JUMPING to distant topics that share keywords like "Formula", "Step", or "Law"
+    final int startSearch = (_lastSpokenBlockIndex >= 0) ? _lastSpokenBlockIndex + 1 : 0;
+    final int forwardLimit = (startSearch + 3 < blocks.length) ? startSearch + 3 : blocks.length;
+
+    for (int i = startSearch; i < forwardLimit; i++) {
+      if (_matchesBlock(blocks[i].text.trim(), currentSentence)) {
+        _lastSpokenBlockIndex = i;
+        return i;
+      }
+    }
+
+    // 3. Third priority: Extended sequential forward search (only forward, never jump backward)
+    for (int i = forwardLimit; i < blocks.length; i++) {
+      if (_matchesBlock(blocks[i].text.trim(), currentSentence)) {
+        _lastSpokenBlockIndex = i;
+        return i;
+      }
+    }
+
+    // 4. Proportional progressive estimate if text was heavily stripped of formatting
+    if (totalChunks > 0 && currentChunkIndex >= 0) {
+      final estimatedIndex = ((currentChunkIndex / totalChunks) * blocks.length).floor().clamp(0, blocks.length - 1);
+      if (estimatedIndex >= _lastSpokenBlockIndex) {
+        _lastSpokenBlockIndex = estimatedIndex;
+        return estimatedIndex;
+      }
+    }
+
+    return _lastSpokenBlockIndex.clamp(0, blocks.length - 1);
+  }
+
+  bool _matchesBlock(String blockText, String sentence) {
+    if (blockText.isEmpty || sentence.isEmpty) return false;
+    final b = blockText.toLowerCase();
+    final s = sentence.toLowerCase();
+    return b.contains(s) || s.contains(b) || _isSubstantialOverlap(b, s);
+  }
+
+  Widget _renderBlock(
+    BuildContext context,
+    _AiBlock block,
+    ThemeData theme, {
+    int index = -1,
+    bool isSpokenActive = false,
+  }) {
     final textColor = defaultTextColor ?? (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B));
     final blockWidget = _buildRawBlockWidget(context, block, theme, textColor);
 
-    final tts = AiTtsService();
-    final isSpeakingThis = tts.isPlaying && tts.currentText == text;
-    final currentSentence = tts.currentRawSentence.trim();
-
-    if (!isSpeakingThis || currentSentence.isEmpty) {
+    if (!isSpokenActive) {
       return InkWell(
-        onDoubleTap: () => AiTtsService().speakFromSection(text, block.text),
-        borderRadius: BorderRadius.circular(8),
-        splashColor: const Color(0x1A6366F1),
-        child: blockWidget,
-      );
-    }
-
-    final blockText = block.text.trim();
-    final isMatching = blockText.isNotEmpty &&
-        (blockText.contains(currentSentence) ||
-         currentSentence.contains(blockText) ||
-         _isSubstantialOverlap(blockText, currentSentence));
-
-    if (!isMatching) {
-      return InkWell(
-        onDoubleTap: () => AiTtsService().speakFromSection(text, block.text),
+        onDoubleTap: () {
+          if (index >= 0) {
+            _lastSpokenBlockIndex = index;
+          }
+          AiTtsService().speakFromSection(text, block.text);
+        },
         borderRadius: BorderRadius.circular(8),
         splashColor: const Color(0x1A6366F1),
         child: blockWidget,
@@ -1222,99 +1363,6 @@ class _FormattedAiTextState extends State<FormattedAiText> {
       mainAxisSize: MainAxisSize.min,
       children: subBlocks.map((b) => _renderBlock(context, b, Theme.of(context))).toList(),
     );
-  }
-
-  List<DerivationStepItem> _parseDerivationSteps(String text) {
-    final lines = text.split('\n');
-    final List<DerivationStepItem> steps = [];
-
-    int currentStepNum = 0;
-    String currentTitle = '';
-    final StringBuffer currentExplanation = StringBuffer();
-    String? currentEquation;
-    String? currentIntuition;
-    String? currentRule;
-
-    void flushStep() {
-      if (currentStepNum > 0 || currentTitle.isNotEmpty || currentExplanation.isNotEmpty || currentEquation != null) {
-        steps.add(
-          DerivationStepItem(
-            stepNumber: currentStepNum > 0 ? currentStepNum : (steps.length + 1),
-            title: currentTitle.isNotEmpty ? currentTitle : 'Derivation Step ${steps.length + 1}',
-            equation: currentEquation,
-            explanation: currentExplanation.toString().trim(),
-            intuition: currentIntuition,
-            ruleOrTheorem: currentRule,
-          ),
-        );
-        currentStepNum = 0;
-        currentTitle = '';
-        currentExplanation.clear();
-        currentEquation = null;
-        currentIntuition = null;
-        currentRule = null;
-      }
-    }
-
-    for (final rawLine in lines) {
-      final line = rawLine.trim();
-      if (line.isEmpty) continue;
-
-      final match = _stepHeaderRx.firstMatch(line);
-      if (match != null) {
-        flushStep();
-        currentStepNum = int.tryParse(match.group(1) ?? '') ?? (steps.length + 1);
-        final rawTitle = match.group(2)?.trim() ?? '';
-        currentTitle = rawTitle.replaceAll(_asterisksStripRx, '').trim();
-        if (currentTitle.isEmpty) {
-          currentTitle = 'Transformation & Calculation';
-        }
-        continue;
-      }
-
-      if (line.startsWith(r'$$') && line.endsWith(r'$$') && line.length > 4) {
-        currentEquation = line.substring(2, line.length - 2).trim();
-        continue;
-      } else if (line.toLowerCase().startsWith('equation:') || line.toLowerCase().startsWith('formula:')) {
-        currentEquation = line.replaceFirst(_equationPrefixRx, '').trim();
-        continue;
-      }
-
-      if (line.toLowerCase().startsWith('💡') ||
-          line.toLowerCase().startsWith('intuition:') ||
-          line.toLowerCase().startsWith('why:') ||
-          line.toLowerCase().startsWith('reason:')) {
-        currentIntuition = line
-            .replaceFirst(_intuitionPrefixRx, '')
-            .trim();
-        continue;
-      }
-
-      if (line.toLowerCase().startsWith('rule:') ||
-          line.toLowerCase().startsWith('theorem:') ||
-          line.toLowerCase().startsWith('law:')) {
-        currentRule = line
-            .replaceFirst(_rulePrefixRx, '')
-            .trim();
-        continue;
-      }
-
-      currentExplanation.writeln(line);
-    }
-
-    flushStep();
-
-    if (steps.isEmpty && text.trim().isNotEmpty) {
-      steps.add(
-        DerivationStepItem(
-          stepNumber: 1,
-          title: 'Analytical Derivation',
-          explanation: text.trim(),
-        ),
-      );
-    }
-
-    return steps;
   }
 
   // ===========================================================================
@@ -2495,19 +2543,6 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   static final RegExp _checklistRx = RegExp(r'^-\s+\[([ xX])\]\s+(.*)');
   static final RegExp _numberedRx = RegExp(r'^(\d+)\.\s+(.*)');
   static final RegExp _bulletRx = RegExp(r'^(?:[•\-\*])\s+(.*)');
-  static final RegExp _derivationStep1Rx = RegExp(
-    r'^(?:#{1,4}\s*)?(?:\*\*)?(?:Step|Phase|Stage)\s*1[:\.\-\s]', caseSensitive: false);
-  static final RegExp _anyDerivationStepRx = RegExp(
-    r'^(?:#{1,4}\s*)?(?:\*\*)?(?:Step|Phase|Stage)\s*\d+[:\.\-\s]', caseSensitive: false);
-
-  bool _isDerivationStepStart(String line) {
-    if (line.toLowerCase().contains('foundation') || line.toLowerCase().contains('deep')) return false;
-    return _derivationStep1Rx.hasMatch(line);
-  }
-  bool _isAnyDerivationStep(String line) {
-    if (line.toLowerCase().contains('foundation') || line.toLowerCase().contains('deep')) return false;
-    return _anyDerivationStepRx.hasMatch(line);
-  }
 
   bool _isDiagramLanguageOrContent(String lang, String content) {
     final l = lang.toLowerCase();

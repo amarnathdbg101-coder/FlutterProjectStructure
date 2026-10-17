@@ -12,6 +12,108 @@ class SmartPromptItem {
     required this.prompt,
     this.icon = Icons.psychology_outlined,
   });
+
+  factory SmartPromptItem.fromJson(Map<String, dynamic> json) {
+    return SmartPromptItem(
+      label: json['label'] as String? ?? '',
+      prompt: json['prompt'] as String? ?? '',
+      icon: _resolveIcon(json['icon'] as String?),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'label': label,
+    'prompt': prompt,
+    'icon': icon.codePoint.toString(),
+  };
+
+  static IconData _resolveIcon(String? iconName) {
+    switch (iconName) {
+      case 'track_changes':
+        return Icons.track_changes_rounded;
+      case 'lightbulb':
+        return Icons.lightbulb_outline_rounded;
+      case 'functions':
+        return Icons.functions_rounded;
+      case 'bolt':
+        return Icons.bolt_rounded;
+      case 'compare_arrows':
+        return Icons.compare_arrows_rounded;
+      case 'help':
+        return Icons.help_outline_rounded;
+      case 'layers':
+        return Icons.layers_outlined;
+      case 'warning':
+        return Icons.warning_amber_rounded;
+      case 'timer':
+        return Icons.timer_outlined;
+      case 'table':
+        return Icons.table_chart_outlined;
+      case 'checklist':
+        return Icons.checklist_rounded;
+      case 'science':
+        return Icons.science_outlined;
+      case 'rule':
+        return Icons.rule_rounded;
+      case 'show_chart':
+        return Icons.show_chart_rounded;
+      case 'psychology':
+      default:
+        return Icons.psychology_outlined;
+    }
+  }
+}
+
+/// Represents server-synthesized smart context response from PostgreSQL & Go Cognitive Engine.
+class SmartContextResponse {
+  final String targetExam;
+  final List<SmartPromptItem> quickChips;
+  final List<SmartPromptItem> tutorSuggestions;
+  final List<String> suggestedTopics;
+  final String focusTopic;
+  final String inputHint;
+  final String topicHint;
+
+  const SmartContextResponse({
+    this.targetExam = '',
+    this.quickChips = const [],
+    this.tutorSuggestions = const [],
+    this.suggestedTopics = const [],
+    this.focusTopic = '',
+    this.inputHint = '',
+    this.topicHint = '',
+  });
+
+  factory SmartContextResponse.fromJson(Map<String, dynamic> json) {
+    return SmartContextResponse(
+      targetExam: json['target_exam'] as String? ?? '',
+      quickChips: (json['quick_chips'] as List<dynamic>?)
+              ?.map((e) => SmartPromptItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          const [],
+      tutorSuggestions: (json['tutor_suggestions'] as List<dynamic>?)
+              ?.map((e) => SmartPromptItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          const [],
+      suggestedTopics: (json['suggested_topics'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      focusTopic: json['focus_topic'] as String? ?? '',
+      inputHint: json['input_hint'] as String? ?? '',
+      topicHint: json['topic_hint'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'target_exam': targetExam,
+    'quick_chips': quickChips.map((c) => c.toJson()).toList(),
+    'tutor_suggestions': tutorSuggestions.map((s) => s.toJson()).toList(),
+    'suggested_topics': suggestedTopics,
+    'focus_topic': focusTopic,
+    'input_hint': inputHint,
+    'topic_hint': topicHint,
+  };
 }
 
 /// Smart AI Context Helper
@@ -22,122 +124,123 @@ class SmartPromptItem {
 /// 2. Student's Target Exam & Academic Domain (GATE CS, NEET, JEE, CBSE Boards, UPSC, etc.)
 /// 3. Currently selected AI Tutor Mode (Socratic, Feynman, Exam Cram, Derivations, etc.)
 class SmartAiContextHelper {
-  // --- Exam Domain Profiles ---
+  static SmartContextResponse? _serverContext;
 
-  static const List<String> _csTopics = [
-    'Data Structures & Algorithms',
-    'Operating Systems & Concurrency',
-    'Computer Networks & Protocols',
-    'Database Management & Indexing',
-    'Computer Architecture & Pipelining',
-    'Theory of Computation & Automata',
-  ];
+  /// Sets the server-synthesized smart context response (from PostgreSQL & Cognitive Engine).
+  static void setServerContext(SmartContextResponse? context) {
+    _serverContext = context;
+  }
 
-  static const List<String> _medicalTopics = [
-    'Molecular Basis of Inheritance',
-    'Human Physiology & Circulation',
-    'Genetics & Mendelian Principles',
-    'Organic Reaction Mechanisms',
-    'Chemical Equilibrium & Thermodynamics',
-    'Cell Structure & Division',
-  ];
+  /// Clears the cached server context.
+  static void clearServerContext() {
+    _serverContext = null;
+  }
 
-  static const List<String> _engineeringTopics = [
-    'Rotational Dynamics & Inertia',
-    'Electromagnetic Induction & Optics',
-    'Definite Integrals & Calculus',
-    'Thermodynamics & Heat Cycles',
-    'Matrices & Linear Transformations',
-    'Chemical Kinetics & Equilibrium',
-  ];
-
-  static const List<String> _schoolTopics = [
-    'Electricity & Ohm\'s Law',
-    'Light: Reflection & Refraction',
-    'Carbon & Its Chemical Compounds',
-    'Life Processes & Circulation',
-    'Quadratic Equations & Trigonometry',
-    'Acids, Bases & Salts',
-  ];
-
-  static const List<String> _civilServicesTopics = [
-    'Indian Constitutional Framework & Rights',
-    'Monsoon Dynamics & Physical Geography',
-    'Macroeconomics, Inflation & Monetary Policy',
-    'Modern Indian Freedom Movement',
-    'International Relations & Multilateral Treaties',
-    'Environmental Ecology & Biodiversity',
-  ];
-
-  static const List<String> _generalTopics = [
-    'Active Recall & Spaced Repetition',
-    'Critical Thinking & Logic Proofs',
-    'Scientific Method & Data Analysis',
-    'Core Mathematical Foundations',
-    'Thermodynamics Principles',
-    'Probability & Applied Statistics',
-  ];
+  // --- Canonical Baseline Fallback Matrices (PostgreSQL exam_curricula is the SSOT) ---
+  static const Map<String, List<String>> _curriculaFallback = {
+    'gate': [
+      'Data Structures & Algorithms',
+      'Operating Systems & Concurrency',
+      'Computer Networks & Protocols',
+      'Database Management & Indexing',
+      'Computer Architecture & Pipelining',
+      'Theory of Computation & Automata',
+    ],
+    'neet': [
+      'Molecular Basis of Inheritance',
+      'Human Physiology & Circulation',
+      'Genetics & Mendelian Principles',
+      'Organic Reaction Mechanisms',
+      'Chemical Equilibrium & Thermodynamics',
+      'Cell Structure & Division',
+    ],
+    'jee': [
+      'Rotational Dynamics & Inertia',
+      'Electromagnetic Induction & Optics',
+      'Definite Integrals & Calculus',
+      'Thermodynamics & Heat Cycles',
+      'Matrices & Linear Transformations',
+      'Chemical Kinetics & Equilibrium',
+    ],
+    'school': [
+      'Electricity & Ohm\'s Law',
+      'Light: Reflection & Refraction',
+      'Carbon & Its Chemical Compounds',
+      'Life Processes & Circulation',
+      'Quadratic Equations & Trigonometry',
+      'Acids, Bases & Salts',
+    ],
+    'upsc': [
+      'Indian Constitutional Framework & Rights',
+      'Monsoon Dynamics & Physical Geography',
+      'Macroeconomics, Inflation & Monetary Policy',
+      'Modern Indian Freedom Movement',
+      'International Relations & Multilateral Treaties',
+      'Environmental Ecology & Biodiversity',
+    ],
+    'general': [
+      'Active Recall & Spaced Repetition',
+      'Critical Thinking & Logic Proofs',
+      'Scientific Method & Data Analysis',
+      'Core Mathematical Foundations',
+      'Thermodynamics Principles',
+      'Probability & Applied Statistics',
+    ],
+  };
 
   /// Resolves the appropriate syllabus topics based on the student's target exam.
   static List<String> getExamTopics(String? targetExam) {
+    if (_serverContext != null &&
+        _serverContext!.suggestedTopics.isNotEmpty &&
+        (targetExam == null ||
+         _serverContext!.targetExam.isEmpty ||
+         _serverContext!.targetExam.toLowerCase().contains(targetExam.toLowerCase()) ||
+         targetExam.toLowerCase().contains(_serverContext!.targetExam.toLowerCase()))) {
+      return _serverContext!.suggestedTopics;
+    }
+
     if (targetExam == null || targetExam.trim().isEmpty) {
-      return _generalTopics;
+      return _curriculaFallback['general']!;
     }
     final lower = targetExam.toLowerCase();
 
-    if (lower.contains('gate') ||
-        lower.contains('computer') ||
-        lower.contains('tech') ||
-        lower.contains('code') ||
-        lower.contains('coding') ||
-        lower.contains('software')) {
-      return _csTopics;
+    if (lower.contains('gate') || lower.contains('computer') || lower.contains('tech') ||
+        lower.contains('code') || lower.contains('coding') || lower.contains('software')) {
+      return _curriculaFallback['gate']!;
     }
-
-    if (lower.contains('neet') ||
-        lower.contains('medical') ||
-        lower.contains('biology') ||
-        lower.contains('mbbs') ||
-        lower.contains('doctor') ||
-        lower.contains('usmle')) {
-      return _medicalTopics;
+    if (lower.contains('neet') || lower.contains('medical') || lower.contains('biology') ||
+        lower.contains('mbbs') || lower.contains('doctor') || lower.contains('usmle')) {
+      return _curriculaFallback['neet']!;
     }
-
-    if (lower.contains('jee') ||
-        lower.contains('iit') ||
-        lower.contains('bitsat') ||
-        lower.contains('engineering') ||
-        lower.contains('physics') ||
-        lower.contains('math')) {
-      return _engineeringTopics;
+    if (lower.contains('jee') || lower.contains('iit') || lower.contains('bitsat') ||
+        lower.contains('engineering') || lower.contains('physics') || lower.contains('math')) {
+      return _curriculaFallback['jee']!;
     }
-
-    if (lower.contains('class 10') ||
-        lower.contains('class 12') ||
-        lower.contains('cbse') ||
-        lower.contains('icse') ||
-        lower.contains('board') ||
-        lower.contains('school')) {
-      return _schoolTopics;
+    if (lower.contains('class 10') || lower.contains('class 12') || lower.contains('cbse') ||
+        lower.contains('icse') || lower.contains('board') || lower.contains('school')) {
+      return _curriculaFallback['school']!;
     }
-
-    if (lower.contains('upsc') ||
-        lower.contains('civil') ||
-        lower.contains('ias') ||
-        lower.contains('ips') ||
-        lower.contains('humanities') ||
-        lower.contains('history') ||
+    if (lower.contains('upsc') || lower.contains('civil') || lower.contains('ias') ||
+        lower.contains('ips') || lower.contains('humanities') || lower.contains('history') ||
         lower.contains('polity')) {
-      return _civilServicesTopics;
+      return _curriculaFallback['upsc']!;
     }
 
-    return _generalTopics;
+    return _curriculaFallback['general']!;
   }
 
   /// Returns 4 dynamic quick prompt chips for the Dashboard.
   /// If student has weak topics, they are directly featured as high-priority revision chips.
   /// Otherwise, curriculum-specific chips for their target exam are generated.
   static List<SmartPromptItem> getDashboardQuickChips(StudentMemoryProfile? profile) {
+    if (_serverContext != null &&
+        _serverContext!.quickChips.isNotEmpty &&
+        (profile == null ||
+         _serverContext!.targetExam.isEmpty ||
+         _serverContext!.targetExam.toLowerCase() == (profile.targetExam).toLowerCase())) {
+      return _serverContext!.quickChips;
+    }
+
     final weak = profile?.weakTopics ?? [];
     final exam = profile?.targetExam ?? 'Academic Studies';
     final examTopics = getExamTopics(profile?.targetExam);
@@ -219,6 +322,14 @@ class SmartAiContextHelper {
     StudentMemoryProfile? profile,
     String? tutorModeKey,
   }) {
+    if (_serverContext != null &&
+        _serverContext!.tutorSuggestions.isNotEmpty &&
+        (profile == null ||
+         _serverContext!.targetExam.isEmpty ||
+         _serverContext!.targetExam.toLowerCase() == (profile.targetExam).toLowerCase())) {
+      return _serverContext!.tutorSuggestions;
+    }
+
     final weak = profile?.weakTopics ?? [];
     final exam = profile?.targetExam ?? 'Exam Preparation';
     final examTopics = getExamTopics(profile?.targetExam);
@@ -337,6 +448,14 @@ class SmartAiContextHelper {
   /// Returns dynamic suggested topics for Quizzes and Mind Map generation dialogs.
   /// Blends the student's actual weak topics with exam curriculum topics.
   static List<String> getSuggestedTopics(StudentMemoryProfile? profile) {
+    if (_serverContext != null &&
+        _serverContext!.suggestedTopics.isNotEmpty &&
+        (profile == null ||
+         _serverContext!.targetExam.isEmpty ||
+         _serverContext!.targetExam.toLowerCase() == (profile.targetExam).toLowerCase())) {
+      return _serverContext!.suggestedTopics;
+    }
+
     return getSuggestedTopicsFromParams(
       weakTopics: profile?.weakTopics ?? [],
       targetExam: profile?.targetExam,
@@ -363,11 +482,19 @@ class SmartAiContextHelper {
       }
     }
 
-    return list.isNotEmpty ? list : _generalTopics;
+    return list.isNotEmpty ? list : _curriculaFallback['general']!;
   }
 
   /// Returns a dynamic hint string for search and doubt inputs.
   static String getSmartInputHint(StudentMemoryProfile? profile, {String? defaultHint}) {
+    if (_serverContext != null &&
+        _serverContext!.inputHint.isNotEmpty &&
+        (profile == null ||
+         _serverContext!.targetExam.isEmpty ||
+         _serverContext!.targetExam.toLowerCase() == (profile.targetExam).toLowerCase())) {
+      return _serverContext!.inputHint;
+    }
+
     if (profile?.weakTopics != null && profile!.weakTopics.isNotEmpty) {
       return 'Ask about ${profile.weakTopics.first} or any doubt...';
     }
@@ -379,6 +506,14 @@ class SmartAiContextHelper {
 
   /// Returns a dynamic hint for topic input fields.
   static String getSmartTopicHint(StudentMemoryProfile? profile) {
+    if (_serverContext != null &&
+        _serverContext!.topicHint.isNotEmpty &&
+        (profile == null ||
+         _serverContext!.targetExam.isEmpty ||
+         _serverContext!.targetExam.toLowerCase() == (profile.targetExam).toLowerCase())) {
+      return _serverContext!.topicHint;
+    }
+
     final topics = getSuggestedTopics(profile);
     if (topics.length >= 3) {
       return 'e.g. ${topics[0]}, ${topics[1]}, ${topics[2]}...';
@@ -388,6 +523,14 @@ class SmartAiContextHelper {
 
   /// Returns the top priority weak topic, or an exam-appropriate fallback.
   static String getPriorityFocusTopic(StudentMemoryProfile? profile) {
+    if (_serverContext != null &&
+        _serverContext!.focusTopic.isNotEmpty &&
+        (profile == null ||
+         _serverContext!.targetExam.isEmpty ||
+         _serverContext!.targetExam.toLowerCase() == (profile.targetExam).toLowerCase())) {
+      return _serverContext!.focusTopic;
+    }
+
     if (profile?.weakTopics != null && profile!.weakTopics.isNotEmpty) {
       return profile.weakTopics.first;
     }

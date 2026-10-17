@@ -10,6 +10,8 @@ class MindMapPainter extends CustomPainter {
   final DiagramNodeModel? draggedNode;
   final String searchQuery;
   final int repaintVersion;
+  final bool isActiveRecallMode;
+  final Set<String> revealedNodeIds;
 
   MindMapPainter({
     required this.diagram,
@@ -18,6 +20,8 @@ class MindMapPainter extends CustomPainter {
     this.draggedNode,
     this.searchQuery = '',
     this.repaintVersion = 0,
+    this.isActiveRecallMode = false,
+    this.revealedNodeIds = const {},
   });
 
   @override
@@ -254,9 +258,15 @@ class MindMapPainter extends CustomPainter {
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, isDragged ? 24 : (isSelected ? 14 : 6));
       canvas.drawRRect(rrect.shift(Offset(0, isDragged ? 8 : 3)), shadowPaint);
 
+      final isMaskedForRecall = isActiveRecallMode && !node.isRoot && !revealedNodeIds.contains(node.id);
+      final isRevealedInRecall = isActiveRecallMode && !node.isRoot && revealedNodeIds.contains(node.id);
+
       // 3. Draw Node Card Background
       final fillPaint = Paint()..style = PaintingStyle.fill;
-      if (node.isRoot) {
+      if (isMaskedForRecall) {
+        fillPaint.color = (isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF))
+            .withValues(alpha: nodeOpacity);
+      } else if (node.isRoot) {
         fillPaint.color = nodeColor.withValues(alpha: nodeOpacity);
       } else if (node.isBranch) {
         fillPaint.color = (isDark ? const Color(0xFF1E293B) : Colors.white)
@@ -275,23 +285,73 @@ class MindMapPainter extends CustomPainter {
           bottomLeft: const Radius.circular(12),
         );
         final accentPaint = Paint()
-          ..color = nodeColor.withValues(alpha: nodeOpacity)
+          ..color = (isMaskedForRecall
+                  ? const Color(0xFF6366F1)
+                  : (isRevealedInRecall ? const Color(0xFF10B981) : nodeColor))
+              .withValues(alpha: nodeOpacity)
           ..style = PaintingStyle.fill;
         canvas.drawRRect(accentRect, accentPaint);
       }
 
       // 5. Draw Card Border
       final borderPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 2.5 : (node.isRoot ? 1.0 : 1.2)
-        ..color = isSelected
+        ..style = PaintingStyle.stroke;
+      if (isMaskedForRecall) {
+        borderPaint.strokeWidth = 1.6;
+        borderPaint.color = const Color(0xFF818CF8).withValues(alpha: 0.9 * nodeOpacity);
+      } else if (isRevealedInRecall) {
+        borderPaint.strokeWidth = 1.8;
+        borderPaint.color = const Color(0xFF10B981).withValues(alpha: 0.95 * nodeOpacity);
+      } else {
+        borderPaint.strokeWidth = isSelected ? 2.5 : (node.isRoot ? 1.0 : 1.2);
+        borderPaint.color = isSelected
             ? AppColors.primary.withValues(alpha: nodeOpacity)
             : (node.isRoot
                 ? Colors.white.withValues(alpha: 0.4 * nodeOpacity)
                 : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)).withValues(alpha: nodeOpacity));
+      }
       canvas.drawRRect(rrect, borderPaint);
 
-      // 6. Draw Node Label Text
+      // 6. Draw Node Label Text (or Masked Recall Prompt)
+      if (isMaskedForRecall) {
+        final maskSpan = TextSpan(
+          text: '🧠 Tap to Reveal',
+          style: TextStyle(
+            color: const Color(0xFF818CF8).withValues(alpha: nodeOpacity),
+            fontSize: 11.8,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.2,
+          ),
+        );
+        final maskPainter = TextPainter(
+          text: maskSpan,
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+        )..layout(maxWidth: node.width - 24);
+        final maskOffset = Offset(
+          node.x + (node.width - maskPainter.width) / 2,
+          node.y + (node.height - maskPainter.height) / 2,
+        );
+        maskPainter.paint(canvas, maskOffset);
+        continue; // Skip details, indicator pills, and metrics until tapped
+      }
+
+      if (isRevealedInRecall) {
+        final checkSpan = TextSpan(
+          text: '✓',
+          style: TextStyle(
+            color: const Color(0xFF10B981).withValues(alpha: nodeOpacity),
+            fontSize: 11.0,
+            fontWeight: FontWeight.bold,
+          ),
+        );
+        final checkPainter = TextPainter(
+          text: checkSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        checkPainter.paint(canvas, Offset(node.x + node.width - 16, node.y + 4));
+      }
+
       final textColor = node.isRoot
           ? Colors.white.withValues(alpha: nodeOpacity)
           : (isDark ? Colors.white : AppColors.textPrimary).withValues(alpha: nodeOpacity);

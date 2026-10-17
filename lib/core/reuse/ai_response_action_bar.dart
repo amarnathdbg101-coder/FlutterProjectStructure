@@ -7,6 +7,7 @@ import '../widgets/custom_snackbar.dart';
 /// Provides one-tap Copy, Listen Aloud (TTS), Feynman Simplification, and Practice Generation
 class AiResponseActionBar extends StatelessWidget {
   final String solutionContent;
+  final String? spokenTranscript;
   final VoidCallback onSimplify;
   final VoidCallback onPractice;
   final VoidCallback? onSummarize;
@@ -16,6 +17,7 @@ class AiResponseActionBar extends StatelessWidget {
   const AiResponseActionBar({
     super.key,
     required this.solutionContent,
+    this.spokenTranscript,
     required this.onSimplify,
     required this.onPractice,
     this.onSummarize,
@@ -66,7 +68,7 @@ class AiResponseActionBar extends StatelessWidget {
                     } else if (isPausedThis) {
                       tts.resume();
                     } else {
-                      tts.speak(solutionContent);
+                      tts.speak(solutionContent, precomputedSpokenTranscript: spokenTranscript);
                     }
                   },
                   borderRadius: BorderRadius.circular(6),

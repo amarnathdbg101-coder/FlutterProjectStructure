@@ -244,26 +244,26 @@ class AiTtsService extends ChangeNotifier {
       await _flutterTts.setLanguage(targetLang);
 
       // 2. Persona-Calibrated Voice Pitch (Natural human vocal register)
-      // Priya Ma'am: sweet, polite, encouraging teacher tone (pitch 1.06)
-      // Dr. Aryan: calm, deep, analytical professor tone (pitch 0.90)
-      // AI Mentor: conversational, lively, friendly timbre (pitch 1.00)
-      double targetPitch = 1.06;
+      // Priya Ma'am: bright, encouraging, energetic teacher tone (pitch 1.08)
+      // Dr. Aryan: confident, articulate, resonant professor tone (pitch 0.96)
+      // AI Mentor: lively, energetic, engaging peer tutor (pitch 1.03)
+      double targetPitch = 1.08;
       bool preferFemale = true;
       if (_persona == VoicePersona.aryan) {
-        targetPitch = 0.90;
+        targetPitch = 0.96;
         preferFemale = false;
       } else if (_persona == VoicePersona.mentor) {
-        targetPitch = 1.00;
+        targetPitch = 1.03;
         preferFemale = true;
       }
       await _flutterTts.setPitch(targetPitch);
 
-      // 3. Natural speech rate: 0.45 gives articulate, smooth pronunciation without rushing
-      final baseRate = kIsWeb ? 0.88 : 0.45;
+      // 3. Energetic, human-like speech tempo: 0.52 gives crisp, lively, and articulate delivery
+      final baseRate = kIsWeb ? 1.0 : 0.52;
       await _flutterTts.setSpeechRate(baseRate * _speechRate);
       await _flutterTts.setVolume(1.0);
 
-      // 4. Intelligent Neural Voice Selector: memoizes Google's Network Neural voices over robotic local voices
+      // 4. Intelligent Neural Voice Selector: prioritizes Google's Neural2 and Studio network voices
       if (!kIsWeb) {
         if (_cachedVoices == null) {
           try {
@@ -294,24 +294,26 @@ class AiTtsService extends ChangeNotifier {
                   continue;
                 }
 
-                // Google Cloud Network Neural voices (WaveNet/Neural2)
-                if (name.contains('network') || name.contains('neural') || name.contains('wavenet') || name.contains('natural') || name.contains('studio')) {
+                // Google Cloud Studio & Neural2 high-fidelity voices
+                if (name.contains('neural2') || name.contains('studio')) {
+                  score += 130;
+                } else if (name.contains('network') || name.contains('neural') || name.contains('wavenet') || name.contains('natural')) {
                   score += 100;
                 }
                 if (name.contains('local') || name.contains('compact') || name.contains('low')) {
-                  score -= 40;
+                  score -= 50;
                 }
 
                 // Gender / Timbre preference
                 if (preferFemale) {
                   if (name.contains('female') || name.contains('cfl') || name.contains('end') || name.contains('ene') || name.contains('hie')) {
-                    score += 40;
+                    score += 50;
                   } else if (name.contains('male')) {
                     score -= 60;
                   }
                 } else {
                   if ((name.contains('male') && !name.contains('female')) || name.contains('enp') || name.contains('hid') || name.contains('hin')) {
-                    score += 40;
+                    score += 50;
                   } else if (name.contains('female')) {
                     score -= 60;
                   }
@@ -707,6 +709,8 @@ class AiTtsService extends ChangeNotifier {
     s = s.replaceAllMapped(RegExp(r'==([^=]+)=='), (m) => m.group(1)!);
     s = s.replaceAllMapped(RegExp(r'<mark>([\s\S]*?)</mark>', caseSensitive: false), (m) => m.group(1)!);
     s = s.replaceAll('**', '').replaceAll('__', '');
+    // Natural human numbered point cadence: "Point 1: ... Point 2: ..."
+    s = s.replaceAllMapped(RegExp(r'^\s*([0-9]+)\.\s+', multiLine: true), (m) => '. Point ${m.group(1)}: ');
     s = s.replaceAll(RegExp(r'^[•\-\*]\s+', multiLine: true), '. ');
 
     // Step 6: Convert Visual Emojis into polite human spoken cues
@@ -744,8 +748,11 @@ class AiTtsService extends ChangeNotifier {
   // ===========================================================================
 
   /// Speaks the solution aloud using high-fidelity TTS
-  Future<void> speak(String text) async {
-    final clean = sanitizeTextForSpeech(text);
+  /// If precomputedSpokenTranscript is provided by the Go backend, it avoids executing heavy client regex on low-end phones!
+  Future<void> speak(String text, {String? precomputedSpokenTranscript}) async {
+    final clean = (precomputedSpokenTranscript != null && precomputedSpokenTranscript.trim().isNotEmpty)
+        ? precomputedSpokenTranscript.trim()
+        : sanitizeTextForSpeech(text);
     if (clean.isEmpty) return;
 
     unawaited(ensureAudioHandlerInitialized());
@@ -758,7 +765,7 @@ class AiTtsService extends ChangeNotifier {
     if (cached != null && cached.isNotEmpty) {
       _chunks = cached;
     } else {
-      _chunks = _splitIntoSpokenChunks(text);
+      _chunks = _splitIntoSpokenChunks(text, precomputedSpokenText: clean);
       unawaited(AiAudioCacheService().cacheChunks(text, _chunks));
     }
     notifyListeners();
@@ -772,7 +779,7 @@ class AiTtsService extends ChangeNotifier {
   }
 
   /// Splits long explanations into sentence-sized chunks with raw-to-spoken matching for real-time karaoke highlight
-  static List<SpokenChunk> _splitIntoSpokenChunks(String text) {
+  static List<SpokenChunk> _splitIntoSpokenChunks(String text, {String? precomputedSpokenText}) {
     final rawLines = text.split(RegExp(r'\n+'));
     final List<String> rawUnits = [];
 
@@ -792,16 +799,34 @@ class AiTtsService extends ChangeNotifier {
     }
 
     final List<SpokenChunk> chunks = [];
-    for (final raw in rawUnits) {
-      final spoken = sanitizeTextForSpeech(raw);
-      if (spoken.isNotEmpty) {
-        chunks.add(SpokenChunk(rawText: raw, spokenText: spoken));
+    if (precomputedSpokenText != null && precomputedSpokenText.trim().isNotEmpty) {
+      // ⚡ Backend offload: Split the server-precomputed transcript by sentence boundaries
+      final spokenSentences = precomputedSpokenText
+          .split(RegExp(r'(?<=[.!?])\s+'))
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+
+      if (spokenSentences.isNotEmpty) {
+        for (int i = 0; i < spokenSentences.length; i++) {
+          final spoken = spokenSentences[i].trim();
+          final raw = i < rawUnits.length ? rawUnits[i] : (rawUnits.isNotEmpty ? rawUnits.last : text);
+          chunks.add(SpokenChunk(rawText: raw, spokenText: spoken));
+        }
+      }
+    }
+
+    if (chunks.isEmpty) {
+      for (final raw in rawUnits) {
+        final spoken = sanitizeTextForSpeech(raw);
+        if (spoken.isNotEmpty) {
+          chunks.add(SpokenChunk(rawText: raw, spokenText: spoken));
+        }
       }
     }
 
     // Fallback if no individual units parsed
     if (chunks.isEmpty) {
-      final spoken = sanitizeTextForSpeech(text);
+      final spoken = precomputedSpokenText ?? sanitizeTextForSpeech(text);
       if (spoken.isNotEmpty) {
         chunks.add(SpokenChunk(rawText: text, spokenText: spoken));
       }

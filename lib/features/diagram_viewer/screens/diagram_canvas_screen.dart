@@ -103,6 +103,9 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
 
     controller.selectNode(hitNode);
     if (hitNode != null) {
+      if (controller.isActiveRecallMode && !hitNode.isRoot) {
+        controller.revealNode(hitNode.id);
+      }
       HapticFeedback.selectionClick();
       _showNodeDetailsSheet(hitNode);
     }
@@ -2137,6 +2140,8 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                                             draggedNode: controller.draggedNode,
                                             searchQuery: controller.searchQuery,
                                             repaintVersion: controller.version,
+                                            isActiveRecallMode: controller.isActiveRecallMode,
+                                            revealedNodeIds: controller.revealedNodeIds,
                                           ),
                                         ),
                                       ),
@@ -2369,6 +2374,77 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
             },
           ),
 
+          // Active Recall Mode Toggle
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              controller.toggleActiveRecallMode();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: controller.isActiveRecallMode ? const Color(0xFF6366F1) : const Color(0xFF475569),
+                  duration: const Duration(seconds: 2),
+                  content: Text(
+                    controller.isActiveRecallMode
+                        ? '🧠 Active Recall Mode ON! Tap cards to test your memory.'
+                        : 'Active Recall Mode OFF.',
+                  ),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: controller.isActiveRecallMode
+                    ? const Color(0xFF6366F1).withValues(alpha: 0.18)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: controller.isActiveRecallMode
+                      ? const Color(0xFF6366F1)
+                      : (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+                  width: 1.0,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.psychology_rounded,
+                    size: 15,
+                    color: controller.isActiveRecallMode
+                        ? const Color(0xFF6366F1)
+                        : (isDark ? Colors.white70 : AppColors.textSecondary),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    controller.isActiveRecallMode
+                        ? 'Recall: ${controller.revealedCount}/${controller.totalTestableNodes}'
+                        : 'Active Recall',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: controller.isActiveRecallMode
+                          ? const Color(0xFF6366F1)
+                          : (isDark ? Colors.white70 : AppColors.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 1-Tap Mind Map to Practice Quiz
+          IconButton(
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: 'Practice Quiz from Mind Map',
+            icon: const Icon(Icons.quiz_rounded, color: Color(0xFF10B981)),
+            onPressed: () => _handleGenerateQuizFromMindMap(controller),
+          ),
+
           // 1-Tap HD PNG Poster Export (pixelRatio: 2.5)
           IconButton(
             iconSize: 18,
@@ -2381,5 +2457,56 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _handleGenerateQuizFromMindMap(DiagramController controller) async {
+    if (controller.diagram == null || controller.diagram!.nodes.isEmpty) return;
+    HapticFeedback.mediumImpact();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 16),
+            ],
+          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Synthesizing Practice Quiz from Mind Map...',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final quizData = await controller.generateQuizFromMindMap(numQuestions: 5, difficulty: 'medium');
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (quizData != null) {
+      context.push(
+        AppRoutes.quizzes,
+        extra: {'title': controller.diagram?.concept ?? 'Mind Map Quiz'},
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(controller.errorMessage ?? 'Failed to generate quiz from mind map'),
+        ),
+      );
+    }
   }
 }

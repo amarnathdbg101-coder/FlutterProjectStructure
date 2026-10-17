@@ -111,6 +111,8 @@ class AiTutorRepository {
       final followUpQuestions = <String>[];
       String? returnedSessionId = effectiveSessionId;
       String? returnedAssistantMessageId;
+      String? returnedSpokenTranscript;
+      List<AiBlockModel>? returnedBlocks;
       String? streamError;
       var pendingSseText = '';
 
@@ -129,6 +131,13 @@ class AiTutorRepository {
           case 'done':
             returnedSessionId = decoded['session_id'] as String? ?? returnedSessionId;
             returnedAssistantMessageId = decoded['assistant_message_id'] as String?;
+            returnedSpokenTranscript = decoded['spoken_transcript'] as String?;
+            if (decoded['blocks'] is List) {
+              returnedBlocks = (decoded['blocks'] as List)
+                  .whereType<Map<String, dynamic>>()
+                  .map(AiBlockModel.fromJson)
+                  .toList();
+            }
             if (decoded['follow_up_chips'] is List) {
               followUpQuestions.addAll((decoded['follow_up_chips'] as List).map((item) => item.toString()));
             }
@@ -159,6 +168,8 @@ class AiTutorRepository {
           followUpQuestions: followUpQuestions,
           createdAt: DateTime.now(),
           sessionId: returnedSessionId,
+          spokenTranscript: returnedSpokenTranscript,
+          blocks: returnedBlocks,
         );
       }
 
@@ -230,6 +241,14 @@ class AiTutorRepository {
         chips = (data['follow_up_chips'] as List).map((e) => e.toString()).toList();
       }
 
+      List<AiBlockModel>? blocks;
+      if (data['blocks'] is List) {
+        blocks = (data['blocks'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map(AiBlockModel.fromJson)
+            .toList();
+      }
+
       return ChatMessageModel(
         id: data['assistant_message_id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
         role: 'assistant',
@@ -237,6 +256,8 @@ class AiTutorRepository {
         followUpQuestions: chips,
         createdAt: DateTime.now(),
         sessionId: returnedSessionId,
+        spokenTranscript: data['spoken_transcript'] as String?,
+        blocks: blocks,
       );
     }
 

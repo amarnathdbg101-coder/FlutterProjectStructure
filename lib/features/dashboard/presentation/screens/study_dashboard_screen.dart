@@ -28,7 +28,6 @@ class StudyDashboardScreen extends ConsumerStatefulWidget {
 class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
   final StudentMemoryService _memoryService = StudentMemoryService();
   final TextEditingController _searchController = TextEditingController();
-  StudentMemoryProfile? _studentProfile;
 
   @override
   void initState() {
@@ -51,12 +50,7 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
   }
 
   Future<void> _loadStudentMemory() async {
-    final profile = await _memoryService.getProfile();
-    if (mounted) {
-      setState(() {
-        _studentProfile = profile;
-      });
-    }
+    await _memoryService.getProfile();
   }
 
   Future<void> _logout() async {
@@ -418,15 +412,6 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
     final auth = context.watch<AuthController>();
     final user = auth.currentUser;
     final userName = user?.name ?? TokenStorage.getUserName() ?? 'Scholar';
-
-    final streakDays = _studentProfile?.studyStreakDays ?? 1;
-    final activeSubject = _studentProfile?.targetExam.isNotEmpty == true
-        ? _studentProfile!.targetExam
-        : 'University Exam Track';
-    final activeTopic = _studentProfile?.weakTopics.isNotEmpty == true
-        ? _studentProfile!.weakTopics.first
-        : 'Branch Prediction & Pipeline Hazards';
-    final activeProgress = ((_studentProfile?.readinessScore ?? 45) / 100.0).clamp(0.1, 1.0);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0B0F17) : const Color(0xFFF8FAFC),

@@ -30,6 +30,8 @@ class DiagramController extends ChangeNotifier {
   bool _isExpandingNode = false;
   DiagramNodeModel? _draggedNode;
   List<SavedMindMapSummaryModel> _savedMindMaps = [];
+  bool _isActiveRecallMode = false;
+  final Set<String> _revealedNodeIds = {};
 
   DiagramModel? get diagram => _diagram;
   bool get isLoading => _isLoading;
@@ -43,6 +45,45 @@ class DiagramController extends ChangeNotifier {
   List<SavedMindMapSummaryModel> get savedMindMaps => _savedMindMaps;
   MindMapLayoutStyle get layoutStyle => _diagram?.layoutStyle ?? MindMapLayoutStyle.radial;
   bool get isCustomPositions => _diagram?.isCustomPositions ?? false;
+  bool get isActiveRecallMode => _isActiveRecallMode;
+  Set<String> get revealedNodeIds => _revealedNodeIds;
+  int get revealedCount => _revealedNodeIds.length;
+  int get totalTestableNodes => _diagram?.nodes.where((n) => !n.isRoot).length ?? 0;
+
+  void toggleActiveRecallMode() {
+    _isActiveRecallMode = !_isActiveRecallMode;
+    if (_isActiveRecallMode) {
+      _revealedNodeIds.clear();
+    }
+    _version++;
+    notifyListeners();
+  }
+
+  void revealNode(String nodeId) {
+    if (!_revealedNodeIds.contains(nodeId)) {
+      _revealedNodeIds.add(nodeId);
+      _version++;
+      notifyListeners();
+    }
+  }
+
+  void revealAllNodes() {
+    if (_diagram != null) {
+      for (final n in _diagram!.nodes) {
+        if (!n.isRoot) {
+          _revealedNodeIds.add(n.id);
+        }
+      }
+      _version++;
+      notifyListeners();
+    }
+  }
+
+  void resetActiveRecall() {
+    _revealedNodeIds.clear();
+    _version++;
+    notifyListeners();
+  }
 
   int _version = 0;
   int get version => _version;
@@ -222,7 +263,10 @@ class DiagramController extends ChangeNotifier {
         noteId: noteId,
         diagramType: diagramType,
       );
-      result.calculateLayout(canvasSize);
+      final hasServerLayout = result.nodes.any((n) => n.x != 0 || n.y != 0);
+      if (!hasServerLayout) {
+        result.calculateLayout(canvasSize);
+      }
       _diagram = result;
       resetView();
     } catch (e) {
@@ -234,7 +278,10 @@ class DiagramController extends ChangeNotifier {
   }
 
   void setDiagramDirect(DiagramModel model, {Size canvasSize = const Size(2800, 2000)}) {
-    model.calculateLayout(canvasSize);
+    final hasServerLayout = model.nodes.any((n) => n.x != 0 || n.y != 0);
+    if (!hasServerLayout) {
+      model.calculateLayout(canvasSize);
+    }
     _diagram = model;
     resetView();
     notifyListeners();
@@ -415,7 +462,10 @@ class DiagramController extends ChangeNotifier {
 
     try {
       final model = await _repository.getMindMap(id);
-      model.calculateLayout(canvasSize);
+      final hasServerLayout = model.nodes.any((n) => n.x != 0 || n.y != 0);
+      if (!hasServerLayout) {
+        model.calculateLayout(canvasSize);
+      }
       _diagram = model;
       resetView();
     } catch (e) {

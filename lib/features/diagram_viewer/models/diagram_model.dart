@@ -112,6 +112,11 @@ class DiagramNodeModel {
       parsedFormulas.insert(0, latex);
     }
 
+    final double? parsedX = (json['x'] is num) ? (json['x'] as num).toDouble() : null;
+    final double? parsedY = (json['y'] is num) ? (json['y'] as num).toDouble() : null;
+    final double? parsedW = (json['width'] is num && (json['width'] as num) > 0) ? (json['width'] as num).toDouble() : null;
+    final double? parsedH = (json['height'] is num && (json['height'] as num) > 0) ? (json['height'] as num).toDouble() : null;
+
     return DiagramNodeModel(
       id: json['id']?.toString() ?? '',
       label: json['label']?.toString() ?? (json['title']?.toString() ?? 'Concept'),
@@ -130,8 +135,10 @@ class DiagramNodeModel {
       metrics: parseMetrics(json['metrics']),
       codeSnippet: json['code_snippet']?.toString() ?? '',
       crossLinks: parseList(json['cross_links']),
-      width: w,
-      height: h,
+      x: parsedX ?? 0.0,
+      y: parsedY ?? 0.0,
+      width: parsedW ?? w,
+      height: parsedH ?? h,
     );
   }
 
@@ -347,13 +354,21 @@ class DiagramModel {
       _extractTreeNodesAndEdges(rootMap, parsedNodes, parsedEdges, null, 0, '');
     }
 
-    // 2. If flat "nodes" list is present, add any nodes that weren't already added
+    // 2. If flat "nodes" list is present, add or update with server pre-computed layout coordinates
     final rawNodes = payload['nodes'] ?? json['nodes'];
     if (rawNodes is List) {
       for (final n in rawNodes) {
         if (n is Map) {
           final node = DiagramNodeModel.fromJson(Map<String, dynamic>.from(n));
-          if (!parsedNodes.any((existing) => existing.id == node.id)) {
+          final existingIdx = parsedNodes.indexWhere((existing) => existing.id == node.id);
+          if (existingIdx != -1) {
+            if (node.x != 0 || node.y != 0) {
+              parsedNodes[existingIdx].x = node.x;
+              parsedNodes[existingIdx].y = node.y;
+              parsedNodes[existingIdx].width = node.width;
+              parsedNodes[existingIdx].height = node.height;
+            }
+          } else {
             parsedNodes.add(node);
           }
         }
@@ -1209,7 +1224,7 @@ class DiagramModel {
 
   /// Automated AABB collision solver that guarantees zero overlapping node boxes
   void resolveCollisions({
-    int maxIterations = 25,
+    int maxIterations = 6,
     double horizontalGap = 28.0,
     double verticalGap = 20.0,
   }) {

@@ -50,6 +50,7 @@ class ApiConstants {
   static const String quizzes = '/api/v1/quizzes';
   static const String generateQuiz = '/api/v1/quizzes/generate';
   static const String cognitiveProfile = '/api/v1/profile/cognitive';
+  static const String cognitiveSmartContext = '/api/v1/profile/cognitive/smart-context';
   static const String cognitiveDiagnose = '/api/v1/profile/cognitive/diagnose';
   static const String cognitivePromote = '/api/v1/profile/cognitive/topics/promote';
   static const String cognitiveDemote = '/api/v1/profile/cognitive/topics/demote';

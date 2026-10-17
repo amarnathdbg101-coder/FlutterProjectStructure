@@ -1169,6 +1169,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                       isDark: isDark,
                       isStreaming: controller.isStreaming && msg.id == controller.streamingAssistantMessageId,
                       sourceNoteTitle: controller.activeNoteTitle,
+                      precomputedBlocks: msg.blocks,
                       onSwitchMode: (mode) {
                         controller.switchModeByName(mode);
                         CustomSnackbar.showInfo(context, 'Switched to ${controller.tutorMode.label}');
@@ -1184,6 +1185,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                       const SizedBox(height: 10),
                       AiResponseActionBar(
                         solutionContent: msg.content,
+                        spokenTranscript: msg.spokenTranscript,
                         isDark: isDark,
                         onSimplify: () {
                           controller.sendQuestion('Explain this in simpler words using Feynman Technique with a simple analogy');

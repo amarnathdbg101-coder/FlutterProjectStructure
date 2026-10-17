@@ -4,9 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../models/student_memory.dart';
+import 'smart_ai_context_helper.dart';
 
 class StudentMemoryService {
   static const String _prefKey = 'studysilo_student_memory_profile';
+  static const String _smartContextPrefKey = 'studysilo_smart_context';
   static StudentMemoryService? _instance;
   final Dio _dio = ApiClient().dio;
 
@@ -30,12 +32,16 @@ class StudentMemoryService {
       }
     } catch (_) {}
 
+    // Also prime smart context in background
+    fetchSmartContext(targetExam: cachedProfile?.targetExam).catchError((_) => null);
+
     // If we have cached profile and don't need forced remote sync, try background refresh or return cached
     if (cachedProfile != null && !forceRemote) {
       // Fire-and-forget sync with backend in background
       _syncFromBackend().then((remoteProfile) {
         if (remoteProfile != null) {
           _saveToLocal(remoteProfile);
+          fetchSmartContext(targetExam: remoteProfile.targetExam, forceRemote: true).catchError((_) => null);
         }
       }).catchError((_) {});
       return cachedProfile;
@@ -45,10 +51,73 @@ class StudentMemoryService {
     final remote = await _syncFromBackend();
     if (remote != null) {
       await _saveToLocal(remote);
+      fetchSmartContext(targetExam: remote.targetExam, forceRemote: true).catchError((_) => null);
       return remote;
     }
 
     return cachedProfile ?? StudentMemoryProfile.defaultProfile();
+  }
+
+  /// Fetch dynamic smart context (prompts, syllabus suggestions, hints) from PostgreSQL / Go Cognitive Engine
+  Future<SmartContextResponse?> fetchSmartContext({
+    String? tutorMode,
+    String? targetExam,
+    bool forceRemote = false,
+  }) async {
+    // 1. Try local cache first for instant startup
+    if (!forceRemote) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_smartContextPrefKey);
+        if (raw != null && raw.isNotEmpty) {
+          final data = jsonDecode(raw) as Map<String, dynamic>;
+          final cached = SmartContextResponse.fromJson(data);
+          SmartAiContextHelper.setServerContext(cached);
+          // background sync
+          _syncSmartContextFromBackend(tutorMode: tutorMode, targetExam: targetExam).then((remote) {
+            if (remote != null) {
+              _saveSmartContextToLocal(remote);
+              SmartAiContextHelper.setServerContext(remote);
+            }
+          }).catchError((_) {});
+          return cached;
+        }
+      } catch (_) {}
+    }
+
+    final remote = await _syncSmartContextFromBackend(tutorMode: tutorMode, targetExam: targetExam);
+    if (remote != null) {
+      await _saveSmartContextToLocal(remote);
+      SmartAiContextHelper.setServerContext(remote);
+      return remote;
+    }
+    return null;
+  }
+
+  Future<SmartContextResponse?> _syncSmartContextFromBackend({String? tutorMode, String? targetExam}) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.cognitiveSmartContext,
+        queryParameters: {
+          if (tutorMode != null && tutorMode.isNotEmpty) 'mode': tutorMode,
+          if (targetExam != null && targetExam.isNotEmpty) 'exam': targetExam,
+        },
+      );
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data != null &&
+          response.data['data'] != null) {
+        final data = Map<String, dynamic>.from(response.data['data'] as Map);
+        return SmartContextResponse.fromJson(data);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _saveSmartContextToLocal(SmartContextResponse response) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_smartContextPrefKey, jsonEncode(response.toJson()));
+    } catch (_) {}
   }
 
   /// Fetch latest profile from backend database

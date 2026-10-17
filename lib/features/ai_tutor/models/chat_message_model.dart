@@ -8,6 +8,8 @@ class ChatMessageModel {
   final List<String> keyConcepts;
   final DateTime createdAt;
   final String? sessionId;
+  final String? spokenTranscript;
+  final List<AiBlockModel>? blocks;
 
   ChatMessageModel({
     required this.id,
@@ -19,6 +21,8 @@ class ChatMessageModel {
     this.keyConcepts = const [],
     required this.createdAt,
     this.sessionId,
+    this.spokenTranscript,
+    this.blocks,
   });
 
   bool get isUser => role == 'user';
@@ -34,6 +38,8 @@ class ChatMessageModel {
     List<String>? keyConcepts,
     DateTime? createdAt,
     String? sessionId,
+    String? spokenTranscript,
+    List<AiBlockModel>? blocks,
   }) {
     return ChatMessageModel(
       id: id ?? this.id,
@@ -45,6 +51,8 @@ class ChatMessageModel {
       keyConcepts: keyConcepts ?? this.keyConcepts,
       createdAt: createdAt ?? this.createdAt,
       sessionId: sessionId ?? this.sessionId,
+      spokenTranscript: spokenTranscript ?? this.spokenTranscript,
+      blocks: blocks ?? this.blocks,
     );
   }
 
@@ -54,6 +62,13 @@ class ChatMessageModel {
         return raw.map((e) => e.toString()).toList();
       }
       return [];
+    }
+
+    List<AiBlockModel>? parseBlocks(dynamic raw) {
+      if (raw is List) {
+        return raw.whereType<Map<String, dynamic>>().map(AiBlockModel.fromJson).toList();
+      }
+      return null;
     }
 
     return ChatMessageModel(
@@ -68,6 +83,8 @@ class ChatMessageModel {
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
       sessionId: json['session_id'] as String? ?? json['scope_id'] as String?,
+      spokenTranscript: json['spoken_transcript'] as String?,
+      blocks: parseBlocks(json['blocks']),
     );
   }
 
@@ -81,5 +98,33 @@ class ChatMessageModel {
     'key_concepts': keyConcepts,
     'created_at': createdAt.toIso8601String(),
     if (sessionId != null) 'session_id': sessionId,
+    if (spokenTranscript != null) 'spoken_transcript': spokenTranscript,
+    if (blocks != null) 'blocks': blocks!.map((b) => b.toJson()).toList(),
+  };
+}
+
+class AiBlockModel {
+  final String type;
+  final String text;
+  final String? extra;
+
+  const AiBlockModel({
+    required this.type,
+    required this.text,
+    this.extra,
+  });
+
+  factory AiBlockModel.fromJson(Map<String, dynamic> json) {
+    return AiBlockModel(
+      type: json['type']?.toString() ?? 'paragraph',
+      text: json['text']?.toString() ?? '',
+      extra: json['extra']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'text': text,
+    if (extra != null) 'extra': extra,
   };
 }

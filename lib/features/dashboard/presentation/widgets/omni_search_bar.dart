@@ -27,8 +27,6 @@ class OmniSearchBar extends StatelessWidget {
     final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
     final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
     final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final chipBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
-    final chipBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
     const primary = Color(0xFF2563EB);
 
     return Column(
