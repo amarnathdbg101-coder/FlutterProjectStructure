@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/ai_language_service.dart';
+import '../../../core/storage/hive_storage.dart';
 import '../models/diagram_model.dart';
 
 class DiagramRepository {
@@ -91,47 +92,75 @@ class DiagramRepository {
 
     if (response.statusCode == 200 && response.data['data'] != null) {
       final resData = response.data['data'] as Map<String, dynamic>;
-      return DiagramModel.fromJson(resData);
+      final model = DiagramModel.fromJson(resData);
+      if (model.id != null) {
+        await HiveStorage.cacheMindMap(model.id!, resData);
+      }
+      return model;
     }
     throw Exception(response.data['message'] ?? 'Failed to save mind map');
   }
 
-  // 2. List saved mind maps
+  // 2. List saved mind maps (Offline-first with Hive cache)
   Future<List<SavedMindMapSummaryModel>> listMindMaps({
     String? search,
     int limit = 20,
     int offset = 0,
   }) async {
-    final response = await _dio.get(
-      ApiConstants.aiMindMaps,
-      queryParameters: {
-        if (search != null && search.isNotEmpty) 'search': search,
-        'limit': limit,
-        'offset': offset,
-      },
-    );
+    try {
+      final response = await _dio.get(
+        ApiConstants.aiMindMaps,
+        queryParameters: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          'limit': limit,
+          'offset': offset,
+        },
+      );
 
-    if (response.statusCode == 200 && response.data['data'] != null) {
-      final data = response.data['data'];
-      final rawList = data is Map ? (data['items'] as List?) : (data as List?);
-      if (rawList != null) {
-        return rawList
-            .map((e) => SavedMindMapSummaryModel.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList();
+      if (response.statusCode == 200 && response.data['data'] != null) {
+        final data = response.data['data'];
+        final rawList = data is Map ? (data['items'] as List?) : (data as List?);
+        if (rawList != null) {
+          final list = rawList
+              .map((e) => SavedMindMapSummaryModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
+          // Cache to Hive for 0ms offline loads
+          await HiveStorage.cacheMindMapList(rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+          return list;
+        }
+        return [];
       }
-      return [];
+    } catch (_) {
+      // Fallback to offline cached mind maps if network fails
+      final cached = HiveStorage.getCachedMindMapList();
+      if (cached.isNotEmpty) {
+        return cached.map((e) => SavedMindMapSummaryModel.fromJson(e)).toList();
+      }
     }
-    throw Exception(response.data['message'] ?? 'Failed to list mind maps');
+    return [];
   }
 
-  // 3. Get single mind map with full node/edge canvas data
+  // 3. Get single mind map with full node/edge canvas data (Offline-first)
   Future<DiagramModel> getMindMap(String id) async {
-    final response = await _dio.get('${ApiConstants.aiMindMaps}/$id');
-    if (response.statusCode == 200 && response.data['data'] != null) {
-      final resData = response.data['data'] as Map<String, dynamic>;
-      return DiagramModel.fromJson(resData);
+    try {
+      final response = await _dio.get('${ApiConstants.aiMindMaps}/$id');
+      if (response.statusCode == 200 && response.data['data'] != null) {
+        final resData = response.data['data'] as Map<String, dynamic>;
+        await HiveStorage.cacheMindMap(id, resData);
+        return DiagramModel.fromJson(resData);
+      }
+    } catch (_) {
+      // Fallback to local Hive cache for instant 0ms offline view
+      final cached = HiveStorage.getCachedMindMap(id);
+      if (cached != null) {
+        return DiagramModel.fromJson(cached);
+      }
     }
-    throw Exception(response.data['message'] ?? 'Failed to load mind map');
+    final cached = HiveStorage.getCachedMindMap(id);
+    if (cached != null) {
+      return DiagramModel.fromJson(cached);
+    }
+    throw Exception('Failed to load mind map from cloud and no local offline cache found');
   }
 
   // 4. Update title, data, or pinned state

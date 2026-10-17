@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/utils/latex_sanitizer.dart';
 import '../../ai_tutor/widgets/formatted_ai_text.dart';
 import '../models/flashcard_model.dart';
 
@@ -133,7 +134,7 @@ class _FlipFlashcardWidgetState extends State<FlipFlashcardWidget>
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          widget.flashcard.topic,
+                          LatexSanitizer.clean(widget.flashcard.topic),
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -157,7 +158,7 @@ class _FlipFlashcardWidgetState extends State<FlipFlashcardWidget>
             child: Center(
               child: SingleChildScrollView(
                 child: Text(
-                  widget.flashcard.questionFront,
+                  LatexSanitizer.clean(widget.flashcard.questionFront),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 17,

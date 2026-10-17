@@ -18,6 +18,8 @@ import 'package:studysilo/features/quiz/widgets/quiz_card.dart';
 import 'package:studysilo/features/student_memory/controllers/cognitive_profile_controller.dart';
 import 'package:studysilo/features/student_memory/models/flashcard_model.dart';
 import 'package:studysilo/features/student_memory/widgets/flip_flashcard_widget.dart';
+import 'package:studysilo/features/voice_doubt/widgets/ai_audio_player_bar.dart';
+import 'package:studysilo/features/voice_doubt/services/ai_tts_service.dart';
 
 void main() {
   setUpAll(() async {
@@ -166,5 +168,75 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.text('StudySilo'), findsOneWidget);
+  });
+
+  testWidgets('AiAudioPlayerBar renders with 0 overflow on narrow 320dp and 1.3x text scale', (tester) async {
+    tester.view.physicalSize = const Size(320 * 2.0, 600 * 2.0);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final tts = AiTtsService();
+    tts.setTestingState(
+      state: TtsState.playing,
+      chunks: [
+        const SpokenChunk(
+          rawText: 'Newton third law states that for every action there is an equal and opposite reaction.',
+          spokenText: 'Newton third law states that for every action there is an equal and opposite reaction.',
+        ),
+        const SpokenChunk(
+          rawText: 'This fundamental principle governs all mechanical interactions in classical physics.',
+          spokenText: 'This fundamental principle governs all mechanical interactions in classical physics.',
+        ),
+      ],
+      chunkIndex: 0,
+    );
+
+    await tester.pumpWidget(
+      wrapWithTheme(
+        const AiAudioPlayerBar(isDark: false),
+        width: 320,
+        textScale: 1.3,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(AiAudioPlayerBar), findsOneWidget);
+    expect(find.text('AI Tutor'), findsOneWidget);
+
+    tts.setTestingState(state: TtsState.stopped, chunks: []);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('AiAudioPlayerBar renders with 0 overflow on ultra-narrow 280dp screen', (tester) async {
+    tester.view.physicalSize = const Size(280 * 2.0, 500 * 2.0);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final tts = AiTtsService();
+    tts.setTestingState(
+      state: TtsState.playing,
+      chunks: [
+        const SpokenChunk(
+          rawText: 'Kinematics equations help describe motion in one and two dimensions accurately.',
+          spokenText: 'Kinematics equations help describe motion in one and two dimensions accurately.',
+        ),
+      ],
+      chunkIndex: 0,
+    );
+
+    await tester.pumpWidget(
+      wrapWithTheme(
+        const AiAudioPlayerBar(isDark: true),
+        width: 280,
+        textScale: 1.1,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(AiAudioPlayerBar), findsOneWidget);
+    expect(find.text('AI Tutor'), findsOneWidget);
+
+    tts.setTestingState(state: TtsState.stopped, chunks: []);
+    await tester.pumpWidget(const SizedBox());
   });
 }

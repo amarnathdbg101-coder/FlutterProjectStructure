@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/latex_sanitizer.dart';
 import '../models/diagram_model.dart';
 
 class MindMapPainter extends CustomPainter {
@@ -299,7 +300,7 @@ class MindMapPainter extends CustomPainter {
       final hasTopIndicators = (node.examTrap.isNotEmpty || node.formulas.isNotEmpty || node.codeSnippet.isNotEmpty);
 
       final textSpan = TextSpan(
-        text: node.label,
+        text: LatexSanitizer.clean(node.label),
         style: TextStyle(
           color: textColor,
           fontSize: node.isRoot ? 13.5 : (node.isBranch ? 12.0 : 11.2),

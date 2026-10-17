@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/routes/app_router.dart';
+import '../../../core/utils/latex_sanitizer.dart';
 import '../../../core/utils/responsive.dart';
 import '../../ai_tutor/widgets/formatted_ai_text.dart';
 import '../controllers/quiz_controller.dart';
@@ -355,18 +356,18 @@ class QuizTakerScreen extends StatelessWidget {
               child: Math.tex(
                 parts[i],
                 textStyle: baseStyle,
-                onErrorFallback: (_) => Text(parts[i], style: baseStyle),
+                onErrorFallback: (_) => Text(LatexSanitizer.clean(parts[i]), style: baseStyle),
               ),
             ),
           );
         } else {
-          spans.add(TextSpan(text: parts[i], style: baseStyle));
+          spans.add(TextSpan(text: LatexSanitizer.clean(parts[i]), style: baseStyle));
         }
       }
       return Text.rich(TextSpan(children: spans));
     }
 
-    return Text(text, style: baseStyle);
+    return Text(LatexSanitizer.clean(text), style: baseStyle);
   }
 
   Widget _buildResultScreen(BuildContext context, QuizController controller, bool isDark) {

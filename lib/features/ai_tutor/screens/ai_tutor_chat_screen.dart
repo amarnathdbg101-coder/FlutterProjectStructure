@@ -18,7 +18,6 @@ import 'package:intl/intl.dart';
 import '../models/chat_message_model.dart';
 import '../models/chat_session_model.dart';
 import '../widgets/formatted_ai_text.dart';
-import '../widgets/api_key_vault_sheet.dart';
 import '../../student_memory/widgets/student_memory_sheet.dart';
 
 class AiTutorChatScreen extends StatefulWidget {
@@ -182,8 +181,8 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
       final text = _textController.text.trim();
       if (text.isNotEmpty) {
         final cleaned = voiceService.cleanAcademicSpeech(text);
-        setState(() => _textController.text = cleaned);
-        CustomSnackbar.showSuccess(context, 'Voice doubt recognized! Tap send or edit.');
+        _textController.text = cleaned;
+        _sendMessage();
       }
     } else {
       // 1. Initialize speech recognition
@@ -212,8 +211,8 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
           final text = _textController.text.trim();
           if (text.isNotEmpty && mounted) {
             final cleaned = voiceService.cleanAcademicSpeech(text);
-            setState(() => _textController.text = cleaned);
-            CustomSnackbar.showSuccess(context, 'Captured voice doubt! Ready to send.');
+            _textController.text = cleaned;
+            _sendMessage();
           }
         },
       );
@@ -542,6 +541,9 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
     if (text.isEmpty && controller.selectedImageBase64 == null) return;
 
     _textController.clear();
+    if (mounted) {
+      setState(() {});
+    }
     controller.sendQuestion(text);
     _scrollToBottom();
   }
@@ -808,6 +810,8 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                                 File(controller.selectedImagePath!),
                                 width: 44,
                                 height: 44,
+                                cacheWidth: 132,
+                                cacheHeight: 132,
                                 fit: BoxFit.cover,
                               ),
                       ),
@@ -827,11 +831,17 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                 ),
               ],
 
-              // Floating Masterclass Audio Player Bar
-              AiAudioPlayerBar(isDark: isDark),
-
-              // Bottom Input Bar
-              _buildInputBar(controller, isDark),
+              // Floating Masterclass Audio Player Bar + Bottom Input Bar (Safely Wrapped)
+              SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AiAudioPlayerBar(isDark: isDark),
+                    _buildInputBar(controller, isDark),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1022,6 +1032,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                           : Image.file(
                               File(msg.imageUrl!),
                               height: 180,
+                              cacheWidth: 600,
                               fit: BoxFit.cover,
                             ),
                     ),
@@ -1251,47 +1262,45 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
           top: BorderSide(color: isDark ? const Color(0xFF334155) : Colors.grey[200]!),
         ),
       ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (controller.editingMessageId != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    const Icon(Icons.edit_rounded, size: 14, color: AppColors.primary),
-                    const SizedBox(width: 6),
-                    const Expanded(child: Text('Editing last question', style: TextStyle(fontSize: 12))),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Cancel edit',
-                      onPressed: () {
-                        _textController.clear();
-                        controller.cancelEditingMessage();
-                      },
-                      icon: const Icon(Icons.close_rounded, size: 18),
-                    ),
-                  ],
-                ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (controller.editingMessageId != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit_rounded, size: 14, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text('Editing last question', style: TextStyle(fontSize: 12))),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Cancel edit',
+                    onPressed: () {
+                      _textController.clear();
+                      controller.cancelEditingMessage();
+                    },
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+                ],
               ),
-            AiChatInputBar(
-              controller: _textController,
-              focusNode: _inputFocusNode,
-              isDark: isDark,
-              isLoading: controller.isLoading,
-              isStreaming: controller.isStreaming,
-              onStop: controller.stopGeneration,
-              isRecordingVoice: _isRecording,
-              hintText: 'Ask in ${controller.tutorMode.shortTag} mode...',
-              onSend: _sendMessage,
-              onSubmitted: (_) => _sendMessage(),
-              onAttachImage: _showAttachmentOptions,
-              onToggleVoiceRecord: _toggleVoiceRecording,
-              onLongPressVoiceRecord: _openVoiceDoubtSheet,
             ),
-          ],
-        ),
+          AiChatInputBar(
+            controller: _textController,
+            focusNode: _inputFocusNode,
+            isDark: isDark,
+            isLoading: controller.isLoading,
+            isStreaming: controller.isStreaming,
+            onStop: controller.stopGeneration,
+            isRecordingVoice: _isRecording,
+            hintText: 'Ask in ${controller.tutorMode.shortTag} mode...',
+            onSend: _sendMessage,
+            onSubmitted: (_) => _sendMessage(),
+            onAttachImage: _showAttachmentOptions,
+            onToggleVoiceRecord: _toggleVoiceRecording,
+            onLongPressVoiceRecord: _openVoiceDoubtSheet,
+          ),
+        ],
       ),
     );
   }

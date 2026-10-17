@@ -21,6 +21,9 @@ void main() async {
   await HiveStorage.init();
   await AILanguageService.init();
 
+  // ⚡ Low-End Device RAM Guard: limits image cache to 50MB (prevents OOM on budget devices)
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 << 20;
+
   runApp(
     const ProviderScope(
       child: MyApp(),

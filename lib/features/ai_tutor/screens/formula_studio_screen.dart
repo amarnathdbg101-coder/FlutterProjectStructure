@@ -992,26 +992,33 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
   }) {
     final effectiveColor = color ?? (isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7));
     var cleanLatex = latex.trim();
+    cleanLatex = cleanLatex.replaceAll(RegExp(r'^```(?:latex|tex)?\s*', caseSensitive: false), '');
+    cleanLatex = cleanLatex.replaceAll(RegExp(r'\s*```$'), '').trim();
     if (cleanLatex.startsWith(r'$$') && cleanLatex.endsWith(r'$$') && cleanLatex.length >= 4) {
       cleanLatex = cleanLatex.substring(2, cleanLatex.length - 2).trim();
     } else if (cleanLatex.startsWith(r'$') && cleanLatex.endsWith(r'$') && cleanLatex.length >= 2) {
       cleanLatex = cleanLatex.substring(1, cleanLatex.length - 1).trim();
     }
-    return Math.tex(
-      cleanLatex,
-      mathStyle: mathStyle,
-      textStyle: TextStyle(
-        fontSize: fontSize,
-        color: effectiveColor,
-        fontWeight: FontWeight.w600,
-      ),
-      onErrorFallback: (_) => SelectableText(
+    if (cleanLatex.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return RepaintBoundary(
+      child: Math.tex(
         cleanLatex,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: fontSize * 0.85,
+        mathStyle: mathStyle,
+        textStyle: TextStyle(
+          fontSize: fontSize,
           color: effectiveColor,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w600,
+        ),
+        onErrorFallback: (_) => SelectableText(
+          cleanLatex,
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: fontSize * 0.85,
+            color: effectiveColor,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

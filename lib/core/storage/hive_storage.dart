@@ -6,12 +6,18 @@ class HiveStorage {
   static const String boxFoldersName = 'folders_cache';
   static const String boxNotesName = 'notes_cache';
   static const String boxQuizzesName = 'quizzes_cache';
+  static const String boxMindMapsName = 'mind_maps_cache';
+  static const String boxFormulasName = 'formulas_cache';
+  static const String boxFlashcardsName = 'flashcards_cache';
   static const String boxSyncMetaName = 'sync_meta';
 
   static late Box boxCourses;
   static late Box boxFolders;
   static late Box boxNotes;
   static late Box boxQuizzes;
+  static late Box boxMindMaps;
+  static late Box boxFormulas;
+  static late Box boxFlashcards;
   static late Box boxSyncMeta;
 
   static Future<void> init() async {
@@ -20,6 +26,9 @@ class HiveStorage {
     boxFolders = await Hive.openBox(boxFoldersName);
     boxNotes = await Hive.openBox(boxNotesName);
     boxQuizzes = await Hive.openBox(boxQuizzesName);
+    boxMindMaps = await Hive.openBox(boxMindMapsName);
+    boxFormulas = await Hive.openBox(boxFormulasName);
+    boxFlashcards = await Hive.openBox(boxFlashcardsName);
     boxSyncMeta = await Hive.openBox(boxSyncMetaName);
   }
 
@@ -83,12 +92,61 @@ class HiveStorage {
     }
   }
 
+  // --- Mind Map Caching (0ms instant offline load) ---
+  static Map<String, dynamic>? getCachedMindMap(String id) {
+    final raw = boxMindMaps.get(id);
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
+  static Future<void> cacheMindMap(String id, Map<String, dynamic> data) async {
+    await boxMindMaps.put(id, data);
+  }
+
+  static List<Map<String, dynamic>> getCachedMindMapList() {
+    final raw = boxMindMaps.get('saved_mind_maps_list');
+    if (raw is List) {
+      return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  static Future<void> cacheMindMapList(List<Map<String, dynamic>> list) async {
+    await boxMindMaps.put('saved_mind_maps_list', list);
+  }
+
+  // --- Formula Sheets Caching ---
+  static String? getCachedFormulaSheet(String topic) {
+    return boxFormulas.get('sheet_$topic') as String?;
+  }
+
+  static Future<void> cacheFormulaSheet(String topic, String markdownContent) async {
+    await boxFormulas.put('sheet_$topic', markdownContent);
+  }
+
+  // --- Flashcard Decks Caching ---
+  static List<Map<String, dynamic>> getCachedFlashcardDecks() {
+    return boxFlashcards.values
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  static Future<void> cacheFlashcardDeck(String deckId, Map<String, dynamic> deckData) async {
+    await boxFlashcards.put(deckId, deckData);
+  }
+
   // Clear all caches on logout
   static Future<void> clearAll() async {
     await boxCourses.clear();
     await boxFolders.clear();
     await boxNotes.clear();
     await boxQuizzes.clear();
+    await boxMindMaps.clear();
+    await boxFormulas.clear();
+    await boxFlashcards.clear();
     await boxSyncMeta.clear();
   }
 }

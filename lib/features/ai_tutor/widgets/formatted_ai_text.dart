@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import '../../../core/utils/latex_sanitizer.dart';
 import '../../../core/widgets/custom_snackbar.dart';
+import '../../voice_doubt/services/ai_tts_service.dart';
 import 'collapsible_derivation_card.dart';
 import '../../diagram_viewer/widgets/interactive_visual_diagram.dart';
 import '../../diagram_viewer/widgets/interactive_graph_plotter.dart';
@@ -89,10 +91,12 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     final blocks = _getBlocks();
     final visibleBlockCount = _visibleBlockCount < blocks.length ? _visibleBlockCount : blocks.length;
 
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
+    final content = ListenableBuilder(
+      listenable: AiTtsService(),
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
         // Grounding Badge (if source note provided)
         if (sourceNoteTitle != null && sourceNoteTitle!.isNotEmpty) ...[
           Container(
@@ -292,6 +296,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
           ),
         ],
       ],
+      ),
     );
 
     // ⚡ Performance optimization: do NOT wrap in SelectionArea while actively streaming
@@ -306,7 +311,112 @@ class _FormattedAiTextState extends State<FormattedAiText> {
 
   Widget _renderBlock(BuildContext context, _AiBlock block, ThemeData theme) {
     final textColor = defaultTextColor ?? (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B));
+    final blockWidget = _buildRawBlockWidget(context, block, theme, textColor);
 
+    final tts = AiTtsService();
+    final isSpeakingThis = tts.isPlaying && tts.currentText == text;
+    final currentSentence = tts.currentRawSentence.trim();
+
+    if (!isSpeakingThis || currentSentence.isEmpty) {
+      return InkWell(
+        onDoubleTap: () => AiTtsService().speakFromSection(text, block.text),
+        borderRadius: BorderRadius.circular(8),
+        splashColor: const Color(0x1A6366F1),
+        child: blockWidget,
+      );
+    }
+
+    final blockText = block.text.trim();
+    final isMatching = blockText.isNotEmpty &&
+        (blockText.contains(currentSentence) ||
+         currentSentence.contains(blockText) ||
+         _isSubstantialOverlap(blockText, currentSentence));
+
+    if (!isMatching) {
+      return InkWell(
+        onDoubleTap: () => AiTtsService().speakFromSection(text, block.text),
+        borderRadius: BorderRadius.circular(8),
+        splashColor: const Color(0x1A6366F1),
+        child: blockWidget,
+      );
+    }
+
+    // Glowing Real-Time Karaoke Highlight with Automatic Smooth Viewport Scroll
+    return _AutoScrollBlockWrapper(
+      isSpeakingActive: true,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF6366F1).withValues(alpha: 0.20)
+              : const Color(0xFFEEF2FF),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark
+                ? const Color(0xFF818CF8).withValues(alpha: 0.55)
+                : const Color(0xFFC7D2FE),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.22 : 0.10),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              margin: const EdgeInsets.only(bottom: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.volume_up_rounded, size: 10, color: Colors.white),
+                  SizedBox(width: 3),
+                  Text(
+                    'Reading Now',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            blockWidget,
+          ],
+        ),
+      ),
+    );
+  }
+
+  static bool _isSubstantialOverlap(String a, String b) {
+    if (a.length < 10 || b.length < 10) return false;
+    final cleanA = a.replaceAll(RegExp(r'[^a-zA-Z0-9]'), ' ').toLowerCase();
+    final cleanB = b.replaceAll(RegExp(r'[^a-zA-Z0-9]'), ' ').toLowerCase();
+    final wordsB = cleanB.split(RegExp(r'\s+')).where((w) => w.length > 3).toList();
+    if (wordsB.isEmpty) return false;
+    int matches = 0;
+    for (final w in wordsB) {
+      if (cleanA.contains(w)) matches++;
+    }
+    return matches >= 2 && (matches / wordsB.length) >= 0.4;
+  }
+
+  Widget _buildRawBlockWidget(BuildContext context, _AiBlock block, ThemeData theme, Color textColor) {
     try {
       switch (block.type) {
       case _BlockType.heading1:
@@ -497,10 +607,11 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   );
 
   static String _formatInlineMathFallback(String text) {
-    return text.replaceAllMapped(_inlineMathFallbackRx, (match) {
+    final formatted = text.replaceAllMapped(_inlineMathFallbackRx, (match) {
       final rawMath = (match.group(1) ?? match.group(2) ?? match.group(3) ?? match.group(4) ?? '').trim();
       return _isGenuineMath(rawMath) ? _formatMathText(rawMath) : rawMath;
     });
+    return LatexSanitizer.clean(formatted);
   }
 
   Widget _buildHeading3Widget(BuildContext context, _AiBlock block) {
@@ -1092,12 +1203,11 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   // 📐 COLLAPSIBLE MATH & LOGICAL DERIVATION ACCORDION RENDERER
   // ===========================================================================
   Widget _buildDerivationWidget(BuildContext context, _AiBlock block) {
-    final steps = _parseDerivationSteps(block.text);
-    return CollapsibleDerivationCard(
-      derivationTitle: block.extra ?? 'Mathematical & Logical Derivation',
-      steps: steps,
-      isDark: isDark,
-      baseFontSize: baseFontSize,
+    final subBlocks = _parseTextIntoBlocks(block.text);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: subBlocks.map((b) => _renderBlock(context, b, Theme.of(context))).toList(),
     );
   }
 
@@ -1574,8 +1684,9 @@ class _FormattedAiTextState extends State<FormattedAiText> {
 
     for (final match in regex.allMatches(sanitized)) {
       if (match.start > lastMatchEnd) {
+        final snippet = sanitized.substring(lastMatchEnd, match.start);
         spans.add(TextSpan(
-          text: sanitized.substring(lastMatchEnd, match.start),
+          text: LatexSanitizer.clean(snippet),
           style: TextStyle(
             fontSize: baseFontSize,
             height: 1.55,
@@ -1601,7 +1712,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
       } else if (match.group(4) != null) {
         // *italic*
         spans.add(TextSpan(
-          text: match.group(4),
+          text: LatexSanitizer.clean(match.group(4)!),
           style: TextStyle(
             fontSize: baseFontSize,
             fontStyle: FontStyle.italic,
@@ -1629,7 +1740,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         // If not a genuine math expression, render as clean regular inline text without dollar signs
         if (!_isGenuineMath(rawMath)) {
           spans.add(TextSpan(
-            text: '$rawMath$suffix',
+            text: '${LatexSanitizer.clean(rawMath)}$suffix',
             style: TextStyle(
               fontSize: baseFontSize,
               fontWeight: FontWeight.w600,
@@ -1663,20 +1774,22 @@ class _FormattedAiTextState extends State<FormattedAiText> {
           ));
         } else {
           final isDisplayMath = match.group(8) != null || match.group(16) != null;
-          Widget mathWidget = Math.tex(
-            rawMath,
-            textStyle: TextStyle(
-              fontSize: baseFontSize,
-              fontWeight: FontWeight.w600,
-              color: mathColor,
-            ),
-            mathStyle: isDisplayMath ? MathStyle.display : MathStyle.text,
-            onErrorFallback: (err) => Text(
-              '$fallbackMath ',
-              style: GoogleFonts.firaCode(
+          Widget mathWidget = RepaintBoundary(
+            child: Math.tex(
+              rawMath,
+              textStyle: TextStyle(
                 fontSize: baseFontSize,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
                 color: mathColor,
+              ),
+              mathStyle: isDisplayMath ? MathStyle.display : MathStyle.text,
+              onErrorFallback: (err) => Text(
+                '$fallbackMath ',
+                style: GoogleFonts.firaCode(
+                  fontSize: baseFontSize,
+                  fontWeight: FontWeight.bold,
+                  color: mathColor,
+                ),
               ),
             ),
           );
@@ -1730,8 +1843,9 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     }
 
     if (lastMatchEnd < sanitized.length) {
+      final trailing = sanitized.substring(lastMatchEnd);
       spans.add(TextSpan(
-        text: sanitized.substring(lastMatchEnd),
+        text: LatexSanitizer.clean(trailing),
         style: TextStyle(
           fontSize: baseFontSize,
           height: 1.55,
@@ -1986,7 +2100,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
       return (m.group(1) ?? '').split('').map((c) => subMap[c] ?? c).join();
     });
 
-    return s;
+    return LatexSanitizer.clean(s);
   }
 
   // ===========================================================================
@@ -2089,11 +2203,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
           final lang = codeLanguage.toLowerCase().trim();
 
           if (['derivation', 'math-derivation', 'steps', 'proof', 'step-by-step'].contains(lang)) {
-            blocks.add(_AiBlock(
-              type: _BlockType.derivation,
-              text: content,
-              extra: 'Mathematical & Logical Derivation',
-            ));
+            blocks.addAll(_parseTextIntoBlocks(content));
           } else if (['graph', 'plot', 'curve', 'function-graph', 'coordinate-plot'].contains(lang)) {
             blocks.add(_AiBlock(
               type: _BlockType.graph,
@@ -2263,47 +2373,6 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         final count = _flowArrowCountRx.allMatches(line).length;
         if (count >= 2) {
           blocks.add(_AiBlock(type: _BlockType.visualFlow, text: line));
-          continue;
-        }
-      }
-
-      // Derivation Step Sequence (e.g. Step 1: ... Step 2: ...) with mathematical derivation
-      if (_isDerivationStepStart(line)) {
-        flushCallout();
-        flushTable();
-        flushFormula();
-
-        final derivBuffer = StringBuffer()..writeln(rawLine);
-        int stepCount = 1;
-        int j = i + 1;
-        while (j < lines.length) {
-          final nextLine = lines[j].trim();
-          if (nextLine.startsWith('```') ||
-              (nextLine.startsWith('# ') && !nextLine.toLowerCase().contains('step')) ||
-              (nextLine.startsWith('## ') && !nextLine.toLowerCase().contains('step'))) {
-            break;
-          }
-          if (_isAnyDerivationStep(nextLine)) {
-            stepCount++;
-          }
-          derivBuffer.writeln(lines[j]);
-          j++;
-        }
-
-        final content = derivBuffer.toString();
-        final hasMathOrProof = content.contains(r'$$') ||
-            content.contains(r'\[') ||
-            content.contains(r'\(') ||
-            content.toLowerCase().contains('derivation') ||
-            content.toLowerCase().contains('proof');
-
-        if (stepCount >= 2 && hasMathOrProof) {
-          i = j - 1;
-          blocks.add(_AiBlock(
-            type: _BlockType.derivation,
-            text: content.trim(),
-            extra: 'Step-by-Step Derivation & Proof',
-          ));
           continue;
         }
       }
@@ -2642,5 +2711,56 @@ class _StreamingPulseCursorState extends State<_StreamingPulseCursor>
         ),
       ),
     );
+  }
+}
+
+/// Auto-scrolls the currently active spoken sentence/block into the student's viewport
+class _AutoScrollBlockWrapper extends StatefulWidget {
+  final Widget child;
+  final bool isSpeakingActive;
+
+  const _AutoScrollBlockWrapper({
+    required this.child,
+    required this.isSpeakingActive,
+  });
+
+  @override
+  State<_AutoScrollBlockWrapper> createState() => _AutoScrollBlockWrapperState();
+}
+
+class _AutoScrollBlockWrapperState extends State<_AutoScrollBlockWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isSpeakingActive) {
+      _scrollToSelf();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AutoScrollBlockWrapper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isSpeakingActive && !oldWidget.isSpeakingActive) {
+      _scrollToSelf();
+    }
+  }
+
+  void _scrollToSelf() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 380),
+          curve: Curves.easeInOutCubic,
+          alignment: 0.35, // Smoothly centers in the upper-middle viewport
+        );
+      } catch (_) {}
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }

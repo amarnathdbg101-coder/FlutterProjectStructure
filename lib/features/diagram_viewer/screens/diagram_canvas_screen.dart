@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/routes/app_router.dart';
+import '../../../core/utils/latex_sanitizer.dart';
 import '../controllers/diagram_controller.dart';
 import '../models/diagram_model.dart';
 import '../widgets/mind_map_minimap.dart';
@@ -541,7 +542,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          node.label,
+                          LatexSanitizer.clean(node.label),
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 4),
@@ -825,6 +826,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                   RegExp(r'^(Core Idea|Key Rule|How It Works|How it Operates|Mechanism|High-Yield Takeaway|Exam Takeaway|Key Takeaway|Takeaway):\s*', caseSensitive: false),
                   '',
                 );
+                cleanText = LatexSanitizer.clean(cleanText);
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

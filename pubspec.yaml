@@ -48,6 +48,10 @@ dependencies:
   path_provider: ^2.1.6
   uuid: ^4.6.0
   speech_to_text: ^7.5.0
+  flutter_tts: ^4.2.5
+  just_audio: ^0.10.6
+  audio_service: ^0.18.19
+  edge_tts: ^0.1.5
 
 dev_dependencies:
   flutter_test:

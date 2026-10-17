@@ -40,34 +40,60 @@ class AiResponseActionBar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Listen Aloud (TTS) Button
-            InkWell(
-              onTap: () {
-                AiTtsService().speak(solutionContent);
+            // Listen Aloud (TTS) Button with live playback state (Playing / Paused / Listen)
+            ListenableBuilder(
+              listenable: AiTtsService(),
+              builder: (context, _) {
+                final tts = AiTtsService();
+                final isSpeakingThis = tts.isPlaying && tts.currentText == solutionContent;
+                final isPausedThis = tts.isPaused && tts.currentText == solutionContent;
+
+                final IconData icon = isSpeakingThis
+                    ? Icons.pause_circle_filled_rounded
+                    : (isPausedThis ? Icons.play_circle_fill_rounded : Icons.volume_up_rounded);
+                final String label = isSpeakingThis
+                    ? 'Pause'
+                    : (isPausedThis ? 'Resume' : 'Listen');
+                final Color activeColor = isSpeakingThis
+                    ? const Color(0xFF6366F1)
+                    : (isDark ? const Color(0xFF34D399) : const Color(0xFF059669));
+
+                return InkWell(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    if (isSpeakingThis) {
+                      tts.pause();
+                    } else if (isPausedThis) {
+                      tts.resume();
+                    } else {
+                      tts.speak(solutionContent);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          icon,
+                          size: 14,
+                          color: activeColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: activeColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
               },
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.volume_up_rounded,
-                      size: 13,
-                      color: Color(0xFF10B981),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Listen',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ),
             Container(
               height: 12,

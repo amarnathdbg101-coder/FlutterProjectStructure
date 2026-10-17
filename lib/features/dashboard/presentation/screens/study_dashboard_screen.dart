@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart' as legacy_provider;
 import '../../../../core/routes/app_router.dart';
 import '../../../../core/services/ai_language_service.dart';
+import '../../../../core/services/in_app_update_service.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/responsive.dart';
@@ -32,9 +33,14 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<AuthController>().fetchProfile();
       _loadStudentMemory();
+      // 0ms instant version check against ai.shopsilo.in/js/version.json
+      final updateMeta = await InAppUpdateService.checkForUpdates();
+      if (mounted && updateMeta != null) {
+        InAppUpdateService.showUpdateDialogIfNeeded(context, updateMeta);
+      }
     });
   }
 
