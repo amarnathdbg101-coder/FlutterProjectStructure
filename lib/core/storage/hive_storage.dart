@@ -117,6 +117,24 @@ class HiveStorage {
     await boxMindMaps.put('saved_mind_maps_list', list);
   }
 
+  // --- Formula Cards Persistence (100% Dynamic User & AI Created) ---
+  static List<Map<String, dynamic>> getCachedFormulas() {
+    return boxFormulas.values
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  static Future<void> cacheFormulaItem(Map<String, dynamic> formulaJson) async {
+    if (formulaJson['id'] != null) {
+      await boxFormulas.put(formulaJson['id'], formulaJson);
+    }
+  }
+
+  static Future<void> deleteFormulaItem(String formulaId) async {
+    await boxFormulas.delete(formulaId);
+  }
+
   // --- Formula Sheets Caching ---
   static String? getCachedFormulaSheet(String topic) {
     return boxFormulas.get('sheet_$topic') as String?;

@@ -6,7 +6,6 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import '../../../core/utils/latex_sanitizer.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../voice_doubt/services/ai_tts_service.dart';
-import 'collapsible_derivation_card.dart';
 import '../../diagram_viewer/widgets/interactive_visual_diagram.dart';
 import '../../diagram_viewer/widgets/interactive_graph_plotter.dart';
 import '../models/chat_message_model.dart' show AiBlockModel;
@@ -113,9 +112,37 @@ class _FormattedAiTextState extends State<FormattedAiText> {
 
       _lastParseTimeMs = now;
       _cachedText = widget.text;
+
+      // ⚡ Fast 0.1ms Initial Frame Render: For non-streaming long messages, yield full AST parsing to microtask
+      if (!widget.isStreaming && widget.text.length > 250 && _cachedBlocks == null) {
+        _cachedBlocks = _fastParagraphSplit(widget.text);
+        Future.microtask(() {
+          if (mounted && _cachedText == widget.text) {
+            setState(() {
+              _cachedBlocks = _parseTextIntoBlocks(widget.text);
+            });
+          }
+        });
+        return _cachedBlocks!;
+      }
+
       _cachedBlocks = _parseTextIntoBlocks(widget.text);
     }
     return _cachedBlocks!;
+  }
+
+  static List<_AiBlock> _fastParagraphSplit(String text) {
+    final parts = text.split('\n\n');
+    return parts.map((p) {
+      final trimmed = p.trim();
+      if (trimmed.startsWith(r'$$') || trimmed.startsWith(r'\[')) {
+        return _AiBlock(type: _BlockType.formula, text: trimmed);
+      }
+      if (trimmed.startsWith('```')) {
+        return _AiBlock(type: _BlockType.code, text: trimmed);
+      }
+      return _AiBlock(type: _BlockType.paragraph, text: trimmed);
+    }).toList();
   }
 
   static _BlockType _blockTypeFromString(String t) {
@@ -559,9 +586,9 @@ class _FormattedAiTextState extends State<FormattedAiText> {
 
   static bool _isSubstantialOverlap(String a, String b) {
     if (a.length < 10 || b.length < 10) return false;
-    final cleanA = a.replaceAll(RegExp(r'[^a-zA-Z0-9]'), ' ').toLowerCase();
-    final cleanB = b.replaceAll(RegExp(r'[^a-zA-Z0-9]'), ' ').toLowerCase();
-    final wordsB = cleanB.split(RegExp(r'\s+')).where((w) => w.length > 3).toList();
+    final cleanA = a.replaceAll(_nonAlphanumericRx, ' ').toLowerCase();
+    final cleanB = b.replaceAll(_nonAlphanumericRx, ' ').toLowerCase();
+    final wordsB = cleanB.split(_whitespaceRx).where((w) => w.length > 3).toList();
     if (wordsB.isEmpty) return false;
     int matches = 0;
     for (final w in wordsB) {
@@ -753,7 +780,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   }
 
   static String _cleanHeadingText(String text) {
-    return _formatInlineMathFallback(text).replaceAll(RegExp(r'\*{1,2}'), '').trim();
+    return _formatInlineMathFallback(text).replaceAll(_asterisksOneOrTwoRx, '').trim();
   }
 
   static final RegExp _inlineMathFallbackRx = RegExp(
@@ -1565,7 +1592,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         : const Color(0xFF10B981).withValues(alpha: isDark ? 0.35 : 0.25);
     final icon = isMistake ? Icons.cancel_rounded : Icons.check_circle_rounded;
     final iconColor = isMistake ? const Color(0xFFDC2626) : const Color(0xFF059669);
-    final displayText = block.text.replaceFirst(RegExp(r'^[❌✅]\\s*'), '').trim();
+    final displayText = block.text.replaceFirst(_checkXEmojiRx, '').trim();
 
     return Container(
       width: double.infinity,
@@ -1924,23 +1951,21 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   static final RegExp _boldMarkerRx = RegExp(r'\*\*');
   static final RegExp _backtickRx = RegExp(r'`');
   static final RegExp _singleDollarRx = RegExp(r'(?<!\$)\$(?!\$)');
-  static final RegExp _supScriptRx = RegExp(r'\^([0-9\+\-a-zA-Z])');
-  static final RegExp _supBraceRx = RegExp(r'\^\{([0-9\+\-a-zA-Z=()]+)\}');
-  static final RegExp _subScriptRx = RegExp(r'_([0-9\+\-a-zA-Z])');
-  static final RegExp _subBraceRx = RegExp(r'_\{([0-9\+\-a-zA-Z=()]+)\}');
+  static final RegExp _supScriptRx = RegExp(r'\^([0-9+\-a-zA-Z])');
+  static final RegExp _supBraceRx = RegExp(r'\^\{([0-9+\-a-zA-Z=()]+)\}');
+  static final RegExp _subScriptRx = RegExp(r'_([0-9+\-a-zA-Z])');
+  static final RegExp _subBraceRx = RegExp(r'_\{([0-9+\-a-zA-Z=()]+)\}');
+
+  static final RegExp _nonAlphanumericRx = RegExp(r'[^a-zA-Z0-9]');
+  static final RegExp _whitespaceRx = RegExp(r'\s+');
+  static final RegExp _asterisksOneOrTwoRx = RegExp(r'\*{1,2}');
+  static final RegExp _checkXEmojiRx = RegExp(r'^[❌✅]\s*');
+  static final RegExp _bulletPrefixRx = RegExp(r'^[-*•]\s*');
 
   static final RegExp _jsonTitleRx = RegExp(r'"title"\s*:\s*"([^"]+)"');
   static final RegExp _flowSplitRx = RegExp(r'\s*(?:-->|==>|->|➔|⭢)\s*');
-  static final RegExp _stepHeaderRx = RegExp(
-    r'^(?:#{1,4}\s*)?(?:\*\*)?(?:Step|Phase|Stage)\s*(\d+)[:\.\-\s]*(.*)$',
-    caseSensitive: false,
-  );
-  static final RegExp _asterisksStripRx = RegExp(r'^\*+|\*+$');
-  static final RegExp _equationPrefixRx = RegExp(r'^(?:equation|formula):\s*', caseSensitive: false);
-  static final RegExp _intuitionPrefixRx = RegExp(r'^(?:💡\s*|intuition:\s*|why:\s*|reason:\s*)', caseSensitive: false);
-  static final RegExp _rulePrefixRx = RegExp(r'^(?:rule|theorem|law):\s*', caseSensitive: false);
 
-  static final RegExp _mathOperatorRx = RegExp(r'[\+\-\*\/\=><]');
+  static final RegExp _mathOperatorRx = RegExp(r'[+\-*/=><]');
   static final RegExp _alphanumericRx = RegExp(r'[0-9a-zA-Z]');
   static final RegExp _hyphenatedWordRx = RegExp(r'^[a-zA-Z]+-[a-zA-Z]+$');
   static final RegExp _digitWithUnitRx = RegExp(r'^[0-9]+[a-zA-Z%]+$');
@@ -1950,7 +1975,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   static final RegExp _sqrtRx = RegExp(r'\\sqrt\{([^}]+)\}');
   static final RegExp _fracRx = RegExp(r'\\frac\{([^}]+)\}\{([^}]+)\}');
   static final RegExp _limRx = RegExp(r'\\lim_\{([^}]+)\}');
-  static final RegExp _textTagsRx = RegExp(r'\\(?:text|mathbf|mathit|mathrm|mathbb)\{([^}]+)\}');
+  static final RegExp _textTagsRx = RegExp(r'\\(?:text|mathbf|mathit|mathrm|calligraphic|mathbb)\{([^}]+)\}');
 
   static final RegExp _calloutPrefixRx = RegExp(r'^(>|\[!(?:NOTE|TIP|WARNING|IMPORTANT|CAUTION|EXAMPLE)\])\s*', caseSensitive: false);
   static final RegExp _calloutHeaderEmojiRx = RegExp(
@@ -1958,7 +1983,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     caseSensitive: false,
   );
   static final RegExp _quotePrefixRx = RegExp(r'^>\s*');
-  static final RegExp _flowArrowCountRx = RegExp(r'(?:-->|==>|->)');
+  static final RegExp _flowArrowCountRx = RegExp(r'-->|==>|->');
   static final RegExp _dividerRx = RegExp(r'^(?:---|[*]{3,}|_{3,})$');
   static final RegExp _h4to6Rx = RegExp(r'^#{4,6}\s+');
 
@@ -2002,7 +2027,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     }
 
     // If text contains multiple words separated by spaces and lacks explicit math syntax (=, \, ^, _, operators)
-    final words = trimmed.split(RegExp(r'\s+'));
+    final words = trimmed.split(_whitespaceRx);
     if (words.length >= 2) {
       final hasMathStructure = trimmed.contains(r'\') ||
           trimmed.contains('=') ||
@@ -2403,7 +2428,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
       // Comparison highlight (❌ Common Mistake / ✅ Correct Concept)
       final trimmedLine = line.trim();
       // Strip any leading bullet marker to also catch '- ❌ ...' lines
-      final compLine = trimmedLine.replaceFirst(RegExp(r'^[-*•]\s*'), '');
+      final compLine = trimmedLine.replaceFirst(_bulletPrefixRx, '');
       if (compLine.startsWith('❌') || compLine.toLowerCase().startsWith('mistake:') || compLine.toLowerCase().startsWith('common mistake:')) {
         flushCallout();
         flushTable();
@@ -2542,7 +2567,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   // ⚡ Static regex constants for parser helpers
   static final RegExp _checklistRx = RegExp(r'^-\s+\[([ xX])\]\s+(.*)');
   static final RegExp _numberedRx = RegExp(r'^(\d+)\.\s+(.*)');
-  static final RegExp _bulletRx = RegExp(r'^(?:[•\-\*])\s+(.*)');
+  static final RegExp _bulletRx = RegExp(r'^[•\-*]\s+(.*)');
 
   bool _isDiagramLanguageOrContent(String lang, String content) {
     final l = lang.toLowerCase();
@@ -2666,10 +2691,36 @@ class _DeferredAiBlockState extends State<_DeferredAiBlock> {
       );
     }
 
+    Widget content;
+    try {
+      content = widget.builder();
+    } catch (e) {
+      content = Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.amber),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Could not render diagram cleanly: $e',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        widget.builder(),
+        content,
         TextButton(
           onPressed: () => setState(() => _isRendered = false),
           child: const Text('Hide diagram'),

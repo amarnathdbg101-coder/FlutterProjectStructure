@@ -3,10 +3,12 @@ import '../../voice_doubt/widgets/voice_doubt_sheet.dart';
 import '../../voice_doubt/widgets/ai_audio_player_bar.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import '../../../core/constants/app_colors.dart';
@@ -49,6 +51,13 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_handleScrollPosition);
+    _inputFocusNode.addListener(() {
+      if (_inputFocusNode.hasFocus) {
+        Future.delayed(const Duration(milliseconds: 250), () {
+          if (mounted) _scrollToBottom();
+        });
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = context.read<AiTutorController>();
       if (widget.noteTitle != null && widget.noteContext != null) {
@@ -762,8 +771,7 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                           ? _buildEmptyState(context, controller, isDark)
                           : ListView.builder(
                               controller: _scrollController,
-                              cacheExtent: 280,
-                              addAutomaticKeepAlives: false,
+                              addAutomaticKeepAlives: true,
                               addRepaintBoundaries: true,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               itemCount: controller.messages.length + (controller.isLoading && controller.streamingAssistantMessageId == null ? 1 : 0),
@@ -1030,20 +1038,36 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (msg.imageUrl != null && msg.imageUrl!.isNotEmpty) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: kIsWeb
-                          ? Container(
-                              height: 120,
-                              color: Colors.grey[300],
-                              child: const Center(child: Icon(Icons.image)),
-                            )
-                          : Image.file(
-                              File(msg.imageUrl!),
-                              height: 180,
-                              cacheWidth: 600,
-                              fit: BoxFit.cover,
+                    GestureDetector(
+                      onTap: () => _openImagePreview(context, msg.imageUrl!),
+                      child: Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: _buildChatAttachmentImage(msg.imageUrl!),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.all(6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(12),
                             ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.fullscreen_rounded, color: Colors.white, size: 14),
+                                SizedBox(width: 4),
+                                Text(
+                                  'View / Download',
+                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -1316,6 +1340,83 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildChatAttachmentImage(String url) {
+    final isNetwork = url.startsWith('http://') || url.startsWith('https://');
+    if (isNetwork) {
+      return Image.network(
+        url,
+        height: 180,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            height: 180,
+            color: Colors.black12,
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                      : null,
+                ),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: 140,
+            color: Colors.grey.shade100,
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.broken_image_rounded, color: Colors.grey, size: 32),
+                  SizedBox(height: 6),
+                  Text(
+                    'Unable to load image',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    if (!kIsWeb) {
+      final file = File(url);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          height: 180,
+          width: double.infinity,
+          cacheWidth: 600,
+          fit: BoxFit.cover,
+        );
+      }
+    }
+
+    return Container(
+      height: 120,
+      color: Colors.grey[300],
+      child: const Center(child: Icon(Icons.image)),
+    );
+  }
+
+  void _openImagePreview(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => _ImagePreviewDialog(imageUrl: imageUrl),
     );
   }
 }
@@ -1810,6 +1911,189 @@ class _ChatHistoryDrawerState extends State<_ChatHistoryDrawer> {
             controller.selectSession(session);
             Navigator.pop(context);
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// --- Fullscreen Pinch-to-Zoom & Download Image Dialog ---
+class _ImagePreviewDialog extends StatefulWidget {
+  final String imageUrl;
+
+  const _ImagePreviewDialog({required this.imageUrl});
+
+  @override
+  State<_ImagePreviewDialog> createState() => _ImagePreviewDialogState();
+}
+
+class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
+  bool _isDownloading = false;
+
+  Future<void> _downloadImage() async {
+    if (_isDownloading) return;
+    setState(() => _isDownloading = true);
+
+    try {
+      final img = widget.imageUrl.trim();
+      final isNetwork = img.startsWith('http://') || img.startsWith('https://');
+      final isBase64 = img.startsWith('data:image/') || (!isNetwork && !img.contains('/') && !img.contains('\\') && img.length > 100);
+
+      final fileName = 'studysilo_img_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      if (kIsWeb) {
+        if (isNetwork) {
+          await Clipboard.setData(ClipboardData(text: img));
+          if (mounted) CustomSnackbar.showSuccess(context, 'Image link copied to clipboard!');
+        } else {
+          if (mounted) CustomSnackbar.showSuccess(context, 'Image ready in browser session!');
+        }
+      } else {
+        final dir = await getApplicationDocumentsDirectory();
+        final savePath = '${dir.path}/$fileName';
+
+        if (isNetwork) {
+          final dio = Dio();
+          await dio.download(img, savePath);
+        } else if (isBase64 || img.contains('base64,')) {
+          var cleanBase64 = img;
+          if (cleanBase64.contains(',')) {
+            cleanBase64 = cleanBase64.split(',').last;
+          }
+          final bytes = base64Decode(cleanBase64.replaceAll(RegExp(r'\s+'), ''));
+          final file = File(savePath);
+          await file.writeAsBytes(bytes);
+        } else {
+          // Local file path
+          final srcFile = File(img);
+          if (await srcFile.exists()) {
+            await srcFile.copy(savePath);
+          } else {
+            throw Exception('Source file not found at $img');
+          }
+        }
+
+        if (mounted) {
+          CustomSnackbar.showSuccess(context, 'Image downloaded & saved successfully! 📥');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showError(context, 'Download failed: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isNetwork = widget.imageUrl.startsWith('http://') || widget.imageUrl.startsWith('https://');
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF12141C),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: Colors.black45,
+              child: Row(
+                children: [
+                  const Icon(Icons.image_rounded, color: Colors.white70, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Attachment Preview',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _isDownloading ? null : _downloadImage,
+                    icon: _isDownloading
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.download_rounded, size: 18, color: Colors.white),
+                    label: Text(
+                      _isDownloading ? 'Saving...' : 'Download',
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close',
+                  ),
+                ],
+              ),
+            ),
+            // Interactive Pinch-to-zoom Viewer
+            Flexible(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.7,
+                ),
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.8,
+                  maxScale: 4.0,
+                  child: Center(
+                    child: isNetwork
+                        ? Image.network(
+                            widget.imageUrl,
+                            fit: BoxFit.contain,
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(child: CircularProgressIndicator());
+                            },
+                            errorBuilder: (context, error, stack) => const Center(
+                              child: Text('Failed to load image', style: TextStyle(color: Colors.white70)),
+                            ),
+                          )
+                        : (!kIsWeb && File(widget.imageUrl).existsSync()
+                            ? Image.file(File(widget.imageUrl), fit: BoxFit.contain)
+                            : const Center(
+                                child: Text('Image not found', style: TextStyle(color: Colors.white70)),
+                              )),
+                  ),
+                ),
+              ),
+            ),
+            // Bottom Pinch Hint
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.black26,
+              alignment: Alignment.center,
+              child: const Text(
+                'Pinch to zoom in / out',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ),
+          ],
         ),
       ),
     );

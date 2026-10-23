@@ -60,6 +60,8 @@ class AiTtsService extends ChangeNotifier {
   bool _isInitialized = false;
 
   bool _isNavigating = false;
+  bool _isLiveTalkMode = false;
+  VoidCallback? onLiveTalkCompleted;
 
   TtsState get state => _state;
   VoicePersona get persona => _persona;
@@ -68,10 +70,18 @@ class AiTtsService extends ChangeNotifier {
   bool get isStopped => _state == TtsState.stopped;
   bool get isUsingNeuralEngine => _usingNeuralEngine;
   bool get isDataSaverMode => _dataSaverMode;
+  bool get isLiveTalkMode => _isLiveTalkMode;
   int? get sleepTimerMinutes => _sleepTimerMinutes;
   StudyAudioHandler? get audioHandler => _audioHandler;
   double get speechRate => _speechRate;
   String get currentText => _currentText;
+
+  /// Enables or disables Live Talk Mode (Gemini Live 1-on-1 continuous conversation loop)
+  void setLiveTalkMode(bool enable, {VoidCallback? onCompleted}) {
+    _isLiveTalkMode = enable;
+    onLiveTalkCompleted = onCompleted;
+    notifyListeners();
+  }
 
   /// Toggles Data Saver Mode: when enabled, bypasses cloud network and uses 0KB data with low battery drain
   void toggleDataSaverMode() {
@@ -244,22 +254,22 @@ class AiTtsService extends ChangeNotifier {
       await _flutterTts.setLanguage(targetLang);
 
       // 2. Persona-Calibrated Voice Pitch (Natural human vocal register)
-      // Priya Ma'am: bright, encouraging, energetic teacher tone (pitch 1.08)
-      // Dr. Aryan: confident, articulate, resonant professor tone (pitch 0.96)
-      // AI Mentor: lively, energetic, engaging peer tutor (pitch 1.03)
-      double targetPitch = 1.08;
+      // Priya Ma'am: bright, encouraging, warm, sweet teacher tone (pitch 1.02)
+      // Dr. Aryan: confident, articulate, resonant professor tone (pitch 0.94)
+      // AI Mentor: lively, engaging peer tutor (pitch 1.00)
+      double targetPitch = 1.02;
       bool preferFemale = true;
       if (_persona == VoicePersona.aryan) {
-        targetPitch = 0.96;
+        targetPitch = 0.94;
         preferFemale = false;
       } else if (_persona == VoicePersona.mentor) {
-        targetPitch = 1.03;
+        targetPitch = 1.00;
         preferFemale = true;
       }
       await _flutterTts.setPitch(targetPitch);
 
-      // 3. Energetic, human-like speech tempo: 0.52 gives crisp, lively, and articulate delivery
-      final baseRate = kIsWeb ? 1.0 : 0.52;
+      // 3. Energetic, human-like speech tempo: 0.48 gives crisp, natural, and articulate teacher cadence
+      final baseRate = kIsWeb ? 0.92 : 0.48;
       await _flutterTts.setSpeechRate(baseRate * _speechRate);
       await _flutterTts.setVolume(1.0);
 
@@ -711,7 +721,7 @@ class AiTtsService extends ChangeNotifier {
     s = s.replaceAll('**', '').replaceAll('__', '');
     // Natural human numbered point cadence: "Point 1: ... Point 2: ..."
     s = s.replaceAllMapped(RegExp(r'^\s*([0-9]+)\.\s+', multiLine: true), (m) => '. Point ${m.group(1)}: ');
-    s = s.replaceAll(RegExp(r'^[•\-\*]\s+', multiLine: true), '. ');
+    s = s.replaceAll(RegExp(r'^[•\-*]\s+', multiLine: true), '. ');
 
     // Step 6: Convert Visual Emojis into polite human spoken cues
     s = s.replaceAll('💡', '. Pro tip: ')
@@ -891,6 +901,11 @@ class AiTtsService extends ChangeNotifier {
       } else {
         // 3. Fallback when completely offline / without network
         _usingNeuralEngine = false;
+        final hasDevanagari = RegExp(r'[\u0900-\u097F]').hasMatch(chunk);
+        final chunkLang = hasDevanagari ? 'hi-IN' : 'en-IN';
+        try {
+          await _flutterTts.setLanguage(chunkLang);
+        } catch (_) {}
         await _configureSweetVoice();
         await _flutterTts.speak(chunk);
       }
@@ -916,6 +931,11 @@ class AiTtsService extends ChangeNotifier {
       _currentChunkIndex = 0;
       _chunks = [];
       notifyListeners();
+
+      // Trigger continuous live talk loop callback if active
+      if (_isLiveTalkMode && onLiveTalkCompleted != null) {
+        onLiveTalkCompleted!();
+      }
     }
   }
 

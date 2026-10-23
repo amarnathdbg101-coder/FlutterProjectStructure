@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use, deprecated_member_use_from_same_package
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -6,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 // import 'package:url_launcher/url_launcher.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import 'hand_drawn_diagram_canvas.dart';
@@ -502,7 +504,7 @@ class _InteractiveVisualDiagramState extends State<InteractiveVisualDiagram> {
     // Check if input is Mermaid graph syntax
     final isMermaid = cleanInput.toLowerCase().contains('graph ') ||
         cleanInput.toLowerCase().contains('flowchart ') ||
-        RegExp(r'[a-zA-Z0-9_\-]+\s*(?:\[|\(|\{).*?-->', multiLine: true).hasMatch(cleanInput);
+        RegExp(r'[a-zA-Z0-9_\-]+\s*[[({].*?-->', multiLine: true).hasMatch(cleanInput);
 
     if (isMermaid) {
       final mermaidNodes = _parseMermaidSyntax(cleanInput, isDark);
@@ -528,7 +530,7 @@ class _InteractiveVisualDiagramState extends State<InteractiveVisualDiagram> {
       if (line.isEmpty) continue;
 
       // Ignore pure horizontal boundary lines from ASCII box art (e.g. +-------+, --------, =======)
-      if (RegExp(r'^[\|\+\-\=\*\#\:\s_]{3,}$').hasMatch(line)) {
+      if (RegExp(r'^[|+=*#:\s_\-]{3,}$').hasMatch(line)) {
         continue;
       }
 
@@ -547,8 +549,8 @@ class _InteractiveVisualDiagramState extends State<InteractiveVisualDiagram> {
       }
 
       // Clean ASCII table/box borders and connectors
-      line = line.replaceAll(RegExp(r'^[\|\+\-\=\*\>\#\.\:\s├──└──│]+'), '').trim();
-      line = line.replaceAll(RegExp(r'[\|\+\-\=\*\#\:\s]+$'), '').trim();
+      line = line.replaceAll(RegExp(r'^[|+=*>.#:\s├─└│]+'), '').trim();
+      line = line.replaceAll(RegExp(r'[|+=*#:\s]+$'), '').trim();
 
       // If line is empty after stripping borders, skip
       if (line.isEmpty || line.length < 2) continue;
@@ -568,7 +570,7 @@ class _InteractiveVisualDiagramState extends State<InteractiveVisualDiagram> {
         if (part.isEmpty) continue;
 
         // Clean enclosing brackets e.g. [Step 1: Title] or ([Title]) or {Title}
-        part = part.replaceAllMapped(RegExp(r'^[\[\(\{]+(.*?)[\]\)\}]+$'), (m) => m.group(1) ?? '').trim();
+        part = part.replaceAllMapped(RegExp(r'^[\[({]+(.*?)[\])}]+$'), (m) => m.group(1) ?? '').trim();
         if (part.isEmpty) continue;
 
         String title = part;
@@ -781,7 +783,7 @@ class _InteractiveVisualDiagramState extends State<InteractiveVisualDiagram> {
     String? branchCondition,
   }) {
     // Matches: ID([Title]), ID((Title)), ID{Title}, ID[[Title]], ID[Title], or just ID
-    final defRegex = RegExp(r'^([a-zA-Z0-9_\-]+)\s*(?:(\(\[|\(\(|\{|\(\[|\[\[|\(|\[)(.*?)(\)\]|\)\)|\}\]|\}\]|\}\]|\}|\)|\]))?$');
+    final defRegex = RegExp(r'^([a-zA-Z0-9_\-]+)\s*(?:(\(\[|\(\(|\{|\[\[|\(|\[)(.*?)(\)\]|\)\)|\}\]|\}|\)|\]))?$');
     final match = defRegex.firstMatch(raw.trim());
 
     String id = raw.trim();
@@ -2518,11 +2520,11 @@ class _DiagramFullscreenViewerState extends State<_DiagramFullscreenViewer> {
   }
 
   void _zoomIn() {
-    _transController.value = _transController.value.clone()..scaleByDouble(1.2, 1.2, 1.0, 1.0);
+    _transController.value = _transController.value.clone()..scale(1.2, 1.2, 1.0);
   }
 
   void _zoomOut() {
-    _transController.value = _transController.value.clone()..scaleByDouble(0.8, 0.8, 1.0, 1.0);
+    _transController.value = _transController.value.clone()..scale(0.8333333333333334, 0.8333333333333334, 1.0);
   }
 
   void _resetZoom() {
@@ -2569,28 +2571,28 @@ class _DiagramFullscreenViewerState extends State<_DiagramFullscreenViewer> {
           ),
         ],
       ),
-      body: InteractiveViewer(
-              transformationController: _transController,
-              boundaryMargin: const EdgeInsets.all(80),
-              minScale: 0.4,
-              maxScale: 4.0,
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: InteractiveVisualDiagram(
-                      rawText: widget.rawText,
-                      diagramTitle: widget.diagramTitle,
-                      isDark: widget.isDark,
-                      baseFontSize: widget.baseFontSize + 1,
-                      initialArchetype: _currentArchetype,
-                      isFullscreen: true,
-                    ),
-                  ),
-                ),
+      body: SafeArea(
+        child: InteractiveViewer(
+          transformationController: _transController,
+          boundaryMargin: const EdgeInsets.all(100),
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: InteractiveVisualDiagram(
+                rawText: widget.rawText,
+                diagramTitle: widget.diagramTitle,
+                isDark: widget.isDark,
+                baseFontSize: widget.baseFontSize + 1,
+                initialArchetype: _currentArchetype,
+                isFullscreen: true,
               ),
             ),
+          ),
+        ),
+      ),
     );
   }
 }

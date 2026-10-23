@@ -117,7 +117,7 @@ class AiBlockModel {
   factory AiBlockModel.fromJson(Map<String, dynamic> json) {
     return AiBlockModel(
       type: json['type']?.toString() ?? 'paragraph',
-      text: json['text']?.toString() ?? '',
+      text: json['text']?.toString() ?? json['content']?.toString() ?? '',
       extra: json['extra']?.toString(),
     );
   }

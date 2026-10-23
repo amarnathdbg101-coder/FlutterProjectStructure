@@ -4,6 +4,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/hive_storage.dart';
 import '../models/study_plan_model.dart';
+import 'study_plan_repository.dart';
 
 export '../models/study_plan_model.dart';
 
@@ -13,8 +14,10 @@ class ExamPlannerService extends ChangeNotifier {
   ExamPlannerService._internal();
 
   final ApiClient _apiClient = ApiClient();
+  final StudyPlanRepository _repository = StudyPlanRepository();
   static const String _key = 'exam_study_plan_v2';
 
+  /// Synchronously loads cached study plan from Hive local storage
   ExamStudyPlanModel getPlan() {
     try {
       final raw = HiveStorage.boxSyncMeta.get(_key);
@@ -24,28 +27,86 @@ class ExamPlannerService extends ChangeNotifier {
       }
     } catch (_) {}
 
-    // Dynamic baseline roadmap generated from target goals
-    return createAdaptiveRoadmap(
-      examName: 'Target Academic Exam Goal',
+    // Clean baseline without any hardcoded goals/tasks
+    return ExamStudyPlanModel(
+      examName: 'Target Academic Exam',
       examDate: DateTime.now().add(const Duration(days: 90)),
       dailyHoursGoal: 4.0,
-      topics: const [
-        'Core Subject Fundamentals',
-        'Formula & Theorem Derivations',
-        'Problem Solving & Numericals',
-        'PYQ Mocks & Active Recall',
-      ],
+      overview: 'Personalized AI Active Recall Study Roadmap.',
+      syllabusTopics: const [],
+      schedule: const [],
     );
   }
 
-  Future<void> savePlan(ExamStudyPlanModel plan) async {
+  /// Fetches the user's study roadmap from the backend API, updating local Hive cache.
+  /// Falls back to local cache if offline or backend is unreachable.
+  Future<ExamStudyPlanModel> fetchPlan() async {
+    try {
+      final roadmaps = await _repository.listRoadmaps();
+      if (roadmaps.isNotEmpty) {
+        // Get the active or latest saved backend roadmap
+        final latest = roadmaps.firstWhere((r) => r.isActive,orElse: () => roadmaps.first);
+        final localCache = getPlan();
+        final backendPlan = latest.toExamStudyPlan().copyWith(
+          dailyHoursGoal: localCache.dailyHoursGoal,
+          totalStudyMinutes: localCache.totalStudyMinutes,
+        );
+
+        await _saveToLocalCache(backendPlan);
+        notifyListeners();
+        return backendPlan;
+      }
+    } catch (_) {}
+
+    return getPlan();
+  }
+
+  /// Internal helper to persist plan to local Hive cache
+  Future<void> _saveToLocalCache(ExamStudyPlanModel plan) async {
     try {
       await HiveStorage.boxSyncMeta.put(_key, jsonEncode(plan.toJson()));
-      notifyListeners();
     } catch (_) {}
   }
 
-  /// Dynamically generates an AI-powered study roadmap tailored to the student's exact syllabus topics and timeline
+  /// Saves study plan to local Hive storage AND syncs to Backend DB (POST/PATCH)
+  Future<void> savePlan(ExamStudyPlanModel plan) async {
+    await _saveToLocalCache(plan);
+    notifyListeners();
+
+    // Async sync with Backend Database
+    try {
+      if (plan.id != null && plan.id!.isNotEmpty && !plan.id!.startsWith('local-')) {
+        // Update existing backend roadmap
+        await _repository.updateRoadmap(
+          plan.id!,
+          UpdateRoadmapRequest(
+            examName: plan.examName,
+            overview: plan.overview,
+            schedule: plan.schedule,
+          ),
+        );
+      } else {
+        // Create new roadmap on backend DB
+        final saved = await _repository.saveRoadmap(
+          SaveRoadmapRequest(
+            examName: plan.examName,
+            overview: plan.overview,
+            syllabus: plan.syllabusTopics,
+            targetDays: plan.daysRemaining,
+            schedule: plan.schedule,
+          ),
+        );
+
+        if (saved != null && saved.id.isNotEmpty) {
+          final updatedWithId = plan.copyWith(id: saved.id);
+          await _saveToLocalCache(updatedWithId);
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Dynamically generates an AI-powered study roadmap, persists it on backend DB & local cache
   Future<ExamStudyPlanModel> generateAiPlan({
     required String examName,
     required DateTime examDate,
@@ -63,41 +124,49 @@ class ExamPlannerService extends ChangeNotifier {
     }
 
     try {
-      final response = await _apiClient.dio.post(
-        ApiConstants.generateStudyPlan,
-        data: {
-          'exam_name': examName,
-          'syllabus': cleanSyllabus,
-          'target_days': targetDays,
-        },
+      final response = await _repository.generateAIRoadmap(
+        examName: examName,
+        syllabus: cleanSyllabus,
+        targetDays: targetDays,
+        saveToDB: true,
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        final data = response.data['data'] as Map<String, dynamic>?;
-        if (data != null) {
-          final scheduleRaw = data['schedule'] as List<dynamic>? ?? [];
-          final tasks = scheduleRaw.map((e) {
-            final map = Map<String, dynamic>.from(e as Map);
-            return StudyPlanTaskModel.fromJson(map);
-          }).toList();
+      if (response != null && response.schedule.isNotEmpty) {
+        String? roadmapId = response.roadmapId;
 
-          if (tasks.isNotEmpty) {
-            final newPlan = ExamStudyPlanModel(
+        // If backend did not return a roadmapId, explicitly save to DB
+        if (roadmapId == null || roadmapId.isEmpty) {
+          final savedRoadmap = await _repository.saveRoadmap(
+            SaveRoadmapRequest(
               examName: examName,
-              examDate: examDate,
-              dailyHoursGoal: dailyHours,
-              overview: data['overview']?.toString() ?? 'Personalized AI Active Recall Study Roadmap for $examName.',
-              syllabusTopics: cleanSyllabus,
-              schedule: tasks,
-            );
-            await savePlan(newPlan);
-            return newPlan;
-          }
+              overview: response.overview,
+              syllabus: cleanSyllabus,
+              targetDays: targetDays,
+              schedule: response.schedule,
+            ),
+          );
+          roadmapId = savedRoadmap?.id;
         }
+
+        final newPlan = ExamStudyPlanModel(
+          id: roadmapId,
+          examName: examName,
+          examDate: examDate,
+          dailyHoursGoal: dailyHours,
+          overview: response.overview.isNotEmpty
+              ? response.overview
+              : 'Personalized AI Active Recall Study Roadmap for $examName.',
+          syllabusTopics: cleanSyllabus,
+          schedule: response.schedule,
+        );
+
+        await _saveToLocalCache(newPlan);
+        notifyListeners();
+        return newPlan;
       }
     } catch (_) {}
 
-    // Resilient Adaptive Fallback: Generates tailored multi-phase roadmap from user's syllabus
+    // Resilient Adaptive Fallback: Generates tailored multi-phase roadmap from syllabus
     final adaptivePlan = createAdaptiveRoadmap(
       examName: examName,
       examDate: examDate,
@@ -105,7 +174,27 @@ class ExamPlannerService extends ChangeNotifier {
       topics: cleanSyllabus,
     );
 
-    await savePlan(adaptivePlan);
+    // Persist fallback adaptive plan to backend DB
+    try {
+      final saved = await _repository.saveRoadmap(
+        SaveRoadmapRequest(
+          examName: adaptivePlan.examName,
+          overview: adaptivePlan.overview,
+          syllabus: adaptivePlan.syllabusTopics,
+          targetDays: targetDays,
+          schedule: adaptivePlan.schedule,
+        ),
+      );
+      if (saved != null && saved.id.isNotEmpty) {
+        final planWithId = adaptivePlan.copyWith(id: saved.id);
+        await _saveToLocalCache(planWithId);
+        notifyListeners();
+        return planWithId;
+      }
+    } catch (_) {}
+
+    await _saveToLocalCache(adaptivePlan);
+    notifyListeners();
     return adaptivePlan;
   }
 
@@ -118,7 +207,14 @@ class ExamPlannerService extends ChangeNotifier {
   }) {
     final cleanTopics = topics.where((s) => s.trim().isNotEmpty).toList();
     if (cleanTopics.isEmpty) {
-      cleanTopics.addAll(['Core Theory & Definitions', 'Formula Derivations', 'Previous Year Questions']);
+      return ExamStudyPlanModel(
+        examName: examName,
+        examDate: examDate,
+        dailyHoursGoal: dailyHoursGoal,
+        overview: 'Personalized AI Active Recall Study Roadmap for $examName.',
+        syllabusTopics: const [],
+        schedule: const [],
+      );
     }
 
     final targetDays = examDate.difference(DateTime.now()).inDays.clamp(3, 90);

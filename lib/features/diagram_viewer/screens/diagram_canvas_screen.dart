@@ -775,7 +775,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
           .toList();
     } else {
       // Split on emojis or sentence ends
-      final regex = RegExp(r'(💡|⚙️|📌|🎯|⚠️|✅|❌)');
+      final regex = RegExp(r'[💡⚙📌🎯⚠✅❌\uFE0F]', unicode: true);
       final matches = regex.allMatches(rawText).toList();
       if (matches.length > 1) {
         int lastIndex = 0;
@@ -824,7 +824,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
           for (int i = 0; i < points.length; i++) ...[
             Builder(
               builder: (_) {
-                var cleanText = points[i].replaceAll(RegExp(r'^[•\-\*]\s*'), '').trim();
+                var cleanText = points[i].replaceAll(RegExp(r'^[•\-*]\s*'), '').trim();
                 cleanText = cleanText.replaceAll(
                   RegExp(r'^(Core Idea|Key Rule|How It Works|How it Operates|Mechanism|High-Yield Takeaway|Exam Takeaway|Key Takeaway|Takeaway):\s*', caseSensitive: false),
                   '',

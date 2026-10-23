@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/routes/app_router.dart';
+import '../../../core/storage/hive_storage.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../repositories/ai_tutor_repository.dart';
@@ -41,6 +42,52 @@ class FormulaCardItem {
     this.phoneticReadout = '',
     this.calculatorType = 'general',
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'subject': subject,
+        'topic': topic,
+        'latex': latex,
+        'description': description,
+        'variables': variables,
+        'examTrap': examTrap,
+        'derivationSummary': derivationSummary,
+        'shortcuts': shortcuts,
+        'phoneticReadout': phoneticReadout,
+        'calculatorType': calculatorType,
+      };
+
+  factory FormulaCardItem.fromJson(Map<String, dynamic> json) {
+    Map<String, String> parseVars(dynamic raw) {
+      if (raw is Map) {
+        return raw.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+      return {};
+    }
+
+    List<String> parseList(dynamic raw) {
+      if (raw is List) {
+        return raw.map((e) => e.toString()).toList();
+      }
+      return [];
+    }
+
+    return FormulaCardItem(
+      id: json['id']?.toString() ?? 'formula_${DateTime.now().millisecondsSinceEpoch}',
+      title: json['title']?.toString() ?? 'Untitled Formula',
+      subject: json['subject']?.toString() ?? 'Mathematics',
+      topic: json['topic']?.toString() ?? 'General',
+      latex: json['latex']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      variables: parseVars(json['variables']),
+      examTrap: json['examTrap']?.toString() ?? (json['exam_trap']?.toString() ?? ''),
+      derivationSummary: json['derivationSummary']?.toString() ?? (json['derivation_summary']?.toString() ?? ''),
+      shortcuts: parseList(json['shortcuts']),
+      phoneticReadout: json['phoneticReadout']?.toString() ?? (json['phonetic_readout']?.toString() ?? ''),
+      calculatorType: json['calculatorType']?.toString() ?? (json['calculator_type']?.toString() ?? 'general'),
+    );
+  }
 }
 
 /// Standalone Full-Page AI Formula Studio & Equation Vault
@@ -104,13 +151,19 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
     super.initState();
     _initVaultData();
     _loadBookmarks();
+    _searchController.addListener(_onSearchChanged);
     if (widget.initialTopic != null && widget.initialTopic!.trim().isNotEmpty) {
       _searchController.text = widget.initialTopic!.trim();
     }
   }
 
+  void _onSearchChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _pageController.dispose();
     super.dispose();
@@ -145,500 +198,44 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
   }
 
   void _initVaultData() {
-    _vaultFormulas = [
-      // =========================================================================
-      // 1. MATHEMATICS & CALCULUS
-      // =========================================================================
-      const FormulaCardItem(
-        id: 'math-1',
-        title: 'Fundamental Theorem of Calculus',
-        subject: 'Mathematics',
-        topic: 'Definite Integrals',
-        latex: r'\int_a^b f(x)\,dx = F(b) - F(a) \quad \text{where } F^{\prime}(x) = f(x)',
-        description: 'Connects differentiation and integration, allowing evaluation of total accumulation via antiderivative boundary evaluation.',
-        variables: {
-          'f(x)': 'Continuous integrand on [a, b]',
-          'F(x)': 'Antiderivative of f(x)',
-          'a, b': 'Lower and upper integration bounds',
-        },
-        examTrap: 'The integrand f(x) must be continuous on [a, b]. If f(x) has an asymptotic discontinuity (e.g. 1/x^2 around x=0), standard evaluation fails!',
-        derivationSummary: r'\sum f(c_i)\Delta x_i = \sum [F(x_i) - F(x_{i-1})] = F(b) - F(a)',
-        shortcuts: ['Verify continuity first', 'Check symmetric bounds for odd/even functions'],
-        phoneticReadout: 'Integral from a to b of f of x dx equals F of b minus F of a, where F-prime of x equals f of x.',
-        calculatorType: 'calculus',
-      ),
-      const FormulaCardItem(
-        id: 'math-2',
-        title: 'Integration by Parts (LIATE Rule)',
-        subject: 'Mathematics',
-        topic: 'Integral Calculus',
-        latex: r'\int u\,dv = u\cdot v - \int v\,du',
-        description: 'Transfers derivatives between product factors to reduce complex integration into standard elementary integrals.',
-        variables: {
-          'u': 'Differentiable factor (chosen via LIATE)',
-          'dv': 'Integrable factor with differential dx',
-          'du': 'Derivative of u with respect to x',
-          'v': 'Antiderivative of dv',
-        },
-        examTrap: 'Order of u priority strictly follows LIATE: Logarithmic, Inverse trig, Algebraic, Trigonometric, Exponential.',
-        derivationSummary: r'\frac{d}{dx}(uv) = u\frac{dv}{dx} + v\frac{du}{dx} \implies \int d(uv) = \int u\,dv + \int v\,du',
-        shortcuts: ['Tabular method for polynomial multiplied by exponential/sine'],
-        phoneticReadout: 'Integral of u dv equals u times v minus integral of v du.',
-        calculatorType: 'parts',
-      ),
-      const FormulaCardItem(
-        id: 'math-3',
-        title: 'Euler Identity & Complex Exponential',
-        subject: 'Mathematics',
-        topic: 'Complex Analysis',
-        latex: r'e^{i\theta} = \cos(\theta) + i\sin(\theta) \implies e^{i\pi} + 1 = 0',
-        description: 'Establishes the fundamental bridge between trigonometric harmonic oscillations and exponential algebra.',
-        variables: {
-          r'\theta': 'Phase angle in radians',
-          'i': r'Imaginary unit \sqrt{-1}',
-          'e': 'Euler mathematical constant (~2.71828)',
-        },
-        examTrap: r'Angle \theta must strictly be in radians! Using degrees leads to invalid Taylor expansion convergence.',
-        derivationSummary: r'e^z = 1 + z + \frac{z^2}{2!} + \dots \implies e^{i\theta} = \cos\theta + i\sin\theta',
-        shortcuts: [r'De Moivre: (\cos\theta + i\sin\theta)^n = \cos(n\theta) + i\sin(n\theta)'],
-        phoneticReadout: 'e raised to the power of i theta equals cosine theta plus i sine theta. Special case: e raised to i pi plus one equals zero.',
-        calculatorType: 'euler',
-      ),
-      const FormulaCardItem(
-        id: 'math-4',
-        title: 'Characteristic Equation & Matrix Eigenvalues',
-        subject: 'Mathematics',
-        topic: 'Linear Algebra',
-        latex: r'\det(A - \lambda I) = 0 \quad \text{and} \quad A\vec{v} = \lambda\vec{v}',
-        description: 'Determines invariant scalar dilation factors (eigenvalues) and directional eigenvectors under linear transformation.',
-        variables: {
-          'A': 'Square matrix of order n',
-          r'\lambda': 'Eigenvalue scalar roots',
-          'I': 'Identity matrix of order n',
-          r'\vec{v}': 'Non-zero eigenvector',
-        },
-        examTrap: r'Sum of eigenvalues equals Trace(A); Product of eigenvalues equals \det(A). Always check with Trace test!',
-        derivationSummary: r'(A - \lambda I)\vec{v} = 0 \implies \text{Non-trivial solution requires } \det(A - \lambda I) = 0',
-        shortcuts: ['Trace(A) = sum of lambdas', 'Det(A) = product of lambdas'],
-        phoneticReadout: 'Determinant of A minus lambda times the identity matrix equals zero, and A times vector v equals lambda times vector v.',
-        calculatorType: 'matrix',
-      ),
-      const FormulaCardItem(
-        id: 'math-5',
-        title: 'Bayes Theorem of Conditional Probability',
-        subject: 'Mathematics',
-        topic: 'Probability & Statistics',
-        latex: r'P(A|B) = \frac{P(B|A)\,P(A)}{P(B)} = \frac{P(B|A)\,P(A)}{P(B|A)P(A) + P(B|\neg A)P(\neg A)}',
-        description: 'Updates posterior probability of a hypothesis A upon observing evidence B via prior beliefs and likelihood.',
-        variables: {
-          'P(A|B)': 'Posterior probability of A given evidence B',
-          'P(B|A)': 'Likelihood of evidence B assuming A is true',
-          'P(A)': 'Prior probability of hypothesis A',
-          'P(B)': 'Total probability of evidence B across all states',
-        },
-        examTrap: 'Do not confuse P(A|B) with P(B|A)! Base rate neglect occurs when prior P(A) is ignored in medical diagnostics.',
-        derivationSummary: r'P(A \cap B) = P(A|B)P(B) = P(B|A)P(A) \implies P(A|B) = \frac{P(B|A)P(A)}{P(B)}',
-        shortcuts: ['Posterior = (Likelihood * Prior) / Marginal Evidence'],
-        phoneticReadout: 'Probability of A given B equals probability of B given A times probability of A divided by probability of B.',
-        calculatorType: 'bayes',
-      ),
-      const FormulaCardItem(
-        id: 'math-6',
-        title: 'Quadratic Formula & Root Discriminant',
-        subject: 'Mathematics',
-        topic: 'Algebra',
-        latex: r'x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} \quad \text{where } \Delta = b^2 - 4ac',
-        description: 'Computes exact algebraic roots of second-degree polynomial equations and classifies real vs complex nature.',
-        variables: {
-          'a, b, c': 'Quadratic coefficients (a != 0)',
-          r'\Delta': 'Discriminant (Delta > 0: two real; Delta = 0: one real; Delta < 0: two complex conjugate)',
-        },
-        examTrap: 'Watch out when a=0 (the equation reduces to linear bx + c = 0, so quadratic formula divides by zero)!',
-        derivationSummary: r'ax^2 + bx + c = 0 \implies \left(x + \frac{b}{2a}\right)^2 = \frac{b^2 - 4ac}{4a^2} \implies x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}',
-        shortcuts: ['Sum of roots = -b/a', 'Product of roots = c/a'],
-        phoneticReadout: 'x equals minus b plus or minus square root of b squared minus 4 a c, all divided by 2 a.',
-        calculatorType: 'quadratic',
-      ),
-      const FormulaCardItem(
-        id: 'math-7',
-        title: 'Taylor & Maclaurin Series Expansion',
-        subject: 'Mathematics',
-        topic: 'Infinite Series',
-        latex: r'f(x) = \sum_{n=0}^{\infty} \frac{f^{(n)}(a)}{n!}\,(x - a)^n = f(a) + f^{\prime}(a)(x-a) + \frac{f^{\prime\prime}(a)}{2!}(x-a)^2 + \dots',
-        description: 'Expresses any infinitely differentiable function as an infinite polynomial expansion evaluated around point a.',
-        variables: {
-          'f^(n)(a)': 'n-th order derivative evaluated at anchor point a',
-          'n!': 'Factorial of n',
-          '(x - a)': 'Displacement distance from center of convergence a',
-        },
-        examTrap: 'Always verify the radius and interval of convergence R! The expansion is only valid within |x - a| < R.',
-        derivationSummary: r'P_n(x) = \sum_{k=0}^n c_k(x-a)^k \implies P_n^{(m)}(a) = m!\,c_m = f^{(m)}(a) \implies c_m = \frac{f^{(m)}(a)}{m!}',
-        shortcuts: [r'Maclaurin is Taylor centered at a=0: e^x = 1 + x + x^2/2! + \dots'],
-        phoneticReadout: 'f of x equals sum from n equals zero to infinity of n-th derivative of f at a divided by n factorial times x minus a to the n.',
-        calculatorType: 'general',
-      ),
+    final cached = HiveStorage.getCachedFormulas();
+    if (cached.isNotEmpty) {
+      _vaultFormulas = cached.map((e) => FormulaCardItem.fromJson(e)).toList();
+    } else {
+      _vaultFormulas = [];
+    }
+  }
 
-      // =========================================================================
-      // 2. PHYSICS & APPLIED MECHANICS
-      // =========================================================================
-      const FormulaCardItem(
-        id: 'phys-1',
-        title: 'Newton Second Law for Variable Mass (Rocket Equation)',
-        subject: 'Physics',
-        topic: 'Classical Mechanics',
-        latex: r'\vec{F}_{\text{ext}} + \vec{v}_{\text{rel}}\frac{dm}{dt} = m\frac{d\vec{v}}{dt} \implies \Delta v = v_e \ln\left(\frac{m_0}{m_f}\right)',
-        description: 'Governs thrust dynamics in variable-mass open systems where mass ejection produces reactive momentum transfer.',
-        variables: {
-          'F_ext': 'Net external forces (Gravity, Drag) [N]',
-          'v_rel': 'Relative exhaust velocity of expelled propellant [m/s]',
-          'dm/dt': 'Mass burn rate (negative for consumption) [kg/s]',
-          'm': 'Instantaneous total vehicle mass [kg]',
-        },
-        examTrap: 'F = ma fails directly for variable-mass systems! One must apply conservation of momentum to the combined system.',
-        derivationSummary: r'P(t) = mv, \quad P(t+dt) = (m-dm)(v+dv) + dm(v-v_{\text{rel}}) \implies m\frac{dv}{dt} = v_{\text{rel}}\frac{dm}{dt}',
-        shortcuts: ['Tsiolkovsky equation for gravity-free vacuum burn'],
-        phoneticReadout: 'External force vector plus relative velocity times dm dt equals mass times dv dt. Rocket equation: Delta v equals exhaust velocity times natural log of m-zero over m-final.',
-        calculatorType: 'variable_mass',
-      ),
-      const FormulaCardItem(
-        id: 'phys-2',
-        title: 'Maxwell Equations (Electromagnetic Unification)',
-        subject: 'Physics',
-        topic: 'Electrodynamics',
-        latex: r'\oint \vec{E}\cdot d\vec{A} = \frac{Q_{\text{enc}}}{\varepsilon_0}, \quad \oint \vec{B}\cdot d\vec{\ell} = \mu_0 I + \mu_0\varepsilon_0\frac{d\Phi_E}{dt}',
-        description: 'Complete set of partial differential equations unifying electric fields, magnetic fluxes, and electromagnetic radiation.',
-        variables: {
-          'E': 'Electric field intensity vector [V/m]',
-          'B': 'Magnetic flux density vector [Tesla]',
-          'Phi_E': 'Electric flux through enclosing boundary [V·m]',
-          'eps_0, mu_0': 'Permittivity and permeability of free space',
-        },
-        examTrap: 'Displacement current term mu0 * eps0 * dPhi_E/dt is mandatory for time-varying fields (Ampere-Maxwell correction)!',
-        derivationSummary: r'\nabla \cdot \vec{E} = \frac{\rho}{\varepsilon_0}, \quad \nabla \times \vec{E} = -\frac{\partial \vec{B}}{\partial t}, \quad \nabla \cdot \vec{B} = 0, \quad \nabla \times \vec{B} = \mu_0\vec{J} + \mu_0\varepsilon_0\frac{\partial \vec{E}}{\partial t}',
-        shortcuts: [r'Electromagnetic wave speed in vacuum: c = \frac{1}{\sqrt{\varepsilon_0 \mu_0}}'],
-        phoneticReadout: 'Closed surface integral of E dot dA equals enclosed charge over epsilon-zero. Closed line integral of B dot d-ell equals mu-zero I plus mu-zero epsilon-zero d-Phi-E dt.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'phys-3',
-        title: 'Carnot Heat Engine Maximum Efficiency',
-        subject: 'Physics',
-        topic: 'Thermodynamics',
-        latex: r'\eta_{\text{Carnot}} = 1 - \frac{T_C}{T_H} = \frac{W_{\text{net}}}{Q_H}',
-        description: 'Defines the theoretical upper ceiling of thermodynamic efficiency achievable by any heat engine operating between two thermal reservoirs.',
-        variables: {
-          'eta': 'Thermodynamic thermal efficiency (0 <= eta < 1)',
-          'T_C': 'Absolute cold sink reservoir temperature [Kelvin strictly]',
-          'T_H': 'Absolute hot source reservoir temperature [Kelvin strictly]',
-          'W_net': 'Net mechanical work output [Joules]',
-        },
-        examTrap: 'Temperatures must strictly be in Kelvin (K = °C + 273.15). Using Celsius (°C) is the #1 cause of lost marks!',
-        derivationSummary: r'\Delta S_{\text{cycle}} = \frac{Q_H}{T_H} - \frac{Q_C}{T_C} = 0 \implies \frac{Q_C}{Q_H} = \frac{T_C}{T_H} \implies \eta = 1 - \frac{Q_C}{Q_H} = 1 - \frac{T_C}{T_H}',
-        shortcuts: ['100% efficiency is impossible by Kelvin-Planck Statement'],
-        phoneticReadout: 'Carnot efficiency eta equals one minus cold temperature T-sub-C divided by hot temperature T-sub-H.',
-        calculatorType: 'carnot',
-      ),
-      const FormulaCardItem(
-        id: 'phys-4',
-        title: 'Bernoulli Conservation of Fluid Energy',
-        subject: 'Physics',
-        topic: 'Fluid Dynamics',
-        latex: r'P_1 + \frac{1}{2}\rho v_1^2 + \rho g h_1 = P_2 + \frac{1}{2}\rho v_2^2 + \rho g h_2 = \text{Constant}',
-        description: 'States that total mechanical energy in steady, incompressible, non-viscous fluid flow along a streamline remains invariant.',
-        variables: {
-          'P': 'Static hydrostatic fluid pressure [Pa = N/m²]',
-          'rho': 'Fluid density [kg/m³]',
-          'v': 'Streamline velocity [m/s]',
-          'h': 'Geopotential elevation above reference datum [m]',
-        },
-        examTrap: 'Valid only for streamline laminar flow without viscous friction losses (head loss). Not valid across pumps or turbines without head terms!',
-        derivationSummary: r'W_{\text{net}} = \Delta K + \Delta U \implies (P_1 - P_2)V = \frac{1}{2}m(v_2^2 - v_1^2) + mg(h_2 - h_1)',
-        shortcuts: ['Dynamic pressure term = 1/2 rho v^2', 'Torricelli speed v = sqrt(2gh)'],
-        phoneticReadout: 'Pressure P plus one-half rho v squared plus rho g h equals constant along a streamline.',
-        calculatorType: 'bernoulli',
-      ),
-      const FormulaCardItem(
-        id: 'phys-5',
-        title: 'Einstein Relativistic Energy-Momentum Relation',
-        subject: 'Physics',
-        topic: 'Special Relativity',
-        latex: r'E^2 = (pc)^2 + (m_0 c^2)^2 \implies E = \gamma m_0 c^2',
-        description: 'Unifies relativistic kinetic momentum and invariant rest mass energy for particles moving at near-light velocities.',
-        variables: {
-          'E': 'Total relativistic energy [Joules]',
-          'p': 'Relativistic linear momentum [kg·m/s]',
-          'm_0': 'Invariant rest mass [kg] (for photon m_0 = 0 -> E = pc)',
-          'c': 'Speed of light in vacuum (~3.0 x 10^8 m/s)',
-          'gamma': r'Lorentz factor \frac{1}{\sqrt{1 - v^2/c^2}}',
-        },
-        examTrap: 'E = mc^2 applies to rest energy (m0 c^2) or relativistic mass! For moving particles or massless photons, use E^2 = (pc)^2 + (m0 c^2)^2.',
-        derivationSummary: r'p = \gamma m_0 v, \quad E = \gamma m_0 c^2 \implies E^2 - (pc)^2 = \gamma^2 m_0^2 c^4(1 - v^2/c^2) = m_0^2 c^4',
-        shortcuts: ['Massless photon: E = pc', 'At rest: p=0 -> E = m_0 c^2'],
-        phoneticReadout: 'E squared equals p times c squared plus m-zero c squared squared.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'phys-6',
-        title: 'Schrodinger Time-Independent Wave Equation',
-        subject: 'Physics',
-        topic: 'Quantum Mechanics',
-        latex: r'-\frac{\hbar^2}{2m}\nabla^2\psi(\vec{r}) + V(\vec{r})\psi(\vec{r}) = E\psi(\vec{r}) \quad (\hat{H}\psi = E\psi)',
-        description: 'Fundamental eigenvalue differential equation governing stationary quantum states, probability density, and quantized energy levels.',
-        variables: {
-          r'\hbar': 'Reduced Planck constant (h / 2pi) [J·s]',
-          'm': 'Particle mass [kg]',
-          r'\psi': 'Spatial wave function amplitude (Probability density = |psi|^2)',
-          'V': 'Potential energy landscape [Joules]',
-          'E': 'Quantized total energy eigenvalue [Joules]',
-        },
-        examTrap: 'Wave function psi must be continuous, single-valued, and normalizable (integral of |psi|^2 over all space = 1).',
-        derivationSummary: r'\hat{T} + \hat{V} = \hat{H} \implies \left(-\frac{\hbar^2}{2m}\frac{d^2}{dx^2} + V(x)\right)\psi(x) = E\psi(x)',
-        shortcuts: ['Infinite square well energy levels: E_n = n^2 pi^2 hbar^2 / (2 m L^2)'],
-        phoneticReadout: 'Minus h-bar squared over 2 m times Laplacian psi plus V psi equals E psi.',
-        calculatorType: 'general',
-      ),
+  Future<void> _saveFormulaToVault(FormulaCardItem item) async {
+    final json = item.toJson();
+    await HiveStorage.cacheFormulaItem(json);
+    setState(() {
+      _vaultFormulas.removeWhere((f) => f.id == item.id);
+      _vaultFormulas.insert(0, item);
+      _currentCardIndex = 0;
+    });
+    if (mounted) {
+      CustomSnackbar.showSuccess(context, 'Formula card saved to database! 💾');
+    }
+  }
 
-      // =========================================================================
-      // 3. CHEMISTRY & PHYSICAL SCIENCES
-      // =========================================================================
-      const FormulaCardItem(
-        id: 'chem-1',
-        title: 'Gibbs Free Energy & Reaction Spontaneity',
-        subject: 'Chemistry',
-        topic: 'Chemical Thermodynamics',
-        latex: r'\Delta G = \Delta H - T\Delta S \quad \text{and} \quad \Delta G^\circ = -RT\ln K_{\text{eq}}',
-        description: 'Governs thermodynamic feasibility and directionality of chemical processes under constant temperature and pressure.',
-        variables: {
-          'Delta G': 'Gibbs free energy change (Negative = Spontaneous) [kJ/mol]',
-          'Delta H': 'Enthalpy change (Negative = Exothermic) [kJ/mol]',
-          'T': 'Absolute temperature in Kelvin [K]',
-          'Delta S': 'Entropy change of system [J/(mol·K)] - Note unit mismatch!',
-        },
-        examTrap: 'UNIT TRAP: Delta H is typically in kJ/mol while Delta S is in J/(mol·K). Divide Delta S by 1000 before subtracting!',
-        derivationSummary: r'\Delta S_{\text{univ}} = \Delta S_{\text{sys}} + \Delta S_{\text{surr}} = \Delta S_{\text{sys}} - \frac{\Delta H_{\text{sys}}}{T} > 0 \implies \Delta H - T\Delta S < 0',
-        shortcuts: ['Delta H < 0, Delta S > 0: Spontaneous at all temperatures', 'Delta H > 0, Delta S < 0: Non-spontaneous at all temperatures'],
-        phoneticReadout: 'Delta G equals Delta H minus T times Delta S. Standard state: Delta G naught equals minus R T times natural log of K equilibrium.',
-        calculatorType: 'gibbs',
-      ),
-      const FormulaCardItem(
-        id: 'chem-2',
-        title: 'Nernst Equation for Electrochemical Cell Potential',
-        subject: 'Chemistry',
-        topic: 'Electrochemistry',
-        latex: r'E_{\text{cell}} = E^\circ_{\text{cell}} - \frac{RT}{nF}\ln Q = E^\circ_{\text{cell}} - \frac{0.0592}{n}\log_{10} Q \quad (\text{at } 298\,\text{K})',
-        description: 'Calculates non-standard reduction potential of electrochemical galvanic and electrolytic cells as reactant concentrations shift.',
-        variables: {
-          'E_cell': 'Actual cell electromotive force [Volts]',
-          'E_0_cell': 'Standard reduction potential under 1M, 1atm [Volts]',
-          'n': 'Number of moles of electrons transferred in redox reaction',
-          'Q': 'Reaction quotient [Products]^c / [Reactants]^a',
-        },
-        examTrap: 'Pure solids and liquids do NOT appear in the expression for Q! Ensure the redox reaction is strictly balanced before finding n.',
-        derivationSummary: r'\Delta G = \Delta G^\circ + RT\ln Q \quad \text{with } \Delta G = -nFE_{\text{cell}} \implies -nFE = -nFE^\circ + RT\ln Q',
-        shortcuts: ['At equilibrium, E_cell = 0 and Q = K_eq'],
-        phoneticReadout: 'E cell equals E naught cell minus zero point zero five nine two over n times log base ten of Q at 298 Kelvin.',
-        calculatorType: 'nernst',
-      ),
-      const FormulaCardItem(
-        id: 'chem-3',
-        title: 'Arrhenius Activation Energy & Reaction Kinetics',
-        subject: 'Chemistry',
-        topic: 'Chemical Kinetics',
-        latex: r'k = A\,e^{-\frac{E_a}{RT}} \implies \ln\left(\frac{k_2}{k_1}\right) = \frac{E_a}{R}\left(\frac{1}{T_1} - \frac{1}{T_2}\right)',
-        description: 'Quantifies temperature dependence of chemical reaction rate constants based on minimum threshold activation energy barrier.',
-        variables: {
-          'k': 'Reaction rate constant',
-          'A': 'Pre-exponential frequency collision factor',
-          'E_a': 'Molar activation energy barrier [J/mol]',
-          'R': 'Universal gas constant (8.314 J/(mol·K))',
-          'T': 'Absolute temperature in Kelvin [K]',
-        },
-        examTrap: 'Slope of ln(k) vs 1/T plot is -Ea/R (negative slope). A catalyst lowers Ea, causing exponential increase in rate k!',
-        derivationSummary: r'\frac{d\ln k}{dT} = \frac{E_a}{RT^2} \implies \int \frac{d\ln k}{dT}\,dT = \ln k = -\frac{E_a}{RT} + \ln A',
-        shortcuts: ['Rule of thumb: Rate roughly doubles for every 10K temperature rise near 300K'],
-        phoneticReadout: 'Rate constant k equals A times e to the power of minus E-sub-a over R T.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'chem-4',
-        title: 'Henderson-Hasselbalch Buffer pH Equation',
-        subject: 'Chemistry',
-        topic: 'Equilibrium & Acid-Base Buffers',
-        latex: r'\text{pH} = \text{pK}_a + \log_{10}\left(\frac{[\text{A}^-]}{[\text{HA}]}\right)',
-        description: 'Calculates the equilibrium pH of weak acid and conjugate base buffer solutions during titration.',
-        variables: {
-          'pH': 'Negative log of hydrogen ion concentration',
-          'pK_a': 'Acid dissociation constant (-log10 Ka)',
-          '[A-]': 'Molar concentration of conjugate base (salt) [M]',
-          '[HA]': 'Molar concentration of undissociated weak acid [M]',
-        },
-        examTrap: 'Valid only when initial concentrations exceed Ka by at least 100x (so autoionization of water is negligible). Maximum buffer capacity occurs at pH = pKa!',
-        derivationSummary: r'K_a = \frac{[\text{H}^+][\text{A}^-]}{[\text{HA}]} \implies [\text{H}^+] = K_a\frac{[\text{HA}]}{[\text{A}^-]} \implies -\log[\text{H}^+] = -\log K_a + \log\frac{[\text{A}^-]}{[\text{HA}]}',
-        shortcuts: ['When [Conjugate Base] = [Acid], pH = pKa'],
-        phoneticReadout: 'pH equals pKa plus log base 10 of concentration of A-minus over concentration of H A.',
-        calculatorType: 'general',
-      ),
-
-      // =========================================================================
-      // 4. COMPUTER SCIENCE & ALGORITHMS
-      // =========================================================================
-      const FormulaCardItem(
-        id: 'cs-1',
-        title: 'Master Theorem for Divide & Conquer',
-        subject: 'Computer Science',
-        topic: 'Algorithms & Complexity',
-        latex: r'T(n) = a\,T\left(\frac{n}{b}\right) + \Theta(n^k \log^p n) \implies c = \log_b a',
-        description: 'Provides closed-form asymptotic Big-O runtime bounds for recursive recurrence relations in divide-and-conquer algorithms.',
-        variables: {
-          'a': 'Number of recursive subproblems per step (a >= 1)',
-          'b': 'Factor by which input size is divided (b > 1)',
-          'k': 'Polynomial exponent of work done outside recursion (k >= 0)',
-          'c = log_b(a)': 'Critical watershed exponent',
-        },
-        examTrap: 'Check if c > k (Case 1: O(n^c)), c == k (Case 2: O(n^k log^(p+1) n)), or c < k with regularity condition (Case 3: O(n^k log^p n)).',
-        derivationSummary: r'\sum_{j=0}^{\log_b n} a^j \left(\frac{n}{b^j}\right)^k = n^k \sum_{j=0}^{\log_b n} \left(\frac{a}{b^k}\right)^j',
-        shortcuts: ['Merge Sort: a=2, b=2, k=1 -> O(n log n)', 'Binary Search: a=1, b=2, k=0 -> O(log n)'],
-        phoneticReadout: 'T of n equals a times T of n over b plus Theta of n to the k times log to the p of n. Critical exponent c equals log base b of a.',
-        calculatorType: 'master_theorem',
-      ),
-      const FormulaCardItem(
-        id: 'cs-2',
-        title: 'Shannon Information Entropy',
-        subject: 'Computer Science',
-        topic: 'Information Theory',
-        latex: r'H(X) = -\sum_{i=1}^n P(x_i)\log_2 P(x_i) = \sum_{i=1}^n P(x_i)\log_2\left(\frac{1}{P(x_i)}\right)',
-        description: 'Quantifies expected information density, uncertainty, and minimal lossless compression limit per symbol in bits.',
-        variables: {
-          'H(X)': 'Entropy in bits (or shannons) [bits/symbol]',
-          'P(x_i)': 'Probability of occurrence for event i (sum = 1.0)',
-          'log_2': 'Base-2 logarithm representing binary encoding bits',
-        },
-        examTrap: 'If P(x_i) = 0, the term is evaluated as 0 because lim (p -> 0) of p * log2(p) = 0. Maximum entropy occurs with uniform distribution: H_max = log2(n).',
-        derivationSummary: r'I(x) = \log_2(1/P(x)) \implies H(X) = \sum P(x_i)\log_2(1/P(x_i))',
-        shortcuts: ['Fair coin: H = 1 bit', 'Biased coin P=0.9: H = 0.47 bits'],
-        phoneticReadout: 'Entropy H of X equals minus sum over i of P of x-sub-i times log base two of P of x-sub-i.',
-        calculatorType: 'shannon_entropy',
-      ),
-      const FormulaCardItem(
-        id: 'cs-3',
-        title: 'Cross-Entropy Loss Function in Deep Learning',
-        subject: 'Computer Science',
-        topic: 'Machine Learning & Neural Networks',
-        latex: r'\mathcal{L}_{\text{CE}} = -\sum_{i=1}^C y_i \ln(\hat{y}_i) \quad \text{with Softmax } \hat{y}_i = \frac{e^{z_i}}{\sum e^{z_j}}',
-        description: 'Standard loss function used for training classification models by measuring divergence between true one-hot distribution y and predicted probabilities.',
-        variables: {
-          'L_CE': 'Cross-entropy loss score (>= 0)',
-          'y_i': 'Ground truth probability (1 for target class, 0 for others)',
-          'y_hat_i': 'Predicted softmax probability output of neural net',
-          'C': 'Total number of target output classes',
-        },
-        examTrap: 'Numerical instability trap: If predicted probability y_hat approaches 0, ln(0) evaluates to -Infinity! Always clip probabilities (e.g. clamp to 1e-15).',
-        derivationSummary: r'D_{\text{KL}}(P || Q) = \sum P(x)\ln\frac{P(x)}{Q(x)} = H(P, Q) - H(P) \implies \text{Minimizing } D_{\text{KL}} \equiv \text{Minimizing } H(P, Q)',
-        shortcuts: ['Binary cross entropy: -(y log p + (1-y) log(1-p))'],
-        phoneticReadout: 'Cross entropy loss equals minus sum of y-sub-i times natural log of y-hat-sub-i.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'cs-4',
-        title: 'Amdahl Law for Parallel Speedup',
-        subject: 'Computer Science',
-        topic: 'Computer Architecture & Parallel Systems',
-        latex: r'S_{\text{latency}}(s) = \frac{1}{(1 - p) + \frac{p}{s}} \implies S_{\text{max}} = \frac{1}{1 - p}',
-        description: 'Calculates theoretical maximum speedup in execution latency when executing a program with parallel fraction p on s worker processors.',
-        variables: {
-          'S(s)': 'Overall system speedup factor',
-          'p': 'Fraction of execution time that can be parallelized (0 <= p <= 1)',
-          's': 'Number of parallel processor cores or nodes',
-          '1 - p': 'Strictly serial fraction of code that cannot be parallelized',
-        },
-        examTrap: 'Even with infinite processors (s -> infinity), speedup is capped at 1/(1-p). If 10% of code is serial (p=0.9), maximum speedup is strictly 10x!',
-        derivationSummary: r'T_{\text{new}} = T_{\text{old}}\left((1-p) + \frac{p}{s}\right) \implies \text{Speedup } S = \frac{T_{\text{old}}}{T_{\text{new}}} = \frac{1}{(1-p) + \frac{p}{s}}',
-        shortcuts: ['Gustafson Law provides alternative scaled speedup for growing problem sizes'],
-        phoneticReadout: 'Speedup S of s equals 1 over quantity 1 minus p plus p divided by s.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'cs-5',
-        title: 'Average Memory Access Time (AMAT)',
-        subject: 'Computer Science',
-        topic: 'Computer Architecture & Cache Memory',
-        latex: r'\text{AMAT} = T_{\text{hit}} + (\text{Miss Rate} \times \text{Miss Penalty})',
-        description: 'Calculates the effective latency experienced by processor when accessing hierarchical cache and DRAM memory.',
-        variables: {
-          'AMAT': 'Average Memory Access Time in nanoseconds [ns]',
-          'T_hit': 'Cache Hit Time to service word from L1 cache',
-          'Miss Rate': 'Fraction of accesses resulting in cache miss (0 <= m <= 1)',
-          'Miss Penalty': 'Latency to fetch block from lower memory level',
-        },
-        examTrap: 'In multi-level cache problems: Global Miss Rate L2 = Miss Rate L1 * Local Miss Rate L2. Never add miss rates directly!',
-        derivationSummary: r'\text{AMAT} = T_{L1\_hit} + m_{L1}(T_{L2\_hit} + m_{L2\_local} \cdot T_{\text{RAM\_penalty}})',
-        shortcuts: ['AMAT = Hit Time + (Miss Rate * Miss Penalty)'],
-        phoneticReadout: 'A M A T equals hit time plus miss rate times miss penalty.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'cs-6',
-        title: 'Page Fault Rate & Effective Access Time (EAT)',
-        subject: 'Computer Science',
-        topic: 'Operating Systems & Virtual Memory',
-        latex: r'\text{EAT} = (1 - p) \cdot T_{\text{mem}} + p \cdot T_{\text{fault}}',
-        description: 'Measures effective memory access time under demand paging virtual memory systems.',
-        variables: {
-          'EAT': 'Effective Access Time [ns]',
-          'p': 'Page fault probability (0 <= p <= 1)',
-          'T_mem': 'Main memory access time (~100 ns)',
-          'T_fault': 'Page fault service latency including disk IO (~8 ms = 8,000,000 ns)',
-        },
-        examTrap: 'Units trap: T_mem is in nanoseconds, but T_fault is usually in milliseconds! Always convert ms to ns (multiply by 10^6).',
-        derivationSummary: r'\text{EAT} = T_{\text{mem}} + p(T_{\text{page\_fault\_handling}} + T_{\text{disk\_read}} + T_{\text{restart}})',
-        shortcuts: ['1 page fault in 1000 can increase access time by 800x!'],
-        phoneticReadout: 'Effective access time E A T equals 1 minus p times memory time plus p times fault time.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'cs-7',
-        title: 'Open Addressing Double Hashing Sequence',
-        subject: 'Computer Science',
-        topic: 'Data Structures & Hashing',
-        latex: r'h(k, i) = \bigl(h_1(k) + i \cdot h_2(k)\bigr) \bmod m',
-        description: 'Probing sequence for open addressing hash tables that eliminates primary and secondary clustering.',
-        variables: {
-          'h(k, i)': 'Probing index slot for key k on i-th attempt (i = 0, 1, ..., m-1)',
-          'h_1(k)': 'Primary hash function (maps key to initial bucket)',
-          'h_2(k)': 'Secondary hash function (step size; must be coprime to table size m)',
-          'm': 'Total hash table capacity',
-        },
-        examTrap: 'h_2(k) must never evaluate to 0! To guarantee full table coverage, h_2(k) and table size m must be relatively prime.',
-        derivationSummary: r'\text{Probing sequence: } h_1(k), \; (h_1(k) + h_2(k))\bmod m, \; (h_1(k) + 2h_2(k))\bmod m, \dots',
-        shortcuts: ['Table size m prime, h_1(k) = k mod m, h_2(k) = 1 + (k mod (m-1))'],
-        phoneticReadout: 'h of k comma i equals h-1 of k plus i times h-2 of k, all mod m.',
-        calculatorType: 'general',
-      ),
-      const FormulaCardItem(
-        id: 'cs-8',
-        title: 'CAP Theorem & Distributed System Trade-Offs',
-        subject: 'Computer Science',
-        topic: 'System Design & Distributed Systems',
-        latex: r'\text{Consistency (C)} + \text{Availability (A)} + \text{Partition Tolerance (P)} \le 2',
-        description: 'States that any distributed data store can simultaneously guarantee at most 2 out of 3 properties under network partitions.',
-        variables: {
-          'Consistency (C)': 'Every read receives the most recent write or an error',
-          'Availability (A)': 'Every non-failing node returns a non-error response without guarantee of latest data',
-          'Partition Tolerance (P)': 'System continues operation despite arbitrary network message drops',
-        },
-        examTrap: 'In distributed systems over real networks, Network Partitions (P) are unavoidable! Therefore choices are CP (e.g. HBase, MongoDB) vs AP (e.g. Cassandra, DynamoDB).',
-        derivationSummary: r'\text{Network Partitions are inevitable } \implies \text{Trade-off is strictly } \mathbf{CP} \text{ vs } \mathbf{AP}',
-        shortcuts: ['PACELC Theorem extends CAP by considering latency under normal execution'],
-        phoneticReadout: 'Consistency, Availability, Partition Tolerance: choose at most two under network partitions.',
-        calculatorType: 'general',
-      ),
-    ];
+  Future<void> _deleteFormulaFromVault(String id) async {
+    await HiveStorage.deleteFormulaItem(id);
+    setState(() {
+      _vaultFormulas.removeWhere((f) => f.id == id);
+      if (_currentCardIndex >= _vaultFormulas.length && _vaultFormulas.isNotEmpty) {
+        _currentCardIndex = _vaultFormulas.length - 1;
+      }
+    });
+    if (mounted) {
+      CustomSnackbar.showInfo(context, 'Formula removed from database.');
+    }
   }
 
   void _showInteractiveFormulaCalculator(FormulaCardItem item) {
     final varControllers = <String, TextEditingController>{};
     for (final varKey in item.variables.keys) {
-      final cleanKey = varKey.replaceAll(RegExp(r'[\$\\]'), '').trim();
+      final cleanKey = varKey.replaceAll(RegExp(r'[$\\]'), '').trim();
       varControllers[cleanKey] = TextEditingController(text: '1.0');
     }
 
@@ -863,6 +460,17 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
           _customAiSheetContent = response.content;
           _isGeneratingAi = false;
         });
+
+        // Save AI synthesized formula card to Hive Database
+        final newFormula = FormulaCardItem(
+          id: 'ai_formula_${DateTime.now().millisecondsSinceEpoch}',
+          title: '$topic Formula Card',
+          subject: 'Mathematics',
+          topic: topic,
+          latex: _extractPrimaryLatex(response.content),
+          description: 'AI Synthesized Equation Breakdown for $topic.',
+        );
+        _saveFormulaToVault(newFormula);
       }
     } catch (e) {
       if (mounted) {
@@ -872,6 +480,112 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
         CustomSnackbar.showError(context, 'Failed to generate formula sheet: $e');
       }
     }
+  }
+
+  static String _extractPrimaryLatex(String content) {
+    if (content.contains(r'$$')) {
+      final parts = content.split(r'$$');
+      if (parts.length > 1 && parts[1].trim().isNotEmpty) {
+        return parts[1].trim();
+      }
+    }
+    if (content.contains(r'$')) {
+      final parts = content.split(r'$');
+      if (parts.length > 1 && parts[1].trim().isNotEmpty) {
+        return parts[1].trim();
+      }
+    }
+    return r'E = mc^2';
+  }
+
+  void _showCreateCustomFormulaDialog() {
+    final titleCtrl = TextEditingController();
+    final topicCtrl = TextEditingController();
+    final latexCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String selectedSub = 'Mathematics';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Create Formula Card', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(labelText: 'Formula Title (e.g. Pythagoras Theorem)'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedSub,
+                  items: ['Mathematics', 'Physics', 'Chemistry', 'Computer Science']
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
+                  onChanged: (val) => setDlgState(() => selectedSub = val ?? 'Mathematics'),
+                  decoration: const InputDecoration(labelText: 'Subject Category'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: topicCtrl,
+                  decoration: const InputDecoration(labelText: 'Sub-Topic (e.g. Geometry)'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: latexCtrl,
+                  decoration: const InputDecoration(labelText: r'LaTeX Formula (e.g. a^2 + b^2 = c^2)'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'Concept Description'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                final title = titleCtrl.text.trim();
+                final latex = latexCtrl.text.trim();
+                if (title.isEmpty || latex.isEmpty) {
+                  CustomSnackbar.showError(context, 'Please enter both Title and LaTeX formula');
+                  return;
+                }
+                final newCard = FormulaCardItem(
+                  id: 'user_formula_${DateTime.now().millisecondsSinceEpoch}',
+                  title: title,
+                  subject: selectedSub,
+                  topic: topicCtrl.text.trim().isEmpty ? 'Custom' : topicCtrl.text.trim(),
+                  latex: latex,
+                  description: descCtrl.text.trim().isEmpty ? 'User-created formula card.' : descCtrl.text.trim(),
+                );
+                _saveFormulaToVault(newCard);
+                Navigator.pop(ctx);
+              },
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Save Formula'),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showAiPromptDialog() {
@@ -1063,6 +777,11 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
           onPressed: () => context.pop(),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
+            tooltip: 'Create Custom Formula Card',
+            onPressed: _showCreateCustomFormulaDialog,
+          ),
           // Self-Test / Flashcard Mode Toggle
           IconButton(
             icon: Icon(
@@ -1100,10 +819,11 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
       bottomNavigationBar: _isCardView && filtered.isNotEmpty
           ? _buildBottomNavigationControls(filtered, isDark)
           : null,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
-          child: Column(
+      body: SizedBox.expand(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
+            child: Column(
             children: [
               // Search & Filter Header
               Padding(
@@ -1153,6 +873,8 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -1273,8 +995,9 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // --- 1. Interactive Card Deck Mode with Swipe ---
   Widget _buildCardDeckView(List<FormulaCardItem> items, bool isDark) {
@@ -1307,87 +1030,72 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
     final canPrev = safeIndex > 0;
     final canNext = safeIndex < items.length - 1;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        border: Border(
-          top: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Previous Button (Piche)
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: canPrev ? () => _goToCard(safeIndex - 1) : null,
-              icon: const Icon(Icons.arrow_back_rounded, size: 16),
-              label: const Text('Prev', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+    return BottomAppBar(
+      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+      elevation: 4,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      height: 62,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Previous Button (Piche)
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
+            onPressed: canPrev ? () => _goToCard(safeIndex - 1) : null,
+            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+            label: const Text('Prev', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
 
-            // Step Indicator: "Formula X of Y"
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Formula ${safeIndex + 1} of ${items.length}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(
-                        items.length > 8 ? 8 : items.length,
-                        (dotIdx) {
-                          final activeDot = (dotIdx == (safeIndex % (items.length > 8 ? 8 : items.length)));
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            width: activeDot ? 10 : 4,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: activeDot ? AppColors.primary : Colors.grey.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          );
-                        },
+          // Step Indicator: "Formula X of Y"
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Formula ${safeIndex + 1} of ${items.length}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(
+                  items.length > 8 ? 8 : items.length,
+                  (dotIdx) {
+                    final activeDot = (dotIdx == (safeIndex % (items.length > 8 ? 8 : items.length)));
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      width: activeDot ? 10 : 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: activeDot ? AppColors.primary : Colors.grey.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
-            ),
+            ],
+          ),
 
-            // Next Button (Aage)
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: canNext ? () => _goToCard(safeIndex + 1) : null,
-              icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-              label: const Text('Next', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+          // Next Button (Aage)
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-          ],
-        ),
+            onPressed: canNext ? () => _goToCard(safeIndex + 1) : null,
+            icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+            label: const Text('Next', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
       ),
     );
   }
@@ -1477,6 +1185,15 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
                   icon: const Icon(Icons.share_outlined, size: 17),
                   tooltip: 'Export Markdown Summary',
                   onPressed: () => _copyFullFormulaMarkdown(item),
+                ),
+                const SizedBox(width: 4),
+                // Delete Formula Card
+                IconButton(
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(5),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 17, color: Colors.redAccent),
+                  tooltip: 'Delete Formula Card from Database',
+                  onPressed: () => _deleteFormulaFromVault(item.id),
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -2074,20 +1791,24 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isBookmarkView ? Icons.bookmark_border_rounded : Icons.search_off_rounded,
+              isBookmarkView ? Icons.bookmark_border_rounded : Icons.menu_book_rounded,
               size: 56,
-              color: isBookmarkView ? Colors.amber : Colors.grey[400],
+              color: isBookmarkView ? Colors.amber : AppColors.primary,
             ),
             const SizedBox(height: 16),
             Text(
-              isBookmarkView ? 'No Bookmarked Formulas Yet' : 'No Formulas Found',
+              isBookmarkView
+                  ? 'No Bookmarked Formulas Yet'
+                  : (_searchController.text.isNotEmpty ? 'No Matching Formulas' : 'Your Formula Vault is Empty'),
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
             ),
             const SizedBox(height: 6),
             Text(
               isBookmarkView
                   ? 'Tap the bookmark icon on any formula card to save it here for fast exam revision.'
-                  : 'No equations match "${_searchController.text}". Generate a dedicated sheet with AI or clear your filter!',
+                  : (_searchController.text.isNotEmpty
+                      ? 'No equations match "${_searchController.text}". Create a custom card or clear search.'
+                      : 'Tap "➕ Create Formula" to add your own equation, or tap "Synthesize With AI" to generate a verified formula sheet.'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Colors.grey[600]),
             ),
@@ -2104,37 +1825,19 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () {
-                    if (isBookmarkView) {
-                      setState(() {
-                        _selectedSubject = 'All';
-                      });
-                    } else {
-                      _showAiPromptDialog();
-                    }
-                  },
-                  icon: Icon(isBookmarkView ? Icons.list_alt : Icons.bolt, size: 18),
-                  label: Text(isBookmarkView ? 'Browse All Formulas' : 'Synthesize With AI', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: _showCreateCustomFormulaDialog,
+                  icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                  label: const Text('➕ Create Formula', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
-                if (!isBookmarkView && _searchController.text.isNotEmpty)
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _searchController.clear();
-                        _selectedSubject = 'All';
-                        _currentCardIndex = 0;
-                      });
-                      if (_isCardView && _pageController.hasClients) {
-                        _pageController.jumpToPage(0);
-                      }
-                    },
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Reset Search & Filters', style: TextStyle(fontWeight: FontWeight.bold)),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
+                  onPressed: _showAiPromptDialog,
+                  icon: const Icon(Icons.bolt, size: 18, color: AppColors.primary),
+                  label: const Text('⚡ Synthesize With AI', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
               ],
             ),
           ],

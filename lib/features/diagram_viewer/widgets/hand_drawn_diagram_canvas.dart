@@ -498,18 +498,30 @@ class HandDrawnDiagramCanvas extends StatelessWidget {
       }
 
       final List<String> queue = List.from(roots);
+      final Set<String> visitedInQueue = Set.from(roots);
       for (final r in roots) {
         nodeLevels[r] = 0;
       }
 
-      while (queue.isNotEmpty) {
+      int safetyCounter = 0;
+      final int maxIterations = max(100, nodes.length * 10);
+
+      while (queue.isNotEmpty && safetyCounter < maxIterations) {
+        safetyCounter++;
         final currentId = queue.removeAt(0);
         final currentLevel = nodeLevels[currentId] ?? 0;
         final children = childrenMap[currentId] ?? [];
         for (final childId in children) {
-          if (!nodeLevels.containsKey(childId) || nodeLevels[childId]! < currentLevel + 1) {
-            nodeLevels[childId] = currentLevel + 1;
-            queue.add(childId);
+          final nextLevel = currentLevel + 1;
+          // Guard against infinite depth in cyclic graphs
+          if (nextLevel >= nodes.length) continue;
+
+          if (!nodeLevels.containsKey(childId) || nodeLevels[childId]! < nextLevel) {
+            nodeLevels[childId] = nextLevel;
+            if (!visitedInQueue.contains(childId)) {
+              visitedInQueue.add(childId);
+              queue.add(childId);
+            }
           }
         }
       }
@@ -663,13 +675,17 @@ class HandDrawnDiagramCanvas extends StatelessWidget {
           child: SizedBox(
             width: layout.totalWidth,
             height: layout.totalHeight,
-            child: CustomPaint(
-              size: Size(layout.totalWidth, layout.totalHeight),
-              painter: _RoughNotebookPainter(
-                graphData: graphData,
-                isDark: isDark,
-                baseFontSize: baseFontSize,
-                layout: layout,
+            child: RepaintBoundary(
+              child: CustomPaint(
+                size: Size(layout.totalWidth, layout.totalHeight),
+                isComplex: true,
+                willChange: false,
+                painter: _RoughNotebookPainter(
+                  graphData: graphData,
+                  isDark: isDark,
+                  baseFontSize: baseFontSize,
+                  layout: layout,
+                ),
               ),
             ),
           ),

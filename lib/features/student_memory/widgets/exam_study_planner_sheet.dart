@@ -41,6 +41,16 @@ class _ExamStudyPlannerSheetState extends State<ExamStudyPlannerSheet> {
   void initState() {
     super.initState();
     _plan = _service.getPlan();
+    _loadBackendPlan();
+  }
+
+  Future<void> _loadBackendPlan() async {
+    final fetched = await _service.fetchPlan();
+    if (mounted) {
+      setState(() {
+        _plan = fetched;
+      });
+    }
   }
 
   @override
@@ -725,12 +735,37 @@ class _ExamStudyPlannerSheetState extends State<ExamStudyPlannerSheet> {
                             ),
                             child: Column(
                               children: [
-                                const Icon(Icons.check_circle_outline, color: Color(0xFF10B981), size: 40),
+                                Icon(
+                                  _plan.schedule.isEmpty ? Icons.auto_awesome_rounded : Icons.check_circle_outline,
+                                  color: _plan.schedule.isEmpty ? const Color(0xFF4F46E5) : const Color(0xFF10B981),
+                                  size: 40,
+                                ),
                                 const SizedBox(height: 10),
                                 Text(
-                                  _activeFilter == 'Pending' ? 'All goals completed! Great work 🎉' : 'No tasks match filter',
+                                  _plan.schedule.isEmpty
+                                      ? 'No study goals set yet!'
+                                      : (_activeFilter == 'Pending' ? 'All goals completed! Great work 🎉' : 'No tasks match filter'),
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                 ),
+                                if (_plan.schedule.isEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Tap "Generate AI Roadmap" or "Add Goal" above to create your personalized active recall roadmap.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF4F46E5),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    icon: const Icon(Icons.auto_awesome, size: 16),
+                                    label: const Text('Generate AI Roadmap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    onPressed: _showAiGeneratorDialog,
+                                  ),
+                                ],
                               ],
                             ),
                           )

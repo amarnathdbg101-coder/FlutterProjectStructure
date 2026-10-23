@@ -51,7 +51,6 @@ dependencies:
   flutter_tts: ^4.2.5
   just_audio: ^0.10.6
   audio_service: ^0.18.19
-  edge_tts: ^0.1.5
 
 dev_dependencies:
   flutter_test:
@@ -79,6 +78,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/data/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

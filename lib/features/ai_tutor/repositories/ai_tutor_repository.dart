@@ -111,6 +111,7 @@ class AiTutorRepository {
       final followUpQuestions = <String>[];
       String? returnedSessionId = effectiveSessionId;
       String? returnedAssistantMessageId;
+      String? returnedUserMessageImageUrl;
       String? returnedSpokenTranscript;
       List<AiBlockModel>? returnedBlocks;
       String? streamError;
@@ -118,31 +119,39 @@ class AiTutorRepository {
 
       void processSseLine(String line) {
         if (!line.startsWith('data:')) return;
-        final decoded = jsonDecode(line.substring(5).trim());
-        if (decoded is! Map) return;
+        final raw = line.substring(5).trim();
+        if (raw.isEmpty || raw == '[DONE]') return;
 
-        switch (decoded['type']) {
-          case 'chunk':
-            final chunk = decoded['text']?.toString() ?? '';
-            if (chunk.isNotEmpty) {
-              content.write(chunk);
-              onChunk(chunk);
-            }
-          case 'done':
-            returnedSessionId = decoded['session_id'] as String? ?? returnedSessionId;
-            returnedAssistantMessageId = decoded['assistant_message_id'] as String?;
-            returnedSpokenTranscript = decoded['spoken_transcript'] as String?;
-            if (decoded['blocks'] is List) {
-              returnedBlocks = (decoded['blocks'] as List)
-                  .whereType<Map<String, dynamic>>()
-                  .map(AiBlockModel.fromJson)
-                  .toList();
-            }
-            if (decoded['follow_up_chips'] is List) {
-              followUpQuestions.addAll((decoded['follow_up_chips'] as List).map((item) => item.toString()));
-            }
-          case 'error':
-            streamError = decoded['message']?.toString() ?? 'AI response stream failed';
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is! Map) return;
+
+          switch (decoded['type']) {
+            case 'chunk':
+              final chunk = decoded['text']?.toString() ?? '';
+              if (chunk.isNotEmpty) {
+                content.write(chunk);
+                onChunk(chunk);
+              }
+            case 'done':
+              returnedSessionId = decoded['session_id'] as String? ?? returnedSessionId;
+              returnedAssistantMessageId = decoded['assistant_message_id'] as String?;
+              returnedUserMessageImageUrl = decoded['user_message_image_url'] as String?;
+              returnedSpokenTranscript = decoded['spoken_transcript'] as String?;
+              if (decoded['blocks'] is List) {
+                returnedBlocks = (decoded['blocks'] as List)
+                    .whereType<Map<String, dynamic>>()
+                    .map(AiBlockModel.fromJson)
+                    .toList();
+              }
+              if (decoded['follow_up_chips'] is List) {
+                followUpQuestions.addAll((decoded['follow_up_chips'] as List).map((item) => item.toString()));
+              }
+            case 'error':
+              streamError = decoded['message']?.toString() ?? 'AI response stream failed';
+          }
+        } catch (_) {
+          // Ignore invalid or non-JSON payloads safely
         }
       }
 
@@ -159,12 +168,13 @@ class AiTutorRepository {
       }
 
       ChatMessageModel buildStreamMessage() {
-        if (streamError != null) throw Exception(streamError);
+        if (streamError != null && content.isEmpty) throw Exception(streamError);
         if (content.isEmpty) throw Exception('AI response stream ended without an answer');
         return ChatMessageModel(
           id: returnedAssistantMessageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
           role: 'assistant',
           content: content.toString(),
+          imageUrl: returnedUserMessageImageUrl,
           followUpQuestions: followUpQuestions,
           createdAt: DateTime.now(),
           sessionId: returnedSessionId,
@@ -191,7 +201,9 @@ class AiTutorRepository {
         if (responseStatus != 404 && responseStatus != 405) {
           if (pendingSseText.isNotEmpty) processSseLine(pendingSseText);
           if (responseStatus < 200 || responseStatus >= 300) {
-            throw Exception('AI stream request failed with status $responseStatus');
+            if (content.isEmpty) {
+              throw Exception('AI stream request failed with status $responseStatus');
+            }
           }
           return buildStreamMessage();
         }
@@ -209,12 +221,19 @@ class AiTutorRepository {
           );
           final stream = streamedResponse.data?.stream;
           if (stream == null) throw Exception('AI stream returned no response body');
-          await for (final line in stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
-            processSseLine(line);
+          try {
+            await for (final line in stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
+              processSseLine(line);
+            }
+          } catch (_) {
+            if (content.isEmpty) rethrow;
           }
           if (pendingSseText.isNotEmpty) processSseLine(pendingSseText);
           return buildStreamMessage();
         } on DioException catch (error) {
+          if (content.isNotEmpty) {
+            return buildStreamMessage();
+          }
           if (error.response?.statusCode != 404 && error.response?.statusCode != 405) rethrow;
         }
       }
@@ -253,6 +272,7 @@ class AiTutorRepository {
         id: data['assistant_message_id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
         role: 'assistant',
         content: solution,
+        imageUrl: data['user_message_image_url'] as String? ?? data['image_url'] as String?,
         followUpQuestions: chips,
         createdAt: DateTime.now(),
         sessionId: returnedSessionId,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../features/voice_doubt/services/ai_tts_service.dart';
+import '../../features/voice_doubt/widgets/live_ai_talk_overlay_sheet.dart';
 import '../widgets/custom_snackbar.dart';
 
 /// Reusable Bottom Action Bar for AI Assistant responses
@@ -96,6 +97,45 @@ class AiResponseActionBar extends StatelessWidget {
                   ),
                 );
               },
+            ),
+            Container(
+              height: 12,
+              width: 1,
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+            // 🎙️ Gemini Live 1-on-1 Interactive Talk Button
+            InkWell(
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                LiveAiTalkOverlaySheet.show(
+                  context,
+                  initialDoubt: solutionContent,
+                );
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.graphic_eq,
+                      size: 14,
+                      color: Color(0xFFEC4899),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Live Talk',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFEC4899),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             Container(
               height: 12,

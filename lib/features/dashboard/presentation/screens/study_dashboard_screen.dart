@@ -10,10 +10,10 @@ import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/custom_dialog.dart';
 import '../../../auth/controllers/auth_controller.dart';
-import '../../../student_memory/models/student_memory.dart';
 import '../../../student_memory/services/student_memory_service.dart';
 import '../../../student_memory/widgets/flashcard_deck_sheet.dart';
 import '../../../student_memory/widgets/exam_study_planner_sheet.dart';
+import '../../../student_memory/widgets/daily_review_queue_card.dart';
 import '../../controllers/dashboard_controller.dart';
 import '../widgets/omni_search_bar.dart';
 import '../widgets/study_engine_card.dart';
@@ -86,7 +86,7 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
     } else if (suggestion.contains('Carnot')) {
       context.push(AppRoutes.formulaStudio);
     } else {
-      final cleanText = suggestion.replaceAll(RegExp(r'^[^\w]+'), '').trim();
+      final cleanText = suggestion.replaceAll(RegExp(r'^\W+'), '').trim();
       context.push(AppRoutes.aiChat, extra: {
         'initialQuery': 'Explain $cleanText in detail with practical real-world examples and step-by-step breakdown.'
       });
@@ -548,6 +548,11 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                         ],
                       ),
                     ),
+                  ),
+
+                  // 3. Daily Spaced Repetition Active Recall Queue
+                  const SliverToBoxAdapter(
+                    child: DailyReviewQueueCard(),
                   ),
 
 

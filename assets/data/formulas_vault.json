@@ -1,0 +1,110 @@
+[
+  {
+    "id": "math-quadratic",
+    "subject": "Mathematics",
+    "topic": "Algebra & Polynomials",
+    "title": "Quadratic Formula & Discriminant Analysis",
+    "description": "Fundamental algebraic formula giving roots of any second-degree polynomial equation $ax^2 + bx + c = 0$.",
+    "latex": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+    "variables": {
+      "a": "Coefficient of $x^2$ ($a \\neq 0$)",
+      "b": "Linear coefficient of $x$",
+      "c": "Constant term",
+      "D": "Discriminant $b^2 - 4ac$ (Determines real vs complex roots)"
+    },
+    "examTrap": "Always ensure $a \\neq 0$. If $D < 0$, roots are complex conjugates: $x = \\frac{-b \\pm i\\sqrt{|D|}}{2a}$.",
+    "derivationSummary": "ax^2 + bx + c = 0 \\implies x^2 + \\frac{b}{a}x = -\\frac{c}{a} \\implies \\left(x + \\frac{b}{2a}\\right)^2 = \\frac{b^2 - 4ac}{4a^2}",
+    "shortcuts": [
+      "If $a + b + c = 0$, roots are $x_1 = 1$ and $x_2 = c/a$",
+      "Sum of roots $x_1 + x_2 = -b/a$, Product of roots $x_1 x_2 = c/a$"
+    ],
+    "phoneticReadout": "x equals minus b plus or minus square root of b squared minus 4 a c, all over 2 a",
+    "calculatorType": "quadratic"
+  },
+  {
+    "id": "math-euler",
+    "subject": "Mathematics",
+    "topic": "Complex Analysis & Euler Identity",
+    "title": "Euler's Formula & Identity",
+    "description": "Establishes the fundamental relationship between trigonometric functions and complex exponential functions.",
+    "latex": "e^{i\\theta} = \\cos\\theta + i\\sin\\theta \\implies e^{i\\pi} + 1 = 0",
+    "variables": {
+      "e": "Euler's number (\\approx 2.71828)",
+      "i": "Imaginary unit (i^2 = -1)",
+      "\\theta": "Angle in radians",
+      "\\pi": "Pi ratio (\\approx 3.14159)"
+    },
+    "examTrap": "Angle $\\theta$ MUST be in radians, never degrees! When $\\theta = \\pi$, $e^{i\\pi} = -1$.",
+    "derivationSummary": "e^x = 1 + x + \\frac{x^2}{2!} + ... \\implies e^{i\\theta} = \\left(1 - \\frac{\\theta^2}{2!} + ...\\right) + i\\left(\\theta - \\frac{\\theta^3}{3!} + ...\\right)",
+    "shortcuts": [
+      "De Moivre's Theorem: $(e^{i\\theta})^n = e^{in\\theta} = \\cos(n\\theta) + i\\sin(n\\theta)$"
+    ],
+    "phoneticReadout": "e to the i theta equals cosine theta plus i sine theta",
+    "calculatorType": "complex"
+  },
+  {
+    "id": "cs-master-theorem",
+    "subject": "Computer Science",
+    "topic": "Algorithms & Recurrence Relations",
+    "title": "Master Theorem for Divide & Conquer Recurrences",
+    "description": "Provides asymptotic time complexity bounds ($O, \\Theta, \\Omega$) for divide-and-conquer algorithm recurrences.",
+    "latex": "T(n) = a T\\left(\\frac{n}{b}\\right) + f(n), \\quad a \\ge 1, b > 1",
+    "variables": {
+      "T(n)": "Runtime on input size $n$",
+      "a": "Number of subproblems in recursive step",
+      "b": "Factor by which input size is divided",
+      "f(n)": "Cost of work done outside recursive calls"
+    },
+    "examTrap": "Master Theorem CANNOT be applied if $a$ is not constant, or if $f(n)$ is non-polynomial (e.g. $2^n$).",
+    "derivationSummary": "Compare f(n) against n^{\\log_b a}: Case 1: T(n) = \\Theta(n^{\\log_b a}), Case 2: T(n) = \\Theta(n^{\\log_b a} \\log n), Case 3: T(n) = \\Theta(f(n))",
+    "shortcuts": [
+      "Merge Sort: $T(n) = 2T(n/2) + O(n) \\implies O(n \\log n)$",
+      "Binary Search: $T(n) = T(n/2) + O(1) \\implies O(\\log n)$"
+    ],
+    "phoneticReadout": "T of n equals a times T of n over b plus f of n",
+    "calculatorType": "general"
+  },
+  {
+    "id": "cs-amat",
+    "subject": "Computer Science",
+    "topic": "Computer Architecture & Memory",
+    "title": "AMAT (Average Memory Access Time)",
+    "description": "Measures total effective memory latency across multi-level cache hierarchies (L1, L2, Main Memory).",
+    "latex": "\\text{AMAT} = \\text{Hit Time}_{L1} + \\text{Miss Rate}_{L1} \\times \\text{Miss Penalty}_{L1}",
+    "variables": {
+      "AMAT": "Average Memory Access Time in nanoseconds ($ns$)",
+      "Hit Time": "Latency to access L1 cache",
+      "Miss Rate": "Fraction of memory accesses that miss L1",
+      "Miss Penalty": "Latency to fetch block from L2 or Main Memory"
+    },
+    "examTrap": "Miss Penalty for L1 is the FULL AMAT of L2, NOT just Main Memory latency alone!",
+    "derivationSummary": "\\text{AMAT} = h_{L1} t_{L1} + (1 - h_{L1})(t_{L2} + (1 - h_{L2}) t_{\\text{mem}})",
+    "shortcuts": [
+      "In 2-Level Cache: $\\text{AMAT} = t_{L1} + m_{L1}(t_{L2} + m_{L2} t_{\\text{main}})$"
+    ],
+    "phoneticReadout": "Average Memory Access Time equals L1 hit time plus L1 miss rate times L1 miss penalty",
+    "calculatorType": "general"
+  },
+  {
+    "id": "physics-newton-2",
+    "subject": "Physics",
+    "topic": "Classical Mechanics & Dynamics",
+    "title": "Newton's Second Law of Motion",
+    "description": "Fundamental law governing net external force, momentum rate of change, and acceleration of a body.",
+    "latex": "\\vec{F}_{\\text{net}} = \\frac{d\\vec{p}}{dt} = m \\cdot \\vec{a}",
+    "variables": {
+      "\\vec{F}": "Net external force in Newtons ($N = \\text{kg}\\cdot\\text{m/s}^2$)",
+      "m": "Inertial mass of body ($kg$)",
+      "\\vec{a}": "Acceleration vector ($\\text{m/s}^2$)",
+      "\\vec{p}": "Linear momentum ($m\\vec{v}$)"
+    },
+    "examTrap": "Formula holds ONLY when mass $m$ is constant! For variable-mass systems (e.g. rockets), use $F = \\frac{dp}{dt} = m\\frac{dv}{dt} + v\\frac{dm}{dt}$.",
+    "derivationSummary": "\\vec{p} = m\\vec{v} \\implies \\vec{F} = \\frac{d(m\\vec{v})}{dt} = m\\frac{d\\vec{v}}{dt} + \\vec{v}\\frac{dm}{dt}. \\text{ When } dm/dt = 0 \\implies \\vec{F} = m\\vec{a}",
+    "shortcuts": [
+      "Inclined plane: Parallel force $F_{\\parallel} = mg \\sin\\theta$, Normal force $N = mg \\cos\\theta$",
+      "Work Done $W = \\int \\vec{F} \\cdot d\\vec{r} = \\Delta K$"
+    ],
+    "phoneticReadout": "F vector net equals mass times acceleration vector",
+    "calculatorType": "general"
+  }
+]

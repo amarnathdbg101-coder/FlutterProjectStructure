@@ -73,10 +73,10 @@ class LatexSanitizer {
   static final RegExp _mathbbRx = RegExp(r'\\mathbb\{([A-Z])\}');
   static final RegExp _wordCommandRx = RegExp(r'\\([a-zA-Z]+)');
   static final RegExp _supBraceRx = RegExp(r'\^\{([^{}]+)\}');
-  static final RegExp _supCharRx = RegExp(r'\^([0-9\+\-a-zA-Z])');
+  static final RegExp _supCharRx = RegExp(r'\^([0-9+\-a-zA-Z])');
   static final RegExp _subBraceRx = RegExp(r'_\{([^{}]+)\}');
   static final RegExp _subCharRx = RegExp(r'_([0-9])');
-  static final RegExp _escapedPunctuationRx = RegExp(r'\\([%&_\$#{}\\])');
+  static final RegExp _escapedPunctuationRx = RegExp(r'\\([%&_$#{}\\])');
   static final RegExp _spacesRx = RegExp(r'\s{2,}');
 
   /// Universal Sanitizer: cleans ANY text (prose, bullets, mind map cards, flashcards)

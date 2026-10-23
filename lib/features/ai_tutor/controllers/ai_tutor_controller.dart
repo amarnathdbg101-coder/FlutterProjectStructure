@@ -528,10 +528,6 @@ class AiTutorController extends ChangeNotifier {
 
     final sessionId = _currentSession?.id ?? target.sessionId;
     final persistedMessageId = answerIndex == -1 ? target.id : _messages[answerIndex].id;
-    if (sessionId != null && sessionId.isNotEmpty) {
-      final deleted = await _repository.deleteChatTurn(sessionId, persistedMessageId);
-      if (!deleted) return false;
-    }
 
     final startIndex = questionIndex == -1 ? targetIndex : questionIndex;
     final endIndex = answerIndex == -1 ? targetIndex : answerIndex;
@@ -547,7 +543,11 @@ class AiTutorController extends ChangeNotifier {
     }
 
     notifyListeners();
-    if (sessionId != null && sessionId.isNotEmpty) await loadSessions();
+
+    if (sessionId != null && sessionId.isNotEmpty) {
+      _repository.deleteChatTurn(sessionId, persistedMessageId).catchError((_) => false);
+    }
+
     return true;
   }
 
@@ -705,17 +705,27 @@ class AiTutorController extends ChangeNotifier {
       );
 
       _flushStreamBuffer();
+
+      // If the backend uploaded the user's doubt image to Cloudflare R2, upgrade local user message with permanent R2 URL
+      if (botResponse.imageUrl != null && botResponse.imageUrl!.isNotEmpty) {
+        final uIdx = _messages.indexWhere((m) => m.id == userMessageId);
+        if (uIdx != -1) {
+          _messages[uIdx] = _messages[uIdx].copyWith(imageUrl: botResponse.imageUrl);
+        }
+      }
+
+      final assistantMsg = botResponse.copyWith(imageUrl: null);
       if (_streamingAssistantMessageId != null) {
         final streamIdx = _messages.indexWhere((m) => m.id == _streamingAssistantMessageId);
         if (streamIdx != -1) {
-          _messages[streamIdx] = botResponse;
+          _messages[streamIdx] = assistantMsg;
         } else {
-          _messages.add(botResponse);
+          _messages.add(assistantMsg);
         }
         _streamingAssistantMessageId = null;
       } else {
         if (_messages.any((message) => message.id == userMessageId)) {
-          _messages.add(botResponse);
+          _messages.add(assistantMsg);
         }
       }
 
@@ -754,31 +764,47 @@ class AiTutorController extends ChangeNotifier {
       _streamThrottleTimer?.cancel();
       _streamThrottleTimer = null;
       _streamChunkBuffer.clear();
-      if (_streamingAssistantMessageId != null) {
-        _messages.removeWhere((m) => m.id == _streamingAssistantMessageId);
-        _streamingAssistantMessageId = null;
-      }
 
-      if (existingUserMessageId != null && previousTurn.isNotEmpty) {
-        final currentTurnIndex = _messages.indexWhere((message) => message.id == existingUserMessageId);
-        if (currentTurnIndex != -1) {
-          _messages.removeRange(currentTurnIndex, _messages.length);
-          _messages.addAll(previousTurn);
-          notifyListeners();
+      String? partialContent;
+      if (_streamingAssistantMessageId != null) {
+        final idx = _messages.indexWhere((m) => m.id == _streamingAssistantMessageId);
+        if (idx != -1) {
+          partialContent = _messages[idx].content.trim();
         }
       }
-      if (!requestCancelToken.isCancelled) {
-        final errorMessage = ApiClient.handleError(e);
-        _errorMessage = errorMessage;
-        _messages.add(
-          ChatMessageModel(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            role: 'assistant',
-            content: errorMessage,
-            followUpQuestions: question.trim().isNotEmpty ? [question.trim()] : const [],
-            createdAt: DateTime.now(),
-          ),
-        );
+
+      if (partialContent != null && partialContent.isNotEmpty) {
+        // AI response was already streamed and received by the student. Preserve it!
+        _streamingAssistantMessageId = null;
+      } else {
+        // Only if no content was received at all, clean up streaming placeholder
+        if (_streamingAssistantMessageId != null) {
+          _messages.removeWhere((m) => m.id == _streamingAssistantMessageId);
+          _streamingAssistantMessageId = null;
+        }
+
+        if (existingUserMessageId != null && previousTurn.isNotEmpty) {
+          final currentTurnIndex = _messages.indexWhere((message) => message.id == existingUserMessageId);
+          if (currentTurnIndex != -1) {
+            _messages.removeRange(currentTurnIndex, _messages.length);
+            _messages.addAll(previousTurn);
+            notifyListeners();
+          }
+        }
+
+        if (!requestCancelToken.isCancelled) {
+          final errorMessage = ApiClient.handleError(e);
+          _errorMessage = errorMessage;
+          _messages.add(
+            ChatMessageModel(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              role: 'assistant',
+              content: errorMessage,
+              followUpQuestions: question.trim().isNotEmpty ? [question.trim()] : const [],
+              createdAt: DateTime.now(),
+            ),
+          );
+        }
       }
     } finally {
       _streamThrottleTimer?.cancel();

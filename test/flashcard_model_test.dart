@@ -26,6 +26,39 @@ void main() {
       expect(revived.isReviewed, true);
     });
 
+    test('SM-2 Spaced Repetition rating calculations work accurately', () {
+      final card = FlashcardModel(
+        id: 'sm2-card-1',
+        topic: 'Physics',
+        questionFront: 'What is Snell\'s Law?',
+        answerBack: 'n1 sin(i) = n2 sin(r)',
+        createdAt: DateTime.now(),
+        intervalDays: 1,
+        easeFactor: 2.5,
+        repetitionCount: 0,
+      );
+
+      expect(card.isDueForReview, true);
+
+      // Rating Good: 1st time
+      final reviewedGood = card.calculateNextReview(ReviewRating.good);
+      expect(reviewedGood.repetitionCount, 1);
+      expect(reviewedGood.intervalDays, 1);
+      expect(reviewedGood.nextReviewAt, isNotNull);
+
+      // Rating Easy: 2nd time
+      final reviewedEasy = reviewedGood.calculateNextReview(ReviewRating.easy);
+      expect(reviewedEasy.repetitionCount, 2);
+      expect(reviewedEasy.intervalDays, 7);
+      expect(reviewedEasy.isMastered, true);
+
+      // Rating Again: Resets repetition count & interval
+      final reviewedAgain = reviewedEasy.calculateNextReview(ReviewRating.again);
+      expect(reviewedAgain.repetitionCount, 0);
+      expect(reviewedAgain.intervalDays, 1);
+      expect(reviewedAgain.isMastered, false);
+    });
+
     test('FlashcardDeckModel computes mastery percentage accurately', () {
       final cards = [
         FlashcardModel(

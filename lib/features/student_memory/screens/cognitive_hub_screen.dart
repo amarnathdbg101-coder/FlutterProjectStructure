@@ -6,6 +6,7 @@ import '../../../core/routes/app_router.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/reuse/reuse.dart';
 import '../controllers/cognitive_profile_controller.dart';
+import '../widgets/cognitive_mastery_heatmap_card.dart';
 
 /// Full-Screen AI Cognitive Brain & Mastery Hub
 /// Live Readiness Gauge, Topic Mastery Grid, 1-Click AI Diagnostic, and Action Drills
@@ -114,6 +115,10 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
 
                     // 3. Current Target Exam & Rigor Card
                     _buildExamTargetCard(controller, isDark),
+                    const SizedBox(height: 16),
+
+                    // 3.5. Cognitive Mastery Heatmap
+                    CognitiveMasteryHeatmapCard(profile: controller.profile),
                     const SizedBox(height: 16),
 
                     // 4. Topic Mastery Matrix with 1-Click Action Drills

@@ -30,7 +30,7 @@ class StudyPlanTaskModel {
 
   factory StudyPlanTaskModel.fromJson(Map<String, dynamic> json) => StudyPlanTaskModel(
     id: json['id']?.toString() ?? 'task-${DateTime.now().microsecondsSinceEpoch}',
-    dayNumber: (json['day_number'] as num?)?.toInt() ?? 1,
+    dayNumber: int.tryParse(json['day_number']?.toString() ?? '') ?? (json['day_number'] as num?)?.toInt() ?? 1,
     title: json['title']?.toString() ?? 'Study Task',
     focusArea: json['focus_area']?.toString() ?? 'Core Concept',
     priority: json['priority']?.toString() ?? 'medium',
@@ -41,6 +41,7 @@ class StudyPlanTaskModel {
 
 /// Comprehensive model for an AI Exam Study Plan & Spaced Repetition Roadmap
 class ExamStudyPlanModel {
+  final String? id;
   final String examName;
   final DateTime examDate;
   final double dailyHoursGoal;
@@ -50,6 +51,7 @@ class ExamStudyPlanModel {
   final int totalStudyMinutes;
 
   ExamStudyPlanModel({
+    this.id,
     required this.examName,
     required this.examDate,
     this.dailyHoursGoal = 4.0,
@@ -70,6 +72,7 @@ class ExamStudyPlanModel {
   double get progressPercentage => schedule.isEmpty ? 0 : (completedTaskCount / schedule.length);
 
   ExamStudyPlanModel copyWith({
+    String? id,
     String? examName,
     DateTime? examDate,
     double? dailyHoursGoal,
@@ -79,6 +82,7 @@ class ExamStudyPlanModel {
     int? totalStudyMinutes,
   }) {
     return ExamStudyPlanModel(
+      id: id ?? this.id,
       examName: examName ?? this.examName,
       examDate: examDate ?? this.examDate,
       dailyHoursGoal: dailyHoursGoal ?? this.dailyHoursGoal,
@@ -90,6 +94,7 @@ class ExamStudyPlanModel {
   }
 
   Map<String, dynamic> toJson() => {
+    if (id != null) 'id': id,
     'exam_name': examName,
     'exam_date': examDate.toIso8601String(),
     'daily_hours_goal': dailyHoursGoal,
@@ -101,6 +106,7 @@ class ExamStudyPlanModel {
 
   factory ExamStudyPlanModel.fromJson(Map<String, dynamic> json) {
     return ExamStudyPlanModel(
+      id: json['id']?.toString() ?? json['_id']?.toString(),
       examName: json['exam_name']?.toString() ?? 'Target Exam',
       examDate: json['exam_date'] != null
           ? DateTime.tryParse(json['exam_date']) ?? DateTime.now().add(const Duration(days: 60))
@@ -113,6 +119,20 @@ class ExamStudyPlanModel {
               .toList() ??
           [],
       totalStudyMinutes: (json['total_study_minutes'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  factory ExamStudyPlanModel.fromAIRoadmap(AIRoadmapModel roadmap) {
+    final targetDays = roadmap.targetDays > 0 ? roadmap.targetDays : 30;
+    final examDate = roadmap.createdAt.add(Duration(days: targetDays));
+    return ExamStudyPlanModel(
+      id: roadmap.id,
+      examName: roadmap.examName,
+      examDate: examDate,
+      dailyHoursGoal: 4.0,
+      overview: roadmap.overview,
+      syllabusTopics: roadmap.syllabusTopics,
+      schedule: roadmap.schedule,
     );
   }
 }
@@ -148,6 +168,10 @@ class AIRoadmapModel {
 
   int get completedCount => schedule.where((t) => t.isCompleted).length;
   double get progress => schedule.isEmpty ? 0.0 : completedCount / schedule.length;
+
+  ExamStudyPlanModel toExamStudyPlan() {
+    return ExamStudyPlanModel.fromAIRoadmap(this);
+  }
 
   factory AIRoadmapModel.fromJson(Map<String, dynamic> json) {
     return AIRoadmapModel(
