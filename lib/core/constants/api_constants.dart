@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiConstants {
   static const bool isProduction = true;
-  static const String productionUrl = 'https://studysilobackend.onrender.com';
+  static const String productionUrl = 'https://sxa5n.aiccloud.online';
 
   static String get baseUrl {
     if (isProduction) {

@@ -16,15 +16,17 @@ class AiAudioCacheService {
   static final Map<String, List<SpokenChunk>> _l1ChunkCache = {};
   static final Map<String, String> _l1AudioPathCache = {};
 
-  /// Computes a fast, 64-bit deterministic hash for text identification
+  /// Computes a fast, deterministic hash for text identification (Web & Native compatible)
   static String computeHash(String text) {
     if (text.isEmpty) return 'empty';
-    var hash = 0xcbf29ce484222325;
+    // Dual 32-bit FNV hash (safe for JavaScript 53-bit integers & 64-bit Dart VM)
+    var h1 = 0x811c9dc5;
+    var h2 = 0x9e3779b9;
     for (final unit in utf8.encode(text)) {
-      hash ^= unit;
-      hash = (hash * 0x100000001b3) & 0x7FFFFFFFFFFFFFFF;
+      h1 = ((h1 ^ unit) * 0x01000193) & 0xFFFFFFFF;
+      h2 = ((h2 ^ unit) * 0x01000193 + 1) & 0xFFFFFFFF;
     }
-    return hash.toRadixString(16);
+    return h1.toRadixString(16).padLeft(8, '0') + h2.toRadixString(16).padLeft(8, '0');
   }
 
   /// Retrieves pre-computed spoken chunks from L1 Memory or L2 Disk cache
