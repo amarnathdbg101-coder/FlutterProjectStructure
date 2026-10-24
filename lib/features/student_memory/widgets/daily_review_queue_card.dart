@@ -102,7 +102,7 @@ class _DailyReviewQueueCardState extends State<DailyReviewQueueCard> {
                           Icon(Icons.bolt, color: Colors.amber, size: 14),
                           SizedBox(width: 4),
                           Text(
-                            'SM-2 SPACCED REPETITION',
+                            'SM-2 SPACED REPETITION',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 10.5,

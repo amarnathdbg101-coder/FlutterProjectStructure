@@ -70,21 +70,38 @@ class _FlashcardDeckSheetState extends State<FlashcardDeckSheet> {
       }
     }
 
-    final topic = widget.initialTopic ?? 'Operating Systems Deadlocks';
-    final deck = await _flashcardService.generateDeck(
-      topic: topic,
-      content: widget.initialContent,
-      cardCount: 5,
-      difficulty: 'medium',
-      saveDeck: true,
-    );
+    if (widget.initialTopic != null && widget.initialTopic!.trim().isNotEmpty) {
+      final topic = widget.initialTopic!.trim();
+      final deck = await _flashcardService.generateDeck(
+        topic: topic,
+        content: widget.initialContent,
+        cardCount: 5,
+        difficulty: 'medium',
+        saveDeck: true,
+      );
 
+      if (mounted) {
+        setState(() {
+          _currentDeck = deck;
+          _isLoading = false;
+        });
+        _loadHistory();
+      }
+      return;
+    }
+
+    // When opening from Dashboard without specific topic, load existing user decks
+    final history = await _flashcardService.listDecks();
     if (mounted) {
       setState(() {
-        _currentDeck = deck;
+        _historyDecks = history;
+        if (history.isNotEmpty) {
+          _currentDeck = history.first;
+        } else {
+          _showHistoryView = true;
+        }
         _isLoading = false;
       });
-      _loadHistory();
     }
   }
 
