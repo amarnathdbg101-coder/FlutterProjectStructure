@@ -59,53 +59,10 @@ class QuizRepository {
         final data = Map<String, dynamic>.from(response.data['data'] as Map);
         return QuizModel.fromJson(data);
       }
-    } catch (_) {}
-
-    return _generateOfflineFallbackQuiz(
-      topic: topic,
-      difficulty: difficulty,
-      questionCount: questionCount,
-    );
-  }
-
-  QuizModel _generateOfflineFallbackQuiz({
-    required String topic,
-    required String difficulty,
-    required int questionCount,
-  }) {
-    final now = DateTime.now();
-    final quizId = 'quiz_${now.millisecondsSinceEpoch}';
-
-    final questions = List.generate(questionCount, (i) {
-      final qNum = i + 1;
-      return QuizQuestionModel(
-        id: 'q_${quizId}_$i',
-        quizId: quizId,
-        questionText: 'Question $qNum: What is the primary governing principle of **$topic**?',
-        options: [
-          'A) Conservation of energy-momentum: \\oint \\mathbf{F} \\cdot d\\mathbf{r} = 0',
-          'B) Arbitrary dissipative transition without equilibrium',
-          'C) Static zero-gradient potential invariant to flux',
-          'D) Non-linear stochastic divergence with group delay',
-        ],
-        correctOptionIndex: 0,
-        explanation: 'In $topic, foundational theorems require energy conservation and state equilibrium.',
-        trapWarning: 'Beware of applying conservative formulas to dissipative frictional systems.',
-        difficulty: difficulty,
-        topic: topic,
-      );
-    });
-
-    return QuizModel(
-      id: quizId,
-      userId: 'offline-user',
-      title: 'Adaptive Quiz: $topic',
-      topic: topic,
-      difficulty: difficulty,
-      totalQuestions: questionCount,
-      createdAt: now,
-      questions: questions,
-    );
+      throw Exception('Server returned empty quiz response');
+    } catch (e) {
+      throw Exception('Failed to generate quiz: ${e.toString().replaceAll('Exception:', '').trim()}');
+    }
   }
 
   Future<QuizSubmissionResponseModel> submitQuiz({
@@ -128,52 +85,10 @@ class QuizRepository {
         final data = Map<String, dynamic>.from(response.data['data'] as Map);
         return QuizSubmissionResponseModel.fromJson(data);
       }
-    } catch (_) {}
-
-    return _generateOfflineSubmissionResult(quizId: quizId, answers: answers);
-  }
-
-  QuizSubmissionResponseModel _generateOfflineSubmissionResult({
-    required String quizId,
-    required List<Map<String, dynamic>> answers,
-  }) {
-    int score = 0;
-    final feedback = <QuestionFeedbackModel>[];
-
-    for (int i = 0; i < answers.length; i++) {
-      final ans = answers[i];
-      final selected = (ans['selected_option'] as int?) ?? -1;
-      final isCorrect = selected == 0;
-      if (isCorrect) score++;
-
-      feedback.add(
-        QuestionFeedbackModel(
-          questionId: (ans['question_id'] as String?) ?? 'q_$i',
-          questionText: 'Question ${i + 1} Assessment',
-          selectedOption: selected,
-          correctOptionIndex: 0,
-          isCorrect: isCorrect,
-          explanation: 'Foundational principles require conservation laws and dimensional unit consistency.',
-          trapWarning: 'Double check SI units, signs, and boundary values.',
-        ),
-      );
+      throw Exception('Server returned empty submission response');
+    } catch (e) {
+      throw Exception('Failed to submit quiz results: ${e.toString().replaceAll('Exception:', '').trim()}');
     }
-
-    final total = answers.isNotEmpty ? answers.length : 1;
-    final percentage = (score / total) * 100.0;
-
-    return QuizSubmissionResponseModel(
-      attemptId: 'attempt_${DateTime.now().millisecondsSinceEpoch}',
-      quizId: quizId,
-      score: score,
-      totalScore: total,
-      percentage: percentage,
-      feedback: feedback,
-      weakAreasIdentified: percentage < 70 ? ['Conceptual Conventions'] : [],
-      studyStreakDays: 1,
-      totalQuizzesTaken: 1,
-      averageQuizScore: percentage,
-    );
   }
 
   Future<CognitiveProfileModel> getCognitiveProfile() async {

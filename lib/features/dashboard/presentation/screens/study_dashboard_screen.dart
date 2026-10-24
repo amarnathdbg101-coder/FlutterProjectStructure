@@ -10,6 +10,7 @@ import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/custom_dialog.dart';
 import '../../../auth/controllers/auth_controller.dart';
 import '../../../student_memory/services/student_memory_service.dart';
+import '../../../student_memory/services/smart_ai_context_helper.dart';
 import '../../../student_memory/widgets/flashcard_deck_sheet.dart';
 import '../../../student_memory/widgets/exam_study_planner_sheet.dart';
 import '../../../student_memory/widgets/daily_review_queue_card.dart';
@@ -582,23 +583,29 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          OmniSearchBar(
-                            controller: _searchController,
-                            isDark: isDark,
-                            suggestions: const [
-                              '🎯 Adaptive Quiz',
-                              '🗺️ Concept Mind Map',
-                              '⚡ Carnot Cycle',
-                              '📐 Bayes Theorem',
-                              '🧪 Reaction Mechanisms',
-                            ],
-                            onChanged: (val) {
-                              ref.read(searchQueryProvider.notifier).setQuery(val);
-                            },
-                            onSubmitted: _submitSearch,
-                            onSuggestionTap: _handleSuggestionTap,
-                            onVoiceTap: () {
-                              context.push(AppRoutes.aiChat);
+                          Builder(
+                            builder: (ctx) {
+                              final profile = StudentMemoryService.getCachedProfileSync();
+                              final dynamicTopics = SmartAiContextHelper.getSuggestedTopics(profile);
+                              final dynamicSuggestions = [
+                                '🎯 Adaptive Quiz',
+                                '🗺️ Concept Mind Map',
+                                ...dynamicTopics.take(3).map((t) => '⚡ $t'),
+                              ];
+
+                              return OmniSearchBar(
+                                controller: _searchController,
+                                isDark: isDark,
+                                suggestions: dynamicSuggestions,
+                                onChanged: (val) {
+                                  ref.read(searchQueryProvider.notifier).setQuery(val);
+                                },
+                                onSubmitted: _submitSearch,
+                                onSuggestionTap: _handleSuggestionTap,
+                                onVoiceTap: () {
+                                  context.push(AppRoutes.aiChat);
+                                },
+                              );
                             },
                           ),
                         ],

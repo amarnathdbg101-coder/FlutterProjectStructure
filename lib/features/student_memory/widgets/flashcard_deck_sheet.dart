@@ -72,22 +72,29 @@ class _FlashcardDeckSheetState extends State<FlashcardDeckSheet> {
 
     if (widget.initialTopic != null && widget.initialTopic!.trim().isNotEmpty) {
       final topic = widget.initialTopic!.trim();
-      final deck = await _flashcardService.generateDeck(
-        topic: topic,
-        content: widget.initialContent,
-        cardCount: 5,
-        difficulty: 'medium',
-        saveDeck: true,
-      );
+      try {
+        final deck = await _flashcardService.generateDeck(
+          topic: topic,
+          content: widget.initialContent,
+          cardCount: 5,
+          difficulty: 'medium',
+          saveDeck: true,
+        );
 
-      if (mounted) {
-        setState(() {
-          _currentDeck = deck;
-          _isLoading = false;
-        });
-        _loadHistory();
+        if (mounted) {
+          setState(() {
+            _currentDeck = deck;
+            _isLoading = false;
+          });
+          _loadHistory();
+        }
+        return;
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          CustomSnackbar.showError(context, 'Could not generate cards for $topic: ${e.toString().replaceAll('Exception:', '').trim()}');
+        }
       }
-      return;
     }
 
     // When opening from Dashboard without specific topic, load existing user decks

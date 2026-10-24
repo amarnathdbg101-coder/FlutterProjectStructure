@@ -718,21 +718,28 @@ class _QuizListScreenState extends State<QuizListScreen> with SingleTickerProvid
                           neg = 0.0;
                         }
 
-                        final exam = await ExamSimulatorService().generateMockExam(
-                          topic: topic,
-                          examType: examType,
-                          durationMinutes: duration,
-                          questionCount: questionCount,
-                          positiveMarking: pos,
-                          negativeMarking: neg,
-                        );
-
-                        if (context.mounted) {
-                          Navigator.pop(ctx);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => ExamSimulatorScreen(exam: exam)),
+                        try {
+                          final exam = await ExamSimulatorService().generateMockExam(
+                            topic: topic,
+                            examType: examType,
+                            durationMinutes: duration,
+                            questionCount: questionCount,
+                            positiveMarking: pos,
+                            negativeMarking: neg,
                           );
+
+                          if (context.mounted) {
+                            Navigator.pop(ctx);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => ExamSimulatorScreen(exam: exam)),
+                            );
+                          }
+                        } catch (e) {
+                          setDialogState(() => isGenerating = false);
+                          if (context.mounted) {
+                            CustomSnackbar.showError(context, e.toString().replaceAll('Exception:', '').trim());
+                          }
                         }
                       },
               ),

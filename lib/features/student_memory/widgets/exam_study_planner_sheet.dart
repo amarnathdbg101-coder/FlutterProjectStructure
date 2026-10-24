@@ -930,7 +930,7 @@ class _ExamStudyPlannerSheetState extends State<ExamStudyPlannerSheet> {
             ],
             const SizedBox(height: 12),
 
-            // 1-Tap Action Handoffs: AI Tutor + Quiz + Formula Studio
+            // 1-Tap Action Handoffs: AI Tutor + Quiz + Flashcards
             Padding(
               padding: const EdgeInsets.only(left: 36),
               child: Wrap(
@@ -958,17 +958,6 @@ class _ExamStudyPlannerSheetState extends State<ExamStudyPlannerSheet> {
                       context.push(AppRoutes.quizzes, extra: {
                         'topic': task.title,
                         'title': task.title,
-                      });
-                    },
-                  ),
-                  ActionChip(
-                    avatar: const Icon(Icons.functions_rounded, size: 14, color: Color(0xFF0284C7)),
-                    label: const Text('Formula Studio', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    backgroundColor: const Color(0xFF0284C7).withValues(alpha: 0.08),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      context.push(AppRoutes.formulaStudio, extra: {
-                        'topic': task.title,
                       });
                     },
                   ),

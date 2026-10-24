@@ -58,18 +58,10 @@ class FlashcardService {
           return deck;
         }
       }
-    } catch (_) {
-      // Graceful offline fallback
+      throw Exception('Server returned an empty deck response');
+    } catch (e) {
+      throw Exception('Failed to generate flashcards: ${e.toString().replaceAll('Exception:', '').trim()}');
     }
-
-    // Adaptive Offline Generation: tailored to user's exact topic
-    final fallbackDeck = _createAdaptiveFallbackDeck(
-      topic: cleanTopic,
-      difficulty: difficulty,
-      count: cardCount,
-    );
-    await _cacheDeckLocally(fallbackDeck);
-    return fallbackDeck;
   }
 
   /// Lists all saved flashcard decks from PostgreSQL (with local cache fallback)
@@ -189,88 +181,5 @@ class FlashcardService {
     final list = await _loadLocalDecks();
     list.removeWhere((d) => d.id == id);
     await _saveAllDecksLocally(list);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Adaptive Offline Flashcard Deck Synthesizer
-  // ---------------------------------------------------------------------------
-  FlashcardDeckModel _createAdaptiveFallbackDeck({
-    required String topic,
-    required String difficulty,
-    required int count,
-  }) {
-    final cards = <FlashcardModel>[];
-
-    cards.add(
-      FlashcardModel(
-        id: 'card-1',
-        topic: topic,
-        questionFront: 'What is the governing definition and primary equation of $topic?',
-        answerBack: '### Core Concept: $topic\n\nState the governing equation and primary boundary conditions. Check dimensionality and coordinate reference frames carefully.',
-        difficulty: 'easy',
-        createdAt: DateTime.now(),
-      ),
-    );
-
-    cards.add(
-      FlashcardModel(
-        id: 'card-2',
-        topic: topic,
-        questionFront: 'Derive the key mathematical relation governing $topic under standard assumptions.',
-        answerBack: r'$$\mathcal{F}(\mathbf{x}) = \int_{\Omega} \rho(\mathbf{x}) d\mathbf{x}$$' '\n\nEnsure all constant values are in standard SI units and limits of integration are declared.',
-        difficulty: difficulty,
-        createdAt: DateTime.now(),
-      ),
-    );
-
-    cards.add(
-      FlashcardModel(
-        id: 'card-3',
-        topic: topic,
-        questionFront: 'What is the most notorious trap or sign mistake examiners set for $topic?',
-        answerBack: '⚠️ **Trap Forensics**: Watch out for sign inversion conventions and relative vs absolute reference frames in $topic problems.',
-        difficulty: 'hard',
-        createdAt: DateTime.now(),
-      ),
-    );
-
-    if (count > 3) {
-      cards.add(
-        FlashcardModel(
-          id: 'card-4',
-          topic: topic,
-          questionFront: 'How do you solve a 3-step competitive numerical on $topic?',
-          answerBack: r'1. State given boundary constraints\n2. Substitute into governing formula\n3. Perform limiting condition check ($t \to 0, t \to \infty$).',
-          difficulty: difficulty,
-          createdAt: DateTime.now(),
-        ),
-      );
-    }
-
-    if (count > 4) {
-      cards.add(
-        FlashcardModel(
-          id: 'card-5',
-          topic: topic,
-          questionFront: 'Compare and contrast $topic with its primary dual or counterpart principle.',
-          answerBack: 'Analyzing the dual reveals edge-cases where the standard linear approximations of $topic fail.',
-          difficulty: 'hard',
-          createdAt: DateTime.now(),
-        ),
-      );
-    }
-
-    return FlashcardDeckModel(
-      id: 'deck-offline-${DateTime.now().millisecondsSinceEpoch}',
-      title: '$topic Active Recall Deck',
-      topic: topic,
-      difficulty: difficulty,
-      cardCount: cards.length,
-      masteredCount: 0,
-      isPinned: false,
-      cards: cards,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
   }
 }

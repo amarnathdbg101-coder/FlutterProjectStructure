@@ -233,7 +233,7 @@ class ExamPlannerService extends ChangeNotifier {
           priority: i == 0 ? 'high' : 'medium',
           subtasks: [
             'Study core principles and governing equations for $topic',
-            'Derive key mathematical formulas in Formula Studio',
+            'Review key conceptual formulas and active recall principles',
             'Create active recall flashcard deck for definition mastery',
           ],
         ),
