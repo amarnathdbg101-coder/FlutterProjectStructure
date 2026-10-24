@@ -423,15 +423,46 @@ class AiTutorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- ChatGPT-Style Session Management ---
+  // --- ChatGPT-Style Session Management with 0ms Offline-First Caching ---
+
+  void _cacheSessionsList() {
+    try {
+      final jsonList = _sessions.map((s) => s.toJson()).toList();
+      HiveStorage.boxSyncMeta.put('cached_chat_sessions', jsonEncode(jsonList));
+    } catch (_) {}
+  }
+
+  void _cacheCurrentSessionMessages() {
+    final sId = _currentSession?.id;
+    if (sId == null || sId.isEmpty) return;
+    try {
+      final jsonList = _messages.map((m) => m.toJson()).toList();
+      HiveStorage.boxSyncMeta.put('cached_session_msgs_$sId', jsonEncode(jsonList));
+    } catch (_) {}
+  }
 
   Future<void> loadSessions() async {
-    _isLoadingSessions = true;
-    notifyListeners();
+    // ⚡ 0ms Instant Local Cache Display
+    try {
+      final rawCache = HiveStorage.boxSyncMeta.get('cached_chat_sessions');
+      if (rawCache is String && rawCache.isNotEmpty) {
+        final decoded = jsonDecode(rawCache) as List;
+        _sessions = decoded
+            .map((e) => ChatSessionModel.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+
+    _isLoadingSessions = _sessions.isEmpty;
+    if (_isLoadingSessions) notifyListeners();
 
     try {
       final fetched = await _repository.getChatSessions();
-      _sessions = fetched;
+      if (fetched.isNotEmpty || _sessions.isEmpty) {
+        _sessions = fetched;
+        _cacheSessionsList();
+      }
     } catch (_) {} finally {
       _isLoadingSessions = false;
       notifyListeners();
@@ -441,15 +472,34 @@ class AiTutorController extends ChangeNotifier {
   Future<void> selectSession(ChatSessionModel session) async {
     _editingMessageId = null;
     _currentSession = session;
-    _isLoading = true;
-    notifyListeners();
+
+    // ⚡ 0ms Instant Message Display from local cache (Zero loading freeze)
+    try {
+      final rawCache = HiveStorage.boxSyncMeta.get('cached_session_msgs_${session.id}');
+      if (rawCache is String && rawCache.isNotEmpty) {
+        final decoded = jsonDecode(rawCache) as List;
+        _messages.clear();
+        _messages.addAll(
+          decoded.map((e) => ChatMessageModel.fromJson(Map<String, dynamic>.from(e as Map))),
+        );
+        notifyListeners();
+      }
+    } catch (_) {}
+
+    if (_messages.isEmpty) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       final msgs = await _repository.getSessionMessages(session.id);
       _messages.clear();
       _messages.addAll(msgs);
+      _cacheCurrentSessionMessages();
     } catch (e) {
-      _errorMessage = e.toString();
+      if (_messages.isEmpty) {
+        _errorMessage = e.toString();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -483,6 +533,7 @@ class AiTutorController extends ChangeNotifier {
       if (_currentSession?.id == sessionId) {
         _currentSession = _currentSession!.copyWith(title: trimmed);
       }
+      _cacheSessionsList();
       notifyListeners();
     }
   }
@@ -491,6 +542,10 @@ class AiTutorController extends ChangeNotifier {
     final success = await _repository.deleteChatSession(sessionId);
     if (success) {
       _sessions.removeWhere((s) => s.id == sessionId);
+      try {
+        HiveStorage.boxSyncMeta.delete('cached_session_msgs_$sessionId');
+      } catch (_) {}
+      _cacheSessionsList();
       if (_currentSession?.id == sessionId) {
         startNewChat();
       } else {
@@ -542,6 +597,8 @@ class AiTutorController extends ChangeNotifier {
       if (sessionIndex != -1) _sessions[sessionIndex] = _currentSession!;
     }
 
+    _cacheCurrentSessionMessages();
+    _cacheSessionsList();
     notifyListeners();
 
     if (sessionId != null && sessionId.isNotEmpty) {
@@ -816,6 +873,8 @@ class AiTutorController extends ChangeNotifier {
       }
       _isStreaming = false;
       _isLoading = false;
+      _cacheCurrentSessionMessages();
+      _cacheSessionsList();
       notifyListeners();
     }
   }
