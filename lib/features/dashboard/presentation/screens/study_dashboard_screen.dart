@@ -78,7 +78,9 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
     } else if (suggestion.contains('Concept Map')) {
       context.push(AppRoutes.diagram);
     } else if (suggestion.contains('Carnot')) {
-      context.push(AppRoutes.formulaStudio);
+      context.push(AppRoutes.aiChat, extra: {
+        'initialQuery': 'Explain Carnot Engine cycle and efficiency formula step-by-step.'
+      });
     } else {
       final cleanText = suggestion.replaceAll(RegExp(r'^\W+'), '').trim();
       context.push(AppRoutes.aiChat, extra: {
