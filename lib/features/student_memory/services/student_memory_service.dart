@@ -10,6 +10,7 @@ class StudentMemoryService {
   static const String _prefKey = 'studysilo_student_memory_profile';
   static const String _smartContextPrefKey = 'studysilo_smart_context';
   static StudentMemoryService? _instance;
+  static StudentMemoryProfile? _cachedProfile;
   final Dio _dio = ApiClient().dio;
 
   StudentMemoryService._internal();
@@ -18,6 +19,9 @@ class StudentMemoryService {
     _instance ??= StudentMemoryService._internal();
     return _instance!;
   }
+
+  /// Synchronous retrieval of cached student memory profile (0ms instant access)
+  static StudentMemoryProfile? getCachedProfileSync() => _cachedProfile;
 
   /// Get student memory profile from local cache first, then sync with backend
   Future<StudentMemoryProfile> getProfile({bool forceRemote = false}) async {
@@ -29,6 +33,7 @@ class StudentMemoryService {
       if (raw != null && raw.isNotEmpty) {
         final Map<String, dynamic> data = jsonDecode(raw) as Map<String, dynamic>;
         cachedProfile = StudentMemoryProfile.fromJson(data);
+        _cachedProfile = cachedProfile;
       }
     } catch (_) {}
 
@@ -40,6 +45,7 @@ class StudentMemoryService {
       // Fire-and-forget sync with backend in background
       _syncFromBackend().then((remoteProfile) {
         if (remoteProfile != null) {
+          _cachedProfile = remoteProfile;
           _saveToLocal(remoteProfile);
           fetchSmartContext(targetExam: remoteProfile.targetExam, forceRemote: true).catchError((_) => null);
         }
@@ -50,12 +56,14 @@ class StudentMemoryService {
     // Attempt remote fetch
     final remote = await _syncFromBackend();
     if (remote != null) {
+      _cachedProfile = remote;
       await _saveToLocal(remote);
       fetchSmartContext(targetExam: remote.targetExam, forceRemote: true).catchError((_) => null);
       return remote;
     }
 
-    return cachedProfile ?? StudentMemoryProfile.defaultProfile();
+    _cachedProfile = cachedProfile ?? StudentMemoryProfile.defaultProfile();
+    return _cachedProfile!;
   }
 
   /// Fetch dynamic smart context (prompts, syllabus suggestions, hints) from PostgreSQL / Go Cognitive Engine

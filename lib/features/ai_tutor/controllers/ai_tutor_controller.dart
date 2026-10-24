@@ -8,6 +8,7 @@ import '../../../core/network/api_client.dart';
 import '../models/chat_message_model.dart';
 import '../models/chat_session_model.dart';
 import '../repositories/ai_tutor_repository.dart';
+import '../../student_memory/services/student_memory_service.dart';
 
 enum TutorMode {
   academic,
@@ -739,6 +740,11 @@ class AiTutorController extends ChangeNotifier {
     clearImageAttachment();
     notifyListeners();
 
+    final memProfile = StudentMemoryService.getCachedProfileSync();
+    final targetExam = memProfile?.targetExam;
+    final academicLevel = memProfile?.academicLevel;
+    final weakTopics = memProfile?.weakTopics;
+
     try {
       final botResponse = await _repository.askDoubt(
         question: question,
@@ -756,6 +762,9 @@ class AiTutorController extends ChangeNotifier {
         editLastQuestion: isEditingLastQuestion,
         model: _selectedModel.modelId,
         mode: _tutorMode.id,
+        targetExam: targetExam,
+        academicLevel: academicLevel,
+        weakTopics: weakTopics,
         onChunk: (chunk) {
           _handleStreamChunk(chunk, effectiveSessionId);
         },
