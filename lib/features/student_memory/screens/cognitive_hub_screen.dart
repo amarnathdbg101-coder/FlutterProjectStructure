@@ -900,6 +900,7 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
               final lvl = levelCtrl.text.trim();
               if (exam.isNotEmpty && lvl.isNotEmpty) {
                 controller.updateGoals(targetExam: exam, academicLevel: lvl);
+                CustomSnackbar.showSuccess(context, 'Exam goal updated to "$exam"');
               }
               Navigator.pop(ctx);
             },

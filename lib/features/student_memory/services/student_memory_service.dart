@@ -45,9 +45,15 @@ class StudentMemoryService {
       // Fire-and-forget sync with backend in background
       _syncFromBackend().then((remoteProfile) {
         if (remoteProfile != null) {
-          _cachedProfile = remoteProfile;
-          _saveToLocal(remoteProfile);
-          fetchSmartContext(targetExam: remoteProfile.targetExam, forceRemote: true).catchError((_) => null);
+          if (cachedProfile!.updatedAt.isAfter(remoteProfile.updatedAt)) {
+            // Local is newer: push local changes up to remote
+            _syncToRemote(cachedProfile);
+          } else {
+            // Remote is newer: accept remote changes
+            _cachedProfile = remoteProfile;
+            _saveToLocal(remoteProfile);
+            fetchSmartContext(targetExam: remoteProfile.targetExam, forceRemote: true).catchError((_) => null);
+          }
         }
       }).catchError((_) {});
       return cachedProfile;
@@ -56,6 +62,11 @@ class StudentMemoryService {
     // Attempt remote fetch
     final remote = await _syncFromBackend();
     if (remote != null) {
+      if (cachedProfile != null && cachedProfile.updatedAt.isAfter(remote.updatedAt)) {
+        await _syncToRemote(cachedProfile);
+        _cachedProfile = cachedProfile;
+        return cachedProfile;
+      }
       _cachedProfile = remote;
       await _saveToLocal(remote);
       fetchSmartContext(targetExam: remote.targetExam, forceRemote: true).catchError((_) => null);
@@ -154,7 +165,7 @@ class StudentMemoryService {
   /// Sync full profile state to backend database
   Future<void> _syncToRemote(StudentMemoryProfile profile) async {
     try {
-      await _dio.put(
+      final response = await _dio.put(
         ApiConstants.cognitiveProfile,
         data: {
           'target_exam': profile.targetExam,
@@ -164,12 +175,21 @@ class StudentMemoryService {
           'exam_traps_to_watch': profile.examTrapsEncountered,
         },
       );
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data != null &&
+          response.data['data'] != null) {
+        final data = Map<String, dynamic>.from(response.data['data'] as Map);
+        final synced = StudentMemoryProfile.fromJson(data);
+        _cachedProfile = synced;
+        await _saveToLocal(synced);
+      }
     } catch (_) {}
   }
 
   /// Save profile to local storage and sync with backend
   Future<void> saveProfile(StudentMemoryProfile profile) async {
     final updated = profile.copyWith(updatedAt: DateTime.now());
+    _cachedProfile = updated;
     await _saveToLocal(updated);
     await _syncToRemote(updated);
   }
@@ -186,6 +206,7 @@ class StudentMemoryService {
       updatedAt: DateTime.now(),
     );
     await saveProfile(updated);
+    fetchSmartContext(targetExam: updated.targetExam, forceRemote: true).catchError((_) => null);
     return updated;
   }
 

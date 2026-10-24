@@ -157,10 +157,29 @@ class StudentMemoryProfile {
       return false;
     });
 
+    var targetExamStr = (json['target_exam'] ?? json['targetExam'] ?? 'General Academic Preparation').toString();
+    targetExamStr = targetExamStr
+        .replaceAll(RegExp(r'\s*&\s*explain point through not paragraph', caseSensitive: false), '')
+        .replaceAll(RegExp(r'explain point through not paragraph', caseSensitive: false), '')
+        .replaceAll(RegExp(r'point by point answer dena', caseSensitive: false), '')
+        .trim();
+    if (targetExamStr.isEmpty) {
+      targetExamStr = 'General Academic Preparation';
+    }
+
+    var academicLevelStr = (json['academic_level'] ?? json['academicLevel'] ?? 'College & Competitive Exams').toString();
+    academicLevelStr = academicLevelStr
+        .replaceAll(RegExp(r'point by point answer dena', caseSensitive: false), '')
+        .replaceAll(RegExp(r'explain point through not paragraph', caseSensitive: false), '')
+        .trim();
+    if (academicLevelStr.isEmpty) {
+      academicLevelStr = 'College & Competitive Exams';
+    }
+
     return StudentMemoryProfile(
       userId: (json['user_id'] ?? json['userId'] ?? 'local_scholar').toString(),
-      targetExam: (json['target_exam'] ?? json['targetExam'] ?? 'General Academic Preparation').toString(),
-      academicLevel: (json['academic_level'] ?? json['academicLevel'] ?? 'College & Competitive Exams').toString(),
+      targetExam: targetExamStr,
+      academicLevel: academicLevelStr,
       strongTopics: filteredStrong,
       weakTopics: filteredWeak,
       examTrapsEncountered: filteredTraps,
