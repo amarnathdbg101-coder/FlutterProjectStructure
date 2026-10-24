@@ -32,7 +32,7 @@ void main() {
     expect(find.text('Load more (6 sections left)'), findsOneWidget);
   });
 
-  testWidgets('interactive diagrams are deferred until requested', (WidgetTester tester) async {
+  testWidgets('interactive diagrams render visual diagram directly', (WidgetTester tester) async {
     const answer = '''
 ```json
 {"title":"Example","nodes":[{"id":"1","label":"Start"}],"edges":[]}
@@ -49,8 +49,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Render interactive diagram'), findsOneWidget);
-    expect(find.byType(InteractiveVisualDiagram), findsNothing);
+    expect(find.byType(InteractiveVisualDiagram), findsOneWidget);
   });
 
   testWidgets('inline LaTeX renders inside highlighted headings and bold text', (WidgetTester tester) async {

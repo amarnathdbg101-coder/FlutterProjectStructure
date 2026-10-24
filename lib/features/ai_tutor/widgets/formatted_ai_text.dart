@@ -79,6 +79,9 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     }
   }
 
+  // ⚡ Static LRU memory cache for pre-parsed markdown/LaTeX AST blocks (0ms scrolling load)
+  static final Map<int, List<_AiBlock>> _astCache = {};
+
   List<_AiBlock> _getBlocks() {
     // ⚡ Server-Side Pre-Parsed AST Blocks: Skip heavy multi-pass regex scanning on phone
     if (widget.precomputedBlocks != null && widget.precomputedBlocks!.isNotEmpty) {
@@ -95,6 +98,18 @@ class _FormattedAiTextState extends State<FormattedAiText> {
           .toList();
       return _cachedBlocks!;
     }
+
+    // ⚡ Check global in-memory AST cache for instant 0ms scroll retrieval
+    if (!widget.isStreaming) {
+      final textHash = widget.text.hashCode;
+      final cached = _astCache[textHash];
+      if (cached != null) {
+        _cachedText = widget.text;
+        _cachedBlocks = cached;
+        return cached;
+      }
+    }
+
     if (_cachedText != widget.text || _cachedBlocks == null) {
       final now = DateTime.now().millisecondsSinceEpoch;
       // ⚡ Smooth 60 FPS Streaming Throttler:
@@ -112,21 +127,14 @@ class _FormattedAiTextState extends State<FormattedAiText> {
 
       _lastParseTimeMs = now;
       _cachedText = widget.text;
-
-      // ⚡ Fast 0.1ms Initial Frame Render: For non-streaming long messages, yield full AST parsing to microtask
-      if (!widget.isStreaming && widget.text.length > 250 && _cachedBlocks == null) {
-        _cachedBlocks = _fastParagraphSplit(widget.text);
-        Future.microtask(() {
-          if (mounted && _cachedText == widget.text) {
-            setState(() {
-              _cachedBlocks = _parseTextIntoBlocks(widget.text);
-            });
-          }
-        });
-        return _cachedBlocks!;
-      }
-
       _cachedBlocks = _parseTextIntoBlocks(widget.text);
+
+      if (!widget.isStreaming) {
+        if (_astCache.length > 200) {
+          _astCache.remove(_astCache.keys.first);
+        }
+        _astCache[widget.text.hashCode] = _cachedBlocks!;
+      }
     }
     return _cachedBlocks!;
   }
@@ -729,10 +737,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
         return RepaintBoundary(child: _buildTableWidget(context, block));
 
       case _BlockType.diagram:
-        return _DeferredAiBlock(
-          label: 'Render interactive diagram',
-          builder: () => _buildDiagramWidget(context, block),
-        );
+        return RepaintBoundary(child: _buildDiagramWidget(context, block));
 
       case _BlockType.graph:
         return RepaintBoundary(child: _buildGraphWidget(context, block));
