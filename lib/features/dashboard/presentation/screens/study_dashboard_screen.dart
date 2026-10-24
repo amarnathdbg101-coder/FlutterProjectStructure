@@ -532,6 +532,13 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                           OmniSearchBar(
                             controller: _searchController,
                             isDark: isDark,
+                            suggestions: const [
+                              '🎯 Adaptive Quiz',
+                              '🗺️ Concept Mind Map',
+                              '⚡ Carnot Cycle',
+                              '📐 Bayes Theorem',
+                              '🧪 Reaction Mechanisms',
+                            ],
                             onChanged: (val) {
                               ref.read(searchQueryProvider.notifier).setQuery(val);
                             },

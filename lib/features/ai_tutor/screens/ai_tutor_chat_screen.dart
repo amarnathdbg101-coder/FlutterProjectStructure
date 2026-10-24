@@ -1324,6 +1324,59 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                 ],
               ),
             ),
+          // Pedagogical Mode Switcher Micro-Pills
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SizedBox(
+              height: 28,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: TutorMode.values.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                itemBuilder: (context, idx) {
+                  final mode = TutorMode.values[idx];
+                  final isSel = controller.tutorMode == mode;
+                  return InkWell(
+                    onTap: () {
+                      if (!isSel) {
+                        controller.setTutorMode(mode);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isSel
+                            ? AppColors.primary
+                            : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isSel
+                              ? AppColors.primary
+                              : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          mode.label,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                            color: isSel
+                                ? Colors.white
+                                : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
           AiChatInputBar(
             controller: _textController,
             focusNode: _inputFocusNode,

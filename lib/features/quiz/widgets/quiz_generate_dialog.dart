@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../student_memory/services/student_memory_service.dart';
 
 /// Clean, high-focus Generate Adaptive Quiz Dialog
 class QuizGenerateDialog extends StatefulWidget {
@@ -128,6 +129,73 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                     ),
                     autofocus: true,
                   ),
+                  Builder(
+                    builder: (context) {
+                      final weak = StudentMemoryService.getCachedProfileSync()?.weakTopics ?? [];
+                      if (weak.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Recommended Weak Topics:',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Row(
+                                children: weak.map((t) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          _topicController.text = t;
+                                        });
+                                      },
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.bolt_rounded, size: 12, color: Color(0xFF2563EB)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              t,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
