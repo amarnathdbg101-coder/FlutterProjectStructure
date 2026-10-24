@@ -94,6 +94,53 @@ class ProductRepository {
     }
   }
 
+  /// Fast server database product search by name, SKU, or barcode (bypasses 20-item local page limit)
+  Future<ApiResponse<List<ProductModel>>> searchProducts(String query, {int limit = 50}) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'search': query.trim(),
+        'q': query.trim(),
+        'limit': limit,
+      };
+
+      final res = await _dio.get(ApiConstants.products, queryParameters: queryParams);
+      dynamic raw = res.data;
+      if (raw is String) {
+        try {
+          raw = jsonDecode(raw);
+        } catch (_) {}
+      }
+
+      List listData = [];
+      if (raw is List) {
+        listData = raw;
+      } else if (raw is Map) {
+        final dataField = raw['data'];
+        if (dataField is Map && dataField['products'] is List) {
+          listData = dataField['products'] as List;
+        } else if (dataField is List) {
+          listData = dataField;
+        } else if (raw['products'] is List) {
+          listData = raw['products'] as List;
+        } else if (raw['items'] is List) {
+          listData = raw['items'] as List;
+        }
+      }
+
+      final items = <ProductModel>[];
+      for (final e in listData) {
+        try {
+          if (e is Map) {
+            items.add(ProductModel.fromJson(Map<String, dynamic>.from(e)));
+          }
+        } catch (_) {}
+      }
+      return ApiResponse(success: true, data: items);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
   Future<ApiResponse<ProductModel>> createProduct(Map<String, dynamic> productData) async {
     try {
       final res = await _dio.post(ApiConstants.createProduct, data: productData);

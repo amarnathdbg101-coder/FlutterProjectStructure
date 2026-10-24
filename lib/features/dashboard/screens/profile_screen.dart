@@ -522,7 +522,7 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                         _SettingTile(
                           icon: Icons.collections_outlined,
                           title: 'Shop Showcase Banners',
-                          subtitle: '${shop?.banners.length ?? 0}/2 Showcase Banners Uploaded',
+                          subtitle: '${shop?.banners.length ?? 0}/4 Showcase Banners Uploaded',
                           trailingText: 'Edit Banners',
                           onTap: () {
                             if (shop == null || shop.id.toString().isEmpty) {
@@ -1242,7 +1242,7 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
     );
   }
 
-  // --- EDIT SHOP BANNERS (Up to 2 Max Promotional Banners) ---
+  // --- EDIT SHOP BANNERS (Up to 4 Max Promotional Banners) ---
   void _showEditShopBannersSheet(BuildContext context, AuthController authController, ShopModel? shop) {
     List<String> bannerList = List<String>.from(shop?.banners ?? []);
     bool isSaving = false;
@@ -1271,7 +1271,7 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Shop Showcase Banners (${bannerList.length}/2)',
+                    'Shop Showcase Banners (${bannerList.length}/4)',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -1345,17 +1345,17 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                         ),
                       );
                     }),
-                    if (bannerList.length < 2)
+                    if (bannerList.length < 4)
                       InkWell(
                         onTap: () {
                           _showBannerImagePickerOptions(
                             ctx,
-                            maxAllowed: 2,
+                            maxAllowed: 4,
                             currentCount: bannerList.length,
                             onImagesSelected: (paths) {
                               setSheetState(() {
                                 for (final p in paths) {
-                                  if (bannerList.length < 2 && p.isNotEmpty) {
+                                  if (bannerList.length < 4 && p.isNotEmpty) {
                                     bannerList.add(p);
                                   }
                                 }
@@ -1425,7 +1425,7 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                         }
 
                         final success = await authController.updateShop({
-                          'banners': finalUploadedBanners.take(2).toList(),
+                          'banners': finalUploadedBanners.take(4).toList(),
                         });
 
                         if (ctx.mounted) {
@@ -1941,52 +1941,55 @@ class _SettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      leading: leadingWidget ??
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: context.colorPrimaryLight,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 18, color: AppColors.primary),
-          ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w700,
-          color: context.colorTextPrimary,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(
-          fontSize: 11.5,
-          color: context.colorTextSecondary,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (trailingText != null) ...[
-            Text(
-              trailingText!,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: context.colorTextMuted,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        leading: leadingWidget ??
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: context.colorPrimaryLight,
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: Icon(icon, size: 18, color: AppColors.primary),
             ),
-            const SizedBox(width: 4),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color: context.colorTextPrimary,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 11.5,
+            color: context.colorTextSecondary,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (trailingText != null) ...[
+              Text(
+                trailingText!,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: context.colorTextMuted,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Icon(Icons.chevron_right_rounded, size: 18, color: context.colorTextMuted),
           ],
-          Icon(Icons.chevron_right_rounded, size: 18, color: context.colorTextMuted),
-        ],
+        ),
+        onTap: onTap,
       ),
-      onTap: onTap,
     );
   }
 }

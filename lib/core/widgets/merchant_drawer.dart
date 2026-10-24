@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../features/auth/controllers/auth_controller.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
+import '../services/offline_sync_service.dart';
 import '../storage/token_storage.dart';
 import 'app_ui_components.dart';
+import 'offline_sync_sheet.dart';
 
 class MerchantDrawer extends StatelessWidget {
   final Function(String shopSlug, String shopName)? onShowQr;
@@ -68,38 +70,14 @@ class MerchantDrawer extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '$shopName • $userEmailPhone',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.colorTextSecondary,
-                                ),
-                              ),
-                            ),
-                            if (!hasShop) ...[
-                              Container(
-                                margin: const EdgeInsets.only(left: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  context.isHindi ? 'नया' : 'Setup',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                        Text(
+                          '$shopName • $userEmailPhone',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colorTextSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -217,6 +195,36 @@ class MerchantDrawer extends StatelessWidget {
                         context.go('/merchant/reservations');
                       },
                     ),
+                    StreamBuilder<int>(
+                      stream: OfflineSyncService.instance.pendingCountStream,
+                      initialData: OfflineSyncService.instance.pendingCount,
+                      builder: (ctx, snapshot) {
+                        final pending = snapshot.data ?? 0;
+                        return _DrawerTile(
+                          icon: pending > 0 ? Icons.cloud_upload_rounded : Icons.cloud_done_rounded,
+                          title: context.isHindi ? 'ऑफ़लाइन क्लाउड सिंक' : 'Offline Cloud Sync',
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: pending > 0 ? AppColors.warning : AppColors.success,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              pending > 0 ? '$pending' : '✓',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            OfflineSyncSheet.show(context);
+                          },
+                        );
+                      },
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Divider(height: 16, color: context.colorBorder),
@@ -271,29 +279,35 @@ class MerchantDrawer extends StatelessWidget {
 class _DrawerTile extends StatelessWidget {
   final IconData icon;
   final String title;
+  final Widget? trailing;
   final VoidCallback onTap;
 
   const _DrawerTile({
     required this.icon,
     required this.title,
+    this.trailing,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.primary, size: 22),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: context.colorTextPrimary,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        leading: Icon(icon, color: AppColors.primary, size: 22),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: context.colorTextPrimary,
+          ),
         ),
+        trailing: trailing,
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        onTap: onTap,
       ),
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      onTap: onTap,
     );
   }
 }

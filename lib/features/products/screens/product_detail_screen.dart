@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/widgets/app_product_image.dart';
+import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
+import '../services/smart_stock_reorder_service.dart';
+import '../services/smart_barcode_catalog_service.dart';
+import '../widgets/barcode_sticker_dialog.dart';
 
 /// Clean, Aesthetic, High-Vibe E-Commerce Product Details Showcase.
 /// Features studio hero gallery with tap-to-zoom fullscreen preview,
@@ -89,6 +94,119 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  void _attachBarcode(BuildContext context, ProductModel p) async {
+    await MobileBarcodeScannerDialog.show(
+      context,
+      title: context.isHindi ? 'बारकोड जोड़ें' : 'Attach Barcode',
+      subtitle: p.name,
+      targetProductName: p.name,
+      autoCloseOnSuccess: true,
+      successMessage: context.isHindi
+          ? '✓ "${p.name}" में बारकोड जुड़ गया!'
+          : '✓ Attached Barcode to "${p.name}"!',
+      onBarcodeScanned: (scanned) async {
+        final cleanBarcode = scanned.trim();
+        if (cleanBarcode.isEmpty) return false;
+
+        final prodCtrl = context.read<ProductController>();
+        final existing = prodCtrl.products.any((item) =>
+            item.id.toString() != p.id.toString() &&
+            item.barcode.trim().isNotEmpty &&
+            item.barcode.trim().toLowerCase() == cleanBarcode.toLowerCase());
+
+        if (existing) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                context.isHindi
+                    ? 'यह बारकोड पहले से किसी अन्य उत्पाद में जुड़ा है: $cleanBarcode'
+                    : 'This barcode is already assigned to another product: $cleanBarcode',
+              ),
+              backgroundColor: AppColors.warning,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          return false;
+        }
+
+        final updates = <String, dynamic>{
+          'barcode': cleanBarcode,
+        };
+        if (p.sku.trim().isEmpty) {
+          updates['sku'] = cleanBarcode;
+        }
+
+        // Global Smart Barcode Auto-Fill / Master Catalog Enrichment
+        final masterMatch = await SmartBarcodeCatalogService.lookup(cleanBarcode);
+        String updatedDisplayName = p.name;
+        if (masterMatch != null) {
+          final isGenericName = p.name.trim().isEmpty ||
+              p.name.trim().toLowerCase() == 'new product' ||
+              p.name.trim().toLowerCase() == 'item' ||
+              p.name.trim().toLowerCase().startsWith('product ');
+          if (isGenericName) {
+            updates['name'] = masterMatch.name;
+            updatedDisplayName = masterMatch.name;
+          }
+          if (p.brand.trim().isEmpty && masterMatch.brand.isNotEmpty) {
+            updates['brand'] = masterMatch.brand;
+            final attrs = Map<String, dynamic>.from(p.attributes);
+            attrs['brand'] = masterMatch.brand;
+            updates['attributes'] = attrs;
+          }
+          if ((p.comparePrice <= 0) && masterMatch.mrp > 0) {
+            updates['compare_price'] = masterMatch.mrp;
+          }
+          if ((p.price <= 0) && masterMatch.sellingPrice > 0) {
+            updates['price'] = masterMatch.sellingPrice;
+          }
+          if ((p.category.trim().isEmpty || p.category.trim().toLowerCase() == 'general store') && masterMatch.category.isNotEmpty) {
+            updates['category'] = CategoryRegistry.formatCategoryName(masterMatch.category);
+          }
+          if (p.unit.trim().isEmpty && masterMatch.unit.isNotEmpty) {
+            updates['unit'] = masterMatch.unit;
+          }
+        }
+
+        final success = await prodCtrl.editProduct(p.id, updates);
+        if (context.mounted) {
+          if (success) {
+            final autoFilledNote = masterMatch != null && (updatedDisplayName != p.name || updates.length > 2);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  autoFilledNote
+                      ? (context.isHindi
+                          ? '⚡ "$updatedDisplayName" में बारकोड ($cleanBarcode) जुड़ा और मास्टर कैटलॉग से विवरण ऑटो-फिल हुआ!'
+                          : '⚡ Attached Barcode ($cleanBarcode) & Auto-Filled details for "$updatedDisplayName"!')
+                      : (context.isHindi
+                          ? '✓ "$updatedDisplayName" में बारकोड ($cleanBarcode) जुड़ गया'
+                          : '✓ Attached Barcode ($cleanBarcode) to "$updatedDisplayName"'),
+                ),
+                backgroundColor: AppColors.success,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  prodCtrl.errorMessage ??
+                      (context.isHindi ? 'बारकोड सेव करने में विफल' : 'Failed to save barcode'),
+                ),
+                backgroundColor: AppColors.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+        return success;
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final prodController = context.watch<ProductController>();
@@ -131,6 +249,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Print Barcode Stickers',
+            icon: const Icon(Icons.qr_code_2_rounded, size: 22, color: AppColors.primary),
+            onPressed: () => BarcodeStickerDialog.show(context, p),
+          ),
+          IconButton(
             tooltip: 'Edit Product',
             icon: const Icon(Icons.edit_note_rounded, size: 24, color: AppColors.primary),
             onPressed: () {
@@ -144,7 +267,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             color: context.colorSurface,
             onSelected: (value) {
-              if (value == 'edit') {
+              if (value == 'attach_barcode') {
+                _attachBarcode(context, p);
+              } else if (value == 'edit') {
                 if (widget.onEditRequested != null) {
                   widget.onEditRequested!(context, p);
                 }
@@ -152,11 +277,45 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 if (widget.onDuplicateRequested != null) {
                   widget.onDuplicateRequested!(context, p);
                 }
+              } else if (value == 'barcode') {
+                BarcodeStickerDialog.show(context, p);
               } else if (value == 'delete') {
                 _confirmDelete(context, p.id);
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem<String>(
+                value: 'attach_barcode',
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_scanner_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      p.barcode.trim().isEmpty
+                          ? (ctx.isHindi ? 'बारकोड जोड़ें' : 'Attach Barcode')
+                          : (ctx.isHindi ? 'बारकोड बदलें' : 'Change Barcode'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: p.barcode.trim().isEmpty ? AppColors.primary : ctx.colorTextPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'barcode',
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_2_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Print Barcodes',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
+                    ),
+                  ],
+                ),
+              ),
               PopupMenuItem<String>(
                 value: 'edit',
                 child: Row(
@@ -238,6 +397,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               _buildProductHeader(context, p),
                               const SizedBox(height: 14),
                               _buildPricingHeroCard(context, p),
+                              const SizedBox(height: 14),
+                              _buildStockManagementCard(context, p),
                               if (isProfitVisible) ...[
                                 const SizedBox(height: 14),
                                 _buildMerchantIntelligenceCard(context, p),
@@ -263,6 +424,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       _buildProductHeader(context, p),
                       const SizedBox(height: 14),
                       _buildPricingHeroCard(context, p),
+                      const SizedBox(height: 14),
+                      _buildStockManagementCard(context, p),
                       if (isProfitVisible) ...[
                         const SizedBox(height: 14),
                         _buildMerchantIntelligenceCard(context, p),
@@ -694,9 +857,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             const SizedBox(width: 6),
             Text('•', style: TextStyle(color: context.colorTextMuted, fontSize: 10)),
             const SizedBox(width: 6),
-            Text(
-              'SKU: ${p.sku.isNotEmpty ? p.sku : (p.barcode.isNotEmpty ? p.barcode : 'N/A')}',
-              style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w500),
+            Flexible(
+              child: Text(
+                'SKU: ${p.sku.isNotEmpty ? p.sku : (p.barcode.isNotEmpty ? p.barcode : 'N/A')}',
+                style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -728,15 +894,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'COUNTER SELLING PRICE',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                  color: context.colorTextMuted,
+              Flexible(
+                child: Text(
+                  'COUNTER SELLING PRICE',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: context.colorTextMuted,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                 decoration: BoxDecoration(
@@ -824,26 +994,33 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    p.isPricePublic ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                    size: 14,
-                    color: p.isPricePublic ? AppColors.success : AppColors.warning,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    p.isPricePublic
-                        ? 'Online Storefront: Public Price'
-                        : 'Online Storefront: 🔒 Price Hidden',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      p.isPricePublic ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                      size: 14,
                       color: p.isPricePublic ? AppColors.success : AppColors.warning,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        p.isPricePublic
+                            ? 'Online Storefront: Public Price'
+                            : 'Online Storefront: 🔒 Price Hidden',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: p.isPricePublic ? AppColors.success : AppColors.warning,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               InkWell(
                 onTap: () async {
                   final newStatus = !p.isPricePublic;
@@ -882,6 +1059,178 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  // --- 4B. INVENTORY STOCK MANAGEMENT & WHOLESALE REORDER ---
+  Widget _buildStockManagementCard(BuildContext context, ProductModel p) {
+    final isOutOfStock = p.isOutOfStock;
+    final isLowStock = p.isLowStock;
+    final isHindi = context.isHindi;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.colorBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isOutOfStock
+                            ? context.colorErrorLight
+                            : (isLowStock ? context.colorWarningLight : context.colorPrimaryLight),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isOutOfStock
+                            ? Icons.error_outline_rounded
+                            : (isLowStock ? Icons.warning_amber_rounded : Icons.inventory_2_outlined),
+                        size: 16,
+                        color: isOutOfStock
+                            ? AppColors.error
+                            : (isLowStock ? AppColors.warning : AppColors.primary),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        isHindi ? 'इन्वेंटरी स्टॉक' : 'Inventory Stock',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: context.colorTextPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isOutOfStock
+                      ? context.colorErrorLight
+                      : (isLowStock ? context.colorWarningLight : context.colorSurfaceSubtle),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isOutOfStock
+                        ? AppColors.error.withValues(alpha: 0.3)
+                        : (isLowStock ? AppColors.warning.withValues(alpha: 0.3) : context.colorBorder),
+                  ),
+                ),
+                child: Text(
+                  isOutOfStock
+                      ? (isHindi ? '❌ स्टॉक समाप्त' : '❌ Out of Stock')
+                      : (isLowStock
+                          ? (isHindi ? '⚠️ कम स्टॉक (${p.stock})' : '⚠️ Low Stock (${p.stock})')
+                          : (isHindi ? '✓ उपलब्ध: ${p.stock}' : '✓ In Stock: ${p.stock}')),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isOutOfStock
+                        ? AppColors.error
+                        : (isLowStock ? AppColors.warning : AppColors.success),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Stepper + Quick Restock Chips Row
+          Row(
+            children: [
+              Text(
+                '${context.tr('stock_quick_restock')}:',
+                style: TextStyle(fontSize: 11.5, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildDeltaChip(context, p, -1, isNegative: true),
+                      _buildDeltaChip(context, p, 1),
+                      _buildDeltaChip(context, p, 5),
+                      _buildDeltaChip(context, p, 10),
+                      _buildDeltaChip(context, p, 25),
+                      _buildDeltaChip(context, p, 50),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Divider(height: 1, color: context.colorBorder),
+          const SizedBox(height: 10),
+
+          // 1-Tap Wholesale Reorder Button
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+            ),
+            icon: const Icon(Icons.playlist_add_rounded, size: 16, color: AppColors.primary),
+            label: Text(
+              context.tr('stock_reorder_btn'),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+            onPressed: () {
+              SmartStockReorderService.addToProcurementList(context, p);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeltaChip(BuildContext context, ProductModel p, int delta, {bool isNegative = false}) {
+    final label = delta > 0 ? '+$delta' : '$delta';
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        onTap: () {
+          if (p.stock + delta >= 0) {
+            context.read<ProductController>().adjustStock(p, delta);
+          }
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: isNegative ? AppColors.error.withValues(alpha: 0.08) : context.colorPrimaryLight,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isNegative ? AppColors.error.withValues(alpha: 0.25) : AppColors.primary.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: isNegative ? AppColors.error : AppColors.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // --- 5. MERCHANT INTELLIGENCE & PROFIT HUB (Centrally Controlled from Settings) ---
   Widget _buildMerchantIntelligenceCard(BuildContext context, ProductModel p) {
     final hasCost = p.costPrice > 0;
@@ -916,9 +1265,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 child: const Icon(Icons.analytics_outlined, size: 15, color: AppColors.primary),
               ),
               const SizedBox(width: 7),
-              Text(
-                'Profit & Commercials Hub',
-                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+              Expanded(
+                child: Text(
+                  'Profit & Commercials Hub',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -1031,8 +1384,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       specItems.add(MapEntry('SKU', p.sku));
     }
 
-    if (p.barcode.isNotEmpty && p.barcode != p.sku) {
+    if (p.barcode.isNotEmpty) {
       specItems.add(MapEntry('Barcode', p.barcode));
+    } else {
+      specItems.add(const MapEntry('Barcode', '+ Attach Barcode'));
     }
 
     // 2. Pricing & Negotiation Rules
@@ -1100,11 +1455,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 child: const Icon(Icons.tune_rounded, size: 15, color: AppColors.primary),
               ),
               const SizedBox(width: 7),
-              Text(
-                'Specifications & Attributes',
-                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+              Expanded(
+                child: Text(
+                  'Specifications & Attributes',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
@@ -1125,29 +1484,50 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             spacing: 8,
             runSpacing: 8,
             children: specItems.map((item) {
-              return Container(
-                constraints: const BoxConstraints(maxWidth: 300),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: context.colorSurfaceSubtle,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: context.colorBorder),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${item.key}: ',
-                      style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+              final isAttachAction = item.key == 'Barcode' && item.value == '+ Attach Barcode';
+              return InkWell(
+                onTap: isAttachAction ? () => _attachBarcode(context, p) : null,
+                borderRadius: BorderRadius.circular(9),
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: isAttachAction ? context.colorPrimaryLight : context.colorSurfaceSubtle,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: isAttachAction ? AppColors.primary.withValues(alpha: 0.4) : context.colorBorder,
+                      width: isAttachAction ? 1.5 : 1.0,
                     ),
-                    Flexible(
-                      child: Text(
-                        item.value,
-                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isAttachAction) ...[
+                        const Icon(Icons.qr_code_scanner_rounded, size: 14, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          context.isHindi ? 'बारकोड जोड़ें' : 'Attach Barcode',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ] else ...[
+                        Text(
+                          '${item.key}: ',
+                          style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                        ),
+                        Flexible(
+                          child: Text(
+                            item.value,
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               );
             }).toList(),

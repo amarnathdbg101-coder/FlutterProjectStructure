@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/storage/token_storage.dart';
 import '../models/khata_model.dart';
 
 class KhataRepository {
@@ -25,12 +25,19 @@ class KhataRepository {
       List listData = [];
       if (raw is List) {
         listData = raw;
-      } else if (raw is Map && raw['customers'] is List) {
-        listData = raw['customers'];
-      } else if (raw is Map && raw['data'] is List) {
-        listData = raw['data'];
+      } else if (raw is Map) {
+        if (raw['customers'] is List) {
+          listData = raw['customers'];
+        } else if (raw['data'] is List) {
+          listData = raw['data'];
+        } else if (raw['data'] is Map && raw['data']['customers'] is List) {
+          listData = raw['data']['customers'];
+        }
       }
-      final customers = listData.map((e) => KhataCustomerModel.fromJson(e as Map<String, dynamic>)).toList();
+      final customers = listData
+          .whereType<Map>()
+          .map((e) => KhataCustomerModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
       return ApiResponse(success: true, data: customers);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
@@ -45,12 +52,19 @@ class KhataRepository {
       List listData = [];
       if (raw is List) {
         listData = raw;
-      } else if (raw is Map && raw['transactions'] is List) {
-        listData = raw['transactions'];
-      } else if (raw is Map && raw['data'] is List) {
-        listData = raw['data'];
+      } else if (raw is Map) {
+        if (raw['transactions'] is List) {
+          listData = raw['transactions'];
+        } else if (raw['data'] is List) {
+          listData = raw['data'];
+        } else if (raw['data'] is Map && raw['data']['transactions'] is List) {
+          listData = raw['data']['transactions'];
+        }
       }
-      final txs = listData.map((e) => KhataTransactionModel.fromJson(e as Map<String, dynamic>)).toList();
+      final txs = listData
+          .whereType<Map>()
+          .map((e) => KhataTransactionModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
       return ApiResponse(success: true, data: txs);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
@@ -66,7 +80,7 @@ class KhataRepository {
   }) async {
     try {
       final clean = normalizePhone(mobile);
-      await _dio.post(
+      final res = await _dio.post(
         ApiConstants.khata,
         data: {
           'customer_name': customerName.trim(),
@@ -76,7 +90,8 @@ class KhataRepository {
           'bill_number': billNumber.trim(),
         },
       );
-      return ApiResponse(success: true, data: true);
+      final isOk = res.statusCode == 200 || res.statusCode == 201;
+      return ApiResponse(success: isOk, data: isOk);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
@@ -91,7 +106,7 @@ class KhataRepository {
   }) async {
     try {
       final clean = normalizePhone(mobile);
-      await _dio.post(
+      final res = await _dio.post(
         ApiConstants.khataRecordPayment(clean),
         data: {
           'customer_name': customerName.trim(),
@@ -100,7 +115,8 @@ class KhataRepository {
           'notes': notes.trim(),
         },
       );
-      return ApiResponse(success: true, data: true);
+      final isOk = res.statusCode == 200 || res.statusCode == 201;
+      return ApiResponse(success: isOk, data: isOk);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
@@ -140,29 +156,23 @@ class KhataRepository {
   }
 
   Future<ApiResponse<String>> getStatementPdfUrl(String mobile) async {
+    final clean = normalizePhone(mobile);
+    final token = TokenStorage.getToken() ?? '';
+    final baseUrl = ApiConstants.baseUrl;
+    final pdfPath = ApiConstants.khataStatementPdf(clean);
+    final directPdfUrl = '$baseUrl$pdfPath${token.isNotEmpty ? '?token=$token' : ''}';
+
     try {
-      final clean = normalizePhone(mobile);
       final res = await _dio.get(
-        ApiConstants.khataStatementPdf(clean),
+        pdfPath,
         options: Options(responseType: ResponseType.bytes),
       );
-      if (res.data is List<int> && (res.data as List<int>).isNotEmpty) {
-        final b64 = base64Encode(res.data as List<int>);
-        return ApiResponse(success: true, data: 'data:application/pdf;base64,$b64');
+      if (res.statusCode == 200 && res.data is List<int> && (res.data as List<int>).isNotEmpty) {
+        return ApiResponse(success: true, data: directPdfUrl);
       }
-      return ApiResponse.failure('Statement PDF could not be generated');
+      return ApiResponse(success: true, data: directPdfUrl);
     } catch (_) {
-      try {
-        final clean = normalizePhone(mobile);
-        final res = await _dio.get(ApiConstants.khataStatementPdf(clean));
-        final data = res.data is Map ? (res.data['pdf_url'] ?? res.data['url'] ?? '') : '';
-        if (data.toString().isNotEmpty) {
-          return ApiResponse(success: true, data: data.toString());
-        }
-      } catch (e) {
-        return ApiResponse.failure(ApiClient.handleError(e));
-      }
-      return ApiResponse.failure('Statement PDF unavailable');
+      return ApiResponse(success: true, data: directPdfUrl);
     }
   }
 

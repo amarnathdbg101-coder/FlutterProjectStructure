@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -6,11 +7,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/services/floor_token_cards_service.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/dynamic_upi_qr_dialog.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
+import '../../../core/widgets/price_checker_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../khata/models/khata_model.dart';
 import '../../products/models/product_model.dart';
@@ -35,6 +39,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   List<ProductModel> _matchingSearchResults = [];
   bool _isSearchingLocal = false;
   String _selectedPosCategory = 'All';
+  Timer? _posSearchDebounceTimer;
 
   KhataCustomerModel? _matchedKhataCustomer;
 
@@ -48,6 +53,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   @override
   void dispose() {
+    _posSearchDebounceTimer?.cancel();
     _scanController.dispose();
     _phoneController.dispose();
     _cashController.dispose();
@@ -57,6 +63,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   void _onSearchQueryChanged(String query, PosController pos) {
     final clean = query.trim().toLowerCase();
     if (clean.isEmpty) {
+      _posSearchDebounceTimer?.cancel();
       setState(() {
         _matchingSearchResults = [];
         _isSearchingLocal = false;
@@ -64,6 +71,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       return;
     }
 
+    // 1. Immediate in-memory match (0ms)
     final matches = pos.products.where((p) {
       final name = p.name.toLowerCase();
       final barcode = p.barcode.toLowerCase();
@@ -76,6 +84,27 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       _matchingSearchResults = matches;
       _isSearchingLocal = true;
     });
+
+    // 2. Debounced server database query (350ms) to search full database beyond initial batch
+    _posSearchDebounceTimer?.cancel();
+    if (clean.length >= 2) {
+      _posSearchDebounceTimer = Timer(const Duration(milliseconds: 350), () async {
+        if (!mounted || _scanController.text.trim().toLowerCase() != clean) return;
+        await pos.searchProducts(clean);
+        if (mounted && _scanController.text.trim().toLowerCase() == clean) {
+          final refreshedMatches = pos.products.where((p) {
+            final name = p.name.toLowerCase();
+            final barcode = p.barcode.toLowerCase();
+            final sku = p.sku.toLowerCase();
+            final category = p.category.toLowerCase();
+            return name.contains(clean) || barcode.contains(clean) || sku.contains(clean) || category.contains(clean);
+          }).take(6).toList();
+          setState(() {
+            _matchingSearchResults = refreshedMatches;
+          });
+        }
+      });
+    }
   }
 
   void _onCustomerPhoneChanged(String phone, PosController pos) {
@@ -103,37 +132,27 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
     });
   }
 
-  /// Adds item via Barcode, SKU, or Product Name from input box
-  Future<void> _handleScanOrAdd(PosController pos) async {
-    final query = _scanController.text.trim();
-    if (query.isEmpty) return;
 
-    final success = await pos.scanAndAddToCart(query);
-    if (success) {
-      _scanController.clear();
-      setState(() {
-        _matchingSearchResults = [];
-        _isSearchingLocal = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Item added to active bill!'),
-            duration: Duration(milliseconds: 800),
-            backgroundColor: AppColors.success,
-          ),
+
+  /// Opens Live Camera Barcode Scanner Viewfinder with continuous scanning
+  void _openCameraScanner(BuildContext context, PosController pos) {
+    MobileBarcodeScannerDialog.show(
+      context,
+      initialToken: pos.currentActiveToken,
+      onBarcodeScanned: (barcode) async {
+        final success = await pos.scanAndAddToCart(barcode);
+        return success;
+      },
+      onRegisterNewProduct: (barcode, name, price, mrp) async {
+        final success = await pos.quickRegisterBarcodeAndAddToCart(
+          barcode: barcode,
+          name: name,
+          price: price,
+          mrp: mrp,
         );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.tr('pos_product_not_found')),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
+        return success;
+      },
+    );
   }
 
   /// Opens Quick Add Custom Item Modal for loose charges or unlisted items
@@ -147,10 +166,13 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
-          children: const [
-            Icon(Icons.add_shopping_cart_rounded, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('Add Custom Loose Item', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          children: [
+            const Icon(Icons.add_shopping_cart_rounded, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(
+              ctx.isHindi ? 'अतिरिक्त वस्तु जोड़ें' : 'Add Custom Loose Item',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: Column(
@@ -158,9 +180,9 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           children: [
             TextField(
               controller: customNameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Item Name / Description *',
-                hintText: 'e.g. Loose Samosa, Packing Charge',
+              decoration: InputDecoration(
+                labelText: ctx.isHindi ? 'वस्तु का नाम / विवरण *' : 'Item Name / Description *',
+                hintText: ctx.isHindi ? 'उदा. समोसा, पैकिंग शुल्क' : 'e.g. Loose Samosa, Packing Charge',
               ),
             ),
             const SizedBox(height: 12),
@@ -170,8 +192,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   child: TextField(
                     controller: customPriceCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Price (₹) *',
+                    decoration: InputDecoration(
+                      labelText: ctx.isHindi ? 'मूल्य (₹) *' : 'Price (₹) *',
                       prefixText: '₹ ',
                     ),
                   ),
@@ -181,8 +203,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   child: TextField(
                     controller: customQtyCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Quantity',
+                    decoration: InputDecoration(
+                      labelText: ctx.isHindi ? 'मात्रा' : 'Quantity',
                       hintText: '1',
                     ),
                   ),
@@ -194,7 +216,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(ctx.isHindi ? 'रद्द करें' : 'Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
@@ -211,15 +233,142 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               }
 
               context.read<PosController>().addCustomItem(
-                name: name.isNotEmpty ? name : 'Custom Item',
+                name: name.isNotEmpty ? name : (ctx.isHindi ? 'अतिरिक्त वस्तु' : 'Custom Item'),
                 price: price,
                 quantity: qty > 0 ? qty : 1,
               );
               Navigator.pop(ctx);
             },
-            child: const Text('Add to Bill'),
+            child: Text(ctx.isHindi ? 'बिल में जोड़ें' : 'Add to Bill'),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Smart Parchi Auto-Cart Dialog (Parse multiline WhatsApp or grocery list)
+  void _showParchiParserDialog(BuildContext context, PosController pos) {
+    final parchiCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: BoxDecoration(
+          color: sheetCtx.colorSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+          top: 20,
+          left: 20,
+          right: 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: sheetCtx.colorPrimaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          sheetCtx.isHindi ? 'स्मार्ट पर्ची बिलिंग' : 'Smart Parchi Auto-Cart',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: sheetCtx.colorTextPrimary,
+                          ),
+                        ),
+                        Text(
+                          sheetCtx.isHindi ? 'व्हाट्सएप या ग्राहक की पर्ची का टेक्स्ट पेस्ट करें' : 'Paste customer grocery list or WhatsApp message',
+                          style: TextStyle(fontSize: 11, color: sheetCtx.colorTextMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(sheetCtx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: parchiCtrl,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: sheetCtx.isHindi
+                      ? 'उदा:\n2 kg आटा\n1 L तेल\n1 पैकेट नमक'
+                      : 'e.g.:\n2 kg Atta\n1 L Oil\n1 pkt Salt',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  minimumSize: const Size(double.infinity, 46),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 18),
+                label: Text(
+                  sheetCtx.isHindi ? 'पर्ची से सामान बिल में जोड़ें' : 'Parse List to Cart',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                ),
+                onPressed: () {
+                  final text = parchiCtrl.text.trim();
+                  if (text.isEmpty) return;
+
+                  final lines = text.split(RegExp(r'[\r\n]+'));
+                  int addedCount = 0;
+
+                  for (final line in lines) {
+                    final clean = line.trim();
+                    if (clean.isEmpty) continue;
+
+                    // Match item in catalog
+                    final match = pos.products.firstWhere(
+                      (p) => p.name.toLowerCase().contains(clean.toLowerCase()) ||
+                          clean.toLowerCase().contains(p.name.toLowerCase()),
+                      orElse: () => ProductModel(id: '', name: '', price: 0, stock: 0, category: ''),
+                    );
+
+                    if (match.id.isNotEmpty) {
+                      pos.addToCart(match);
+                      addedCount++;
+                    } else {
+                      pos.addCustomItem(name: clean, price: 10, quantity: 1);
+                      addedCount++;
+                    }
+                  }
+
+                  Navigator.pop(sheetCtx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(sheetCtx.isHindi ? '$addedCount वस्तुएं बिल में जोड़ी गईं!' : '$addedCount items added to POS cart!'),
+                      backgroundColor: AppColors.success,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -235,10 +384,13 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Row(
-          children: const [
-            Icon(Icons.discount_rounded, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('Apply Bill Discount (₹)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          children: [
+            const Icon(Icons.discount_rounded, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(
+              ctx.isHindi ? 'बिल पर छूट लगाएं (₹)' : 'Apply Bill Discount (₹)',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: Column(
@@ -249,15 +401,16 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               controller: discountCtrl,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Discount Amount (₹)',
+              decoration: InputDecoration(
+                labelText: ctx.isHindi ? 'छूट की राशि (₹)' : 'Discount Amount (₹)',
                 prefixText: '₹ ',
-                hintText: 'e.g. 50',
+                hintText: ctx.isHindi ? 'उदा. 50' : 'e.g. 50',
               ),
             ),
             const SizedBox(height: 12),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
               child: Row(
                 children: [
                   _buildQuickDiscountChip(ctx, discountCtrl, '₹10', 10),
@@ -275,7 +428,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               pos.setDiscount(0);
               Navigator.pop(ctx);
             },
-            child: const Text('Remove Discount', style: TextStyle(color: AppColors.error)),
+            child: Text(ctx.isHindi ? 'छूट हटाएं' : 'Remove Discount', style: const TextStyle(color: AppColors.error)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
@@ -284,7 +437,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               pos.setDiscount(d);
               Navigator.pop(ctx);
             },
-            child: const Text('Apply Discount'),
+            child: Text(ctx.isHindi ? 'छूट लागू करें' : 'Apply Discount'),
           ),
         ],
       ),
@@ -400,7 +553,9 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                       itemBuilder: (ctx, idx) {
                         final b = bills[idx];
                         final diffMinutes = DateTime.now().difference(b.heldAt).inMinutes;
-                        final timeAgo = diffMinutes < 1 ? 'Just now' : '${diffMinutes}m ago';
+                        final timeAgo = diffMinutes < 1
+                            ? (sheetCtx.isHindi ? 'अभी-अभी' : 'Just now')
+                            : '$diffMinutes${sheetCtx.isHindi ? "मि पूर्व" : "m ago"}';
 
                         return Container(
                           padding: const EdgeInsets.all(12),
@@ -433,7 +588,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: Text(
-                                            '${b.totalItemCount} Items',
+                                            '${b.totalItemCount} ${sheetCtx.isHindi ? "वस्तुएं" : "Items"}',
                                             style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
                                           ),
                                         ),
@@ -464,7 +619,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                               const SizedBox(width: 8),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
-                                tooltip: 'Discard Held Bill',
+                                tooltip: sheetCtx.isHindi ? 'पार्क बिल हटाएं' : 'Discard Held Bill',
                                 onPressed: () {
                                   pos.deleteHeldBill(b);
                                   if (pos.heldBills.isEmpty) {
@@ -510,6 +665,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   Widget _buildPosCategoryPill(BuildContext context, String catName, PosController pos) {
     final isSel = _selectedPosCategory.toLowerCase() == catName.toLowerCase();
+    final displayTitle = catName == 'All' ? (context.isHindi ? 'सभी' : 'All') : catName;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: InkWell(
@@ -521,8 +677,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               _isSearchingLocal = false;
             } else {
               _matchingSearchResults = pos.products
-                  .where((p) => p.category.toLowerCase().contains(catName.toLowerCase()))
-                  .take(8)
+                  .where((p) => p.category.toLowerCase().trim() == catName.toLowerCase().trim())
+                  .take(12)
                   .toList();
               _isSearchingLocal = true;
             }
@@ -539,7 +695,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
           ),
           child: Text(
-            catName,
+            displayTitle,
             style: TextStyle(
               fontSize: 11,
               fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
@@ -591,7 +747,12 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       buffer.writeln('${isHindi ? "छूट" : "Discount"}: -₹${sale.discountAmount.toStringAsFixed(2)}');
     }
     buffer.writeln('*${isHindi ? "कुल राशि (TOTAL)" : "GRAND TOTAL"}: ₹${sale.totalAmount.toStringAsFixed(2)}*');
-    buffer.writeln('${isHindi ? "भुगतान माध्यम" : "Payment Mode"}: ${sale.paymentMethod.toUpperCase()}');
+    final payModeDisplay = sale.paymentMethod == 'split'
+        ? (isHindi
+            ? 'स्प्लिट (नकद ₹${sale.splitPayments?.cashAmount.toStringAsFixed(0) ?? "0"} + UPI ₹${sale.splitPayments?.onlineAmount.toStringAsFixed(0) ?? "0"})'
+            : 'SPLIT (Cash ₹${sale.splitPayments?.cashAmount.toStringAsFixed(0) ?? "0"} + UPI ₹${sale.splitPayments?.onlineAmount.toStringAsFixed(0) ?? "0"})')
+        : sale.paymentMethod.toUpperCase();
+    buffer.writeln('${isHindi ? "भुगतान माध्यम" : "Payment Mode"}: $payModeDisplay');
     buffer.writeln('--------------------------------');
     buffer.writeln(isHindi
         ? '🙏 हमारे यहाँ पधारने के लिए धन्यवाद!\nफिर मिलेंगे!'
@@ -618,14 +779,14 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 54),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Bill Generated Successfully!',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              ctx.isHindi ? 'बिल सफलतापूर्वक बन गया!' : 'Bill Generated Successfully!',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
             Text(
-              'Bill #${sale.billNumber ?? "1001"}',
+              '${ctx.isHindi ? "बिल संख्या" : "Bill"} #${sale.billNumber ?? "1001"}',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextMuted),
             ),
             const SizedBox(height: 12),
@@ -641,7 +802,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total Amount:', style: TextStyle(fontWeight: FontWeight.w600)),
+                      Text(ctx.isHindi ? 'कुल राशि:' : 'Total Amount:', style: const TextStyle(fontWeight: FontWeight.w600)),
                       Text(
                         '₹${sale.totalAmount.toStringAsFixed(2)}',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary),
@@ -652,8 +813,15 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Payment Mode:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                      Text(sale.paymentMethod.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text(ctx.isHindi ? 'भुगतान माध्यम:' : 'Payment Mode:', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      Text(
+                        sale.paymentMethod == 'split'
+                            ? (ctx.isHindi
+                                ? 'स्प्लिट (नकद ₹${sale.splitPayments?.cashAmount.toStringAsFixed(0) ?? "0"} + UPI ₹${sale.splitPayments?.onlineAmount.toStringAsFixed(0) ?? "0"})'
+                                : 'SPLIT (Cash ₹${sale.splitPayments?.cashAmount.toStringAsFixed(0) ?? "0"} + UPI ₹${sale.splitPayments?.onlineAmount.toStringAsFixed(0) ?? "0"})')
+                            : sale.paymentMethod.toUpperCase(),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
                   if (sale.customerPhone.isNotEmpty) ...[
@@ -661,7 +829,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Customer Mobile:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        Text(ctx.isHindi ? 'ग्राहक मोबाइल:' : 'Customer Mobile:', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                         Text(sale.customerPhone, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       ],
                     ),
@@ -678,7 +846,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 minimumSize: const Size(double.infinity, 44),
               ),
               icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
-              label: const Text('Share Bill on WhatsApp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: Text(ctx.isHindi ? 'व्हाट्सएप पर बिल भेजें' : 'Share Bill on WhatsApp', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               onPressed: () async {
                 final receiptText = _formatBillReceiptText(ctx, sale);
                 final cleanPhone = sale.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
@@ -732,7 +900,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 minimumSize: const Size(double.infinity, 42),
               ),
               icon: const Icon(Icons.picture_as_pdf_rounded, size: 17, color: AppColors.primary),
-              label: const Text('Print / Save Thermal Receipt PDF', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: Text(ctx.isHindi ? 'थर्मल रसीद प्रिंट / सेव करें' : 'Print / Save Thermal Receipt PDF', style: const TextStyle(fontWeight: FontWeight.bold)),
               onPressed: () {
                 final shop = context.read<AuthController>().currentShop;
                 final shopName = shop?.name ?? 'ShopSilo Retail Store';
@@ -748,7 +916,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               minimumSize: const Size(double.infinity, 46),
             ),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Start Next Bill', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(ctx.isHindi ? 'अगला बिल शुरू करें' : 'Start Next Bill', style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -759,6 +927,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   Widget build(BuildContext context) {
     super.build(context);
     final pos = context.watch<PosController>();
+    context.watch<LanguageController>();
     final isWide = Responsive.isWide(context);
     final today24hRevenue = pos.today24hRevenue;
 
@@ -774,7 +943,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           ),
           leading: IconButton(
             icon: Icon(Icons.arrow_back_rounded, color: context.colorTextPrimary, size: 22),
-            tooltip: 'Back',
+            tooltip: context.isHindi ? 'वापस' : 'Back',
             onPressed: () {
               if (Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
@@ -785,10 +954,11 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           ),
           title: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             child: Row(
               children: [
                 Text(
-                  'POS Billing Counter',
+                  context.isHindi ? 'पीओएस बिलिंग काउंटर' : 'POS Billing Counter',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
                 ),
                 const SizedBox(width: 6),
@@ -799,7 +969,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '${pos.totalItemCount} Items',
+                    '${pos.totalItemCount} ${context.isHindi ? "सामान" : "Items"}',
                     style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.primary),
                   ),
                 ),
@@ -818,7 +988,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                       child: Row(
                         children: [
                           Text(
-                            'Today 24h: ₹${today24hRevenue.toStringAsFixed(0)}',
+                            '${context.isHindi ? "24h बिक्री" : "Today 24h"}: ₹${today24hRevenue.toStringAsFixed(0)}',
                             style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.success),
                           ),
                           const SizedBox(width: 3),
@@ -832,6 +1002,11 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
+              tooltip: context.isHindi ? 'स्मार्ट पर्ची बिलिंग' : 'Smart Parchi Auto-Cart',
+              onPressed: () => _showParchiParserDialog(context, pos),
+            ),
             if (pos.heldBills.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
@@ -851,7 +1026,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                         const Icon(Icons.pause_circle_filled_rounded, size: 14, color: AppColors.warning),
                         const SizedBox(width: 4),
                         Text(
-                          'Held (${pos.heldBills.length})',
+                          '${context.isHindi ? "पार्क" : "Held"} (${pos.heldBills.length})',
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.warning),
                         ),
                       ],
@@ -862,13 +1037,13 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             if (pos.cart.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.pause_circle_outline_rounded, color: AppColors.warning, size: 20),
-                tooltip: 'Hold / Park Active Bill',
+                tooltip: context.isHindi ? 'बिल पार्क करें' : 'Hold / Park Active Bill',
                 onPressed: () {
                   final ok = pos.holdCurrentBill();
                   if (ok && context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(context.isHindi ? '✓ बिल पार्क कर दिया गया (Hold)' : '✓ Active bill parked on hold'),
+                        content: Text(context.isHindi ? '✓ बिल पार्क कर दिया गया' : '✓ Active bill parked on hold'),
                         backgroundColor: AppColors.warning,
                         duration: const Duration(seconds: 2),
                       ),
@@ -877,25 +1052,37 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 },
               ),
             IconButton(
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: AppColors.primary),
+              tooltip: context.isHindi ? 'कैमरा बारकोड स्कैनर' : 'Camera Barcode Scanner',
+              onPressed: () => _openCameraScanner(context, pos),
+            ),
+            IconButton(
               icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
-              tooltip: 'Refresh Billing Catalog',
+              tooltip: context.isHindi ? 'कैटलॉग रीफ्रेश करें' : 'Refresh Billing Catalog',
               onPressed: () async {
                 await context.read<PosController>().loadCatalog();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('✓ POS Billing Catalog Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                    SnackBar(
+                      content: Text(context.isHindi ? '✓ पीओएस कैटलॉग रीफ्रेश हुआ' : '✓ POS Billing Catalog Refreshed'),
+                      backgroundColor: AppColors.success,
+                      duration: const Duration(seconds: 1),
+                    ),
                   );
                 }
               },
             ),
             if (pos.cart.isNotEmpty)
-              TextButton.icon(
-                icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.error, size: 18),
-                label: const Text('Clear Bill', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.error, size: 20),
+                tooltip: context.isHindi ? 'बिल साफ़ करें' : 'Clear Bill',
                 onPressed: () {
                   pos.clearCart();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('POS Cart Cleared!'), duration: Duration(milliseconds: 800)),
+                    SnackBar(
+                      content: Text(context.isHindi ? 'बिल साफ़ कर दिया गया' : 'POS Cart Cleared!'),
+                      duration: const Duration(milliseconds: 800),
+                    ),
                   );
                 },
               ),
@@ -912,12 +1099,502 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
     );
   }
 
+  /// Real-Time Multi-Basket Floor Selling Running Tabs Bar
+  Widget _buildActiveTokensBar(BuildContext context, PosController pos) {
+    final activeBaskets = pos.activeBaskets;
+    final currentToken = pos.currentActiveToken;
+
+    // Collect all unique tokens to display horizontally:
+    // 1. Current token
+    // 2. Any tokens currently running on server / other family members' devices
+    // 3. Quick slots T-01 through T-06
+    final Set<String> tokenSet = {};
+    tokenSet.add(currentToken);
+    for (final b in activeBaskets) {
+      if (b.label.trim().isNotEmpty) {
+        tokenSet.add(b.label.trim().toUpperCase());
+      }
+    }
+    for (int i = 1; i <= 6; i++) {
+      tokenSet.add('T-${i.toString().padLeft(2, '0')}');
+    }
+
+    final tokens = tokenSet.toList();
+    tokens.sort((a, b) {
+      if (a == currentToken) return -1;
+      if (b == currentToken) return 1;
+      final aRunning = activeBaskets.any((x) => x.label.toUpperCase() == a && x.items.isNotEmpty);
+      final bRunning = activeBaskets.any((x) => x.label.toUpperCase() == b && x.items.isNotEmpty);
+      if (aRunning && !bRunning) return -1;
+      if (!aRunning && bRunning) return 1;
+      return a.compareTo(b);
+    });
+
+    final isHindi = context.isHindi;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        border: Border(
+          bottom: BorderSide(color: context.colorBorder.withValues(alpha: 0.6)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.success,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isHindi ? 'लाइव फ्लोर बास्केट्स' : 'Live Floor Baskets',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: context.colorTextSecondary,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const Spacer(),
+              if (activeBaskets.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${activeBaskets.length} ${isHindi ? "सक्रिय" : "Active"}',
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.warning),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                // + New Token button
+                InkWell(
+                  onTap: () => _showTokenPickerSheet(context, pos),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: context.colorPrimaryLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add_circle_outline_rounded, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          isHindi ? 'नया टोकन' : '+ Token',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Horizontal scroll of tokens
+                ...tokens.map((tok) {
+                  final isSelected = tok == currentToken;
+                  final runningBasket = activeBaskets.firstWhere(
+                    (b) => b.label.toUpperCase() == tok,
+                    orElse: () => PosParkedBill(id: '', label: '', items: [], totalAmount: 0),
+                  );
+                  final hasItems = isSelected ? pos.cart.isNotEmpty : runningBasket.items.isNotEmpty;
+                  final itemCount = isSelected ? pos.totalItemCount : runningBasket.totalItemCount;
+                  final totalAmt = isSelected ? pos.grandTotal : runningBasket.totalAmount;
+                  final elapsedMinutes = (hasItems && runningBasket.id.isNotEmpty)
+                      ? DateTime.now().difference(runningBasket.updatedAt).inMinutes
+                      : 0;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: InkWell(
+                      onTap: () => pos.switchToken(tok),
+                      borderRadius: BorderRadius.circular(8),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.primary
+                              : (hasItems ? AppColors.warning.withValues(alpha: 0.12) : context.colorSurfaceSubtle),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppColors.primary
+                                : (hasItems ? AppColors.warning.withValues(alpha: 0.5) : context.colorBorder),
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              tok,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected
+                                    ? Colors.white
+                                    : (hasItems ? context.colorTextPrimary : context.colorTextMuted),
+                              ),
+                            ),
+                            if (hasItems) ...[
+                              const SizedBox(width: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.white.withValues(alpha: 0.25)
+                                      : AppColors.warning.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  '$itemCount • ₹${totalAmt.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected ? Colors.white : AppColors.warning,
+                                  ),
+                                ),
+                              ),
+                              if (elapsedMinutes >= 15) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.white.withValues(alpha: 0.3)
+                                        : (elapsedMinutes >= 30
+                                            ? AppColors.error.withValues(alpha: 0.2)
+                                            : AppColors.warning.withValues(alpha: 0.2)),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '${elapsedMinutes >= 30 ? "🚨" : "⏱️"}${elapsedMinutes}m',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : (elapsedMinutes >= 30 ? AppColors.error : AppColors.warning),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Opens interactive Running Token Picker modal with 20 quick tokens & custom names
+  void _showTokenPickerSheet(BuildContext context, PosController pos) {
+    final customCtrl = TextEditingController();
+    final isHindi = context.isHindi;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final activeBaskets = pos.activeBaskets;
+
+          return Container(
+            decoration: BoxDecoration(
+              color: ctx.colorSurface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              top: 16,
+              left: 20,
+              right: 20,
+            ),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+              maxWidth: 580,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: ctx.colorBorder,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: ctx.colorPrimaryLight,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.confirmation_number_rounded, color: AppColors.primary, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isHindi ? 'ग्राहक बिलिंग टोकन चुनें' : 'Select Customer Basket Token',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: ctx.colorTextPrimary,
+                              ),
+                            ),
+                            Text(
+                              isHindi
+                                  ? 'दुकान में घूमते ग्राहक को टोकन दें और सामान स्कैन करते रहें'
+                                  : 'Assign a floor token while scanning items for parallel customers',
+                              style: TextStyle(fontSize: 11, color: ctx.colorTextMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        onPressed: () => Navigator.pop(sheetCtx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Custom Name / Token Field
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: customCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            labelText: isHindi ? 'कस्टम टोकन या ग्राहक का नाम' : 'Custom Token or Customer Name',
+                            hintText: isHindi ? 'उदा. T-25, रमेश' : 'e.g. T-25, Ramesh',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () {
+                          final val = customCtrl.text.trim();
+                          if (val.isNotEmpty) {
+                            pos.switchToken(val);
+                            Navigator.pop(sheetCtx);
+                          }
+                        },
+                        child: Text(isHindi ? 'शुरू करें' : 'Switch'),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+                  Text(
+                    isHindi ? 'त्वरित टोकन स्लॉट (T-01 से T-20):' : 'Quick Token Slots (T-01 to T-20):',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: ctx.colorTextSecondary),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 4-column Grid of Tokens T-01 to T-20
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(20, (index) {
+                      final tokenLabel = 'T-${(index + 1).toString().padLeft(2, '0')}';
+                      final isSelected = tokenLabel == pos.currentActiveToken;
+                      final running = activeBaskets.firstWhere(
+                        (b) => b.label.toUpperCase() == tokenLabel,
+                        orElse: () => PosParkedBill(id: '', label: '', items: [], totalAmount: 0),
+                      );
+                      final hasItems = isSelected ? pos.cart.isNotEmpty : running.items.isNotEmpty;
+                      final count = isSelected ? pos.totalItemCount : running.totalItemCount;
+                      final amt = isSelected ? pos.grandTotal : running.totalAmount;
+
+                      final elapsed = (hasItems && running.id.isNotEmpty)
+                          ? DateTime.now().difference(running.updatedAt).inMinutes
+                          : 0;
+
+                      return InkWell(
+                        onTap: () {
+                          pos.switchToken(tokenLabel);
+                          Navigator.pop(sheetCtx);
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          width: (MediaQuery.of(ctx).size.width.clamp(320, 540) - 40 - 24) / 4,
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.primary
+                                : (hasItems ? AppColors.warning.withValues(alpha: 0.12) : ctx.colorSurfaceSubtle),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : (hasItems ? AppColors.warning.withValues(alpha: 0.6) : ctx.colorBorder),
+                              width: isSelected ? 1.8 : 1.0,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                tokenLabel,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : (hasItems ? context.colorTextPrimary : ctx.colorTextMuted),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                isSelected
+                                    ? (isHindi ? 'सक्रिय' : 'Active')
+                                    : (hasItems
+                                        ? (elapsed >= 15
+                                            ? '$count • ₹${amt.toStringAsFixed(0)} (${elapsed}m)'
+                                            : '$count • ₹${amt.toStringAsFixed(0)}')
+                                        : (isHindi ? 'खाली' : 'Free')),
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white70
+                                      : (hasItems
+                                          ? (elapsed >= 30 ? AppColors.error : AppColors.warning)
+                                          : AppColors.success),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: ctx.colorSurfaceSubtle,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: ctx.colorBorder),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: ctx.colorPrimaryLight,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.print_rounded, color: AppColors.primary, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isHindi ? 'फ्लोर टोकन कार्ड प्रिंट करें' : 'Print Floor Token Cards',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                isHindi ? 'A4 शीट पर T-01 से T-20 तक 20 लैमिनेटेड कार्ड (QR कोड सहित)' : '20 laminated cards (T-01 to T-20) with QR codes on 1 A4 sheet',
+                                style: TextStyle(fontSize: 10.5, color: ctx.colorTextMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.download_rounded, size: 16),
+                          label: Text(isHindi ? 'प्रिंट / PDF' : 'Print / PDF', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: () {
+                            Navigator.pop(sheetCtx);
+                            final currentShop = context.read<AuthController>().currentShop;
+                            FloorTokenCardsService.printFloorTokens(
+                              context,
+                              shopName: currentShop?.name ?? 'ShopSilo Store',
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// Responsive Desktop 2-Column POS Billing Terminal Layout
   Widget _buildDesktopTerminal(BuildContext context, PosController pos) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Left Main Column: Fast Scan Bar & Active Bill Table
+        // Left Main Column: Tokens Bar, Fast Scan Bar & Active Bill Table
         Expanded(
           flex: 6,
           child: Padding(
@@ -925,6 +1602,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _buildActiveTokensBar(context, pos),
+                const SizedBox(height: 12),
                 _buildFastScanBar(context, pos),
                 const SizedBox(height: 12),
                 Expanded(child: _buildActiveBillTable(context, pos)),
@@ -950,8 +1629,9 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   Widget _buildMobileTerminal(BuildContext context, PosController pos) {
     return Column(
       children: [
+        _buildActiveTokensBar(context, pos),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: _buildFastScanBar(context, pos),
         ),
         Expanded(child: _buildActiveBillTable(context, pos)),
@@ -962,161 +1642,236 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   /// Fast Scan & Search Bar with Auto-Add and Live Overlay Matches
   Widget _buildFastScanBar(BuildContext context, PosController pos) {
+    final dynamicCategories = [
+      'All',
+      ...pos.products
+          .map((p) => p.category.trim())
+          .where((c) => c.isNotEmpty)
+          .toSet()
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppProductSearchBar(
-          controller: _scanController,
-          autoFocus: true,
-          hintText: 'Scan Barcode, SKU or type item name...',
-          showBarcodeScanner: true,
-          onBarcodeScan: () => _handleScanOrAdd(pos),
-          onChanged: (val) => _onSearchQueryChanged(val, pos),
-          onClear: () {
-            setState(() {
-              _matchingSearchResults = [];
-              _isSearchingLocal = false;
-            });
-          },
+        Row(
+          children: [
+            Expanded(
+              child: AppProductSearchBar(
+                controller: _scanController,
+                autoFocus: true,
+                hintText: context.isHindi
+                    ? 'बारकोड, SKU स्कैन करें या नाम लिखें...'
+                    : 'Scan Barcode, SKU or type item name...',
+                showBarcodeScanner: true,
+                onBarcodeScan: () => _openCameraScanner(context, pos),
+                onChanged: (val) => _onSearchQueryChanged(val, pos),
+                onClear: () {
+                  setState(() {
+                    _matchingSearchResults = [];
+                    _isSearchingLocal = false;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => _openCameraScanner(context, pos),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.qr_code_scanner_rounded, size: 20, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Text(
+                      context.isHindi ? 'स्कैनर' : 'Scan',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
 
-        // 1-Tap Quick Category Shortcuts Bar
+        // 1-Tap Quick Dynamic Category Shortcuts Bar
         if (pos.products.isNotEmpty) ...[
           const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             child: Row(
-              children: [
-                _buildPosCategoryPill(context, 'All', pos),
-                _buildPosCategoryPill(context, 'Grocery', pos),
-                _buildPosCategoryPill(context, 'Dairy', pos),
-                _buildPosCategoryPill(context, 'Snacks', pos),
-                _buildPosCategoryPill(context, 'Beverages', pos),
-                _buildPosCategoryPill(context, 'Personal Care', pos),
-                _buildPosCategoryPill(context, 'Household', pos),
-              ],
+              children: dynamicCategories
+                  .map((c) => _buildPosCategoryPill(context, c, pos))
+                  .toList(),
             ),
           ),
         ],
 
-          // LIVE AUTO-COMPLETE MATCHES OVERLAY
-          if (_isSearchingLocal && _matchingSearchResults.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              decoration: BoxDecoration(
-                color: context.colorSurfaceSubtle,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.colorBorder),
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: _matchingSearchResults.length,
-                separatorBuilder: (_, _) => Divider(height: 1, color: context.colorBorder),
-                itemBuilder: (ctx, idx) {
-                  final p = _matchingSearchResults[idx];
-                  return ListTile(
-                    dense: true,
-                    leading: Container(
+        // LIVE AUTO-COMPLETE MATCHES OVERLAY
+        if (_isSearchingLocal && _matchingSearchResults.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: context.colorSurfaceSubtle,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: context.colorBorder),
+            ),
+            child: ListView.separated(
+              physics: const BouncingScrollPhysics(),
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: _matchingSearchResults.length,
+              separatorBuilder: (_, _) => Divider(height: 1, color: context.colorBorder),
+              itemBuilder: (ctx, idx) {
+                final p = _matchingSearchResults[idx];
+                return ListTile(
+                  dense: true,
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: context.colorSurface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: context.colorBorder),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: AppProductImage(
+                      imageUrl: p.imageUrl,
                       width: 36,
                       height: 36,
-                      decoration: BoxDecoration(
-                        color: context.colorSurface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: context.colorBorder),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: AppProductImage(
-                        imageUrl: p.imageUrl,
-                        width: 36,
-                        height: 36,
-                        expand: true,
-                        fit: BoxFit.cover,
-                        borderRadius: BorderRadius.circular(8),
-                        fallbackIcon: Icons.inventory_2_outlined,
-                        fallbackIconSize: 18,
-                      ),
-                    ),
-                    title: Text(p.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: context.colorTextPrimary)),
-                    subtitle: Text('${p.category} • ₹${p.price.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
-                    trailing: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        minimumSize: const Size(60, 32),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                      onPressed: () {
-                        pos.addToCart(p);
-                        _scanController.clear();
-                        setState(() {
-                          _matchingSearchResults = [];
-                          _isSearchingLocal = false;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${p.name} added to bill!'),
-                            duration: const Duration(milliseconds: 800),
-                            backgroundColor: AppColors.success,
-                          ),
-                        );
-                      },
-                      child: const Text('+ Add', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-
-          // Quick Action Bar: Custom Item & Fast Shortcuts (Zero Overflow Scroll)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 14),
-                  label: const Text('+ Loose / Custom Item', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                  onPressed: () => _showAddCustomItemDialog(context),
-                ),
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () => context.go('/merchant/today-sales'),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: context.colorPrimaryLight,
+                      expand: true,
+                      fit: BoxFit.cover,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.history_toggle_off_rounded, size: 14, color: AppColors.primary),
-                        SizedBox(width: 4),
-                        Text('Today 24h Sales Summary', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      ],
+                      fallbackIcon: Icons.inventory_2_outlined,
+                      fallbackIconSize: 18,
                     ),
                   ),
-                ),
-              ],
+                  title: Text(p.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: context.colorTextPrimary)),
+                  subtitle: Text('${p.category} • ₹${p.price.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
+                  trailing: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      minimumSize: const Size(60, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                    onPressed: () {
+                      pos.addToCart(p);
+                      _scanController.clear();
+                      setState(() {
+                        _matchingSearchResults = [];
+                        _isSearchingLocal = false;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.isHindi ? '${p.name} बिल में जोड़ दिया गया!' : '${p.name} added to bill!'),
+                          duration: const Duration(milliseconds: 700),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    },
+                    child: Text(context.isHindi ? '+ जोड़ें' : '+ Add', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                );
+              },
             ),
           ),
         ],
-      );
+        const SizedBox(height: 8),
+
+        // Quick Action Bar: Custom Item & Fast Shortcuts (Zero Overflow Scroll)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              InkWell(
+                onTap: () => PriceCheckerDialog.show(context),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: context.colorSurfaceSubtle,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: context.colorBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.qr_code_scanner_rounded, size: 14, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        context.tr('price_checker_title'),
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.add_shopping_cart_rounded, size: 14),
+                label: Text(context.isHindi ? '+ अतिरिक्त वस्तु' : '+ Loose / Custom Item', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                onPressed: () => _showAddCustomItemDialog(context),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => context.go('/merchant/today-sales'),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: context.colorPrimaryLight,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.history_toggle_off_rounded, size: 14, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        context.isHindi ? 'आज की 24h बिक्री सारांश' : 'Today 24h Sales Summary',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  /// Active Bill Receipt Table with Proper Item Deletion & Steppers
+  /// Active Bill Receipt Table with Dedicated Tile & 60-120 FPS Steppers
   Widget _buildActiveBillTable(BuildContext context, PosController pos) {
     if (pos.cart.isEmpty) {
       return Center(
         child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1130,26 +1885,46 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               ),
               const SizedBox(height: 16),
               Text(
-                'POS Billing Counter Ready',
+                context.isHindi ? 'बिलिंग काउंटर तैयार है' : 'POS Billing Counter Ready',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
               ),
               const SizedBox(height: 6),
-              Text(
-                'Scan product barcode, SKU or type item name above to start billing.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12.5, color: context.colorTextMuted),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  context.isHindi
+                      ? 'बिलिंग शुरू करने के लिए बारकोड स्कैन करें या उत्पाद का नाम लिखें।'
+                      : 'Scan product barcode, SKU or type item name above to start billing.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12.5, color: context.colorTextMuted),
+                ),
               ),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 1,
+                    ),
+                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                    label: Text(
+                      context.isHindi ? 'कैमरा से बारकोड स्कैन करें' : 'Scan with Camera',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: () => _openCameraScanner(context, pos),
+                  ),
+                  OutlinedButton.icon(
                     icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                    label: const Text('+ Add Loose Charge'),
+                    label: Text(context.isHindi ? '+ अतिरिक्त वस्तु जोड़ें' : '+ Add Loose Charge'),
                     onPressed: () => _showAddCustomItemDialog(context),
                   ),
-                  const SizedBox(width: 10),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.history_toggle_off_rounded, size: 18),
                     label: Text(context.tr('today_sales_title')),
@@ -1181,144 +1956,59 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
             child: Row(
               children: [
-                Expanded(flex: 4, child: Text('ITEM NAME', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted))),
-                Expanded(flex: 3, child: Text('QTY', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted))),
-                Expanded(flex: 3, child: Text('PRICE (₹)', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted))),
+                Expanded(
+                  flex: 4,
+                  child: Text(
+                    context.isHindi ? 'वस्तु का नाम' : 'ITEM NAME',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    context.isHindi ? 'मात्रा' : 'QTY',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    context.isHindi ? 'मूल्य (₹)' : 'PRICE (₹)',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                  ),
+                ),
                 const SizedBox(width: 36),
               ],
             ),
           ),
 
-          // Table Items List
+          // Table Items List with 60-120 FPS Bouncing Physics & Cache Extent
           Expanded(
             child: ListView.separated(
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: pos.cart.length,
               separatorBuilder: (_, _) => Divider(height: 1, color: context.colorBorder),
               itemBuilder: (context, idx) {
                 final item = pos.cart[idx];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    children: [
-                      // Item Image Thumbnail
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: AppProductImage(
-                          imageUrl: item.product.imageUrl,
-                          width: 38,
-                          height: 38,
-                          fit: BoxFit.cover,
-                          fallbackIcon: Icons.inventory_2_outlined,
-                        ),
+                return _PosCartItemTile(
+                  key: ValueKey(item.product.id.isNotEmpty ? item.product.id : 'custom_${item.product.name}_$idx'),
+                  item: item,
+                  onIncrement: () => pos.incrementQuantity(item),
+                  onDecrement: () => pos.decrementQuantity(item),
+                  onRemove: () {
+                    final removedName = item.product.name;
+                    pos.removeFromCart(item);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.isHindi ? 'वस्तु "$removedName" हटा दी गई' : 'Item "$removedName" removed from bill'),
+                        duration: const Duration(milliseconds: 700),
+                        backgroundColor: AppColors.error,
                       ),
-                      const SizedBox(width: 10),
-
-                      // Item Name & Unit Price
-                      Expanded(
-                        flex: 4,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.product.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colorTextPrimary),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '₹${item.customPrice.toStringAsFixed(0)} / ${item.product.unit}',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.colorTextMuted),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Quantity Stepper
-                      Expanded(
-                        flex: 3,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            InkWell(
-                              onTap: () {
-                                final itemName = item.product.name;
-                                pos.decrementQuantity(item);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Updated quantity for "$itemName"'),
-                                    duration: const Duration(milliseconds: 600),
-                                  ),
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: context.colorSurfaceSubtle,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: context.colorBorder),
-                                ),
-                                child: const Icon(Icons.remove_rounded, size: 14),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              child: Text(
-                                '${item.quantity}',
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
-                              ),
-                            ),
-                            InkWell(
-                              onTap: () {
-                                pos.incrementQuantity(item);
-                              },
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: context.colorPrimaryLight,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                                ),
-                                child: const Icon(Icons.add_rounded, size: 14, color: AppColors.primary),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Item Total
-                      Expanded(
-                        flex: 3,
-                        child: Text(
-                          '₹${item.total.toStringAsFixed(0)}',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: context.colorTextPrimary),
-                        ),
-                      ),
-
-                      // 🗑️ PROPER ITEM DELETION BUTTON WITH INSTANT FEEDBACK
-                      IconButton(
-                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                        padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
-                        tooltip: 'Remove Item',
-                        onPressed: () {
-                          final removedName = item.product.name;
-                          pos.removeFromCart(item);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Item "$removedName" removed from bill'),
-                              duration: const Duration(milliseconds: 800),
-                              backgroundColor: AppColors.error,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -1333,18 +2023,22 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
     _phoneController.text = pos.customerPhone;
 
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. CUSTOMER LINK & KHATA
-          Text('CUSTOMER MOBILE (OPTIONAL)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted)),
+          Text(
+            context.isHindi ? 'ग्राहक मोबाइल (वैकल्पिक)' : 'CUSTOMER MOBILE (OPTIONAL)',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _phoneController,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              hintText: 'Enter 10-digit customer mobile...',
-              prefixIcon: Icon(Icons.phone_outlined, size: 18),
+            decoration: InputDecoration(
+              hintText: context.isHindi ? '10 अंकों का ग्राहक मोबाइल दर्ज करें...' : 'Enter 10-digit customer mobile...',
+              prefixIcon: const Icon(Icons.phone_outlined, size: 18),
             ),
             onChanged: (val) => _onCustomerPhoneChanged(val, pos),
           ),
@@ -1365,13 +2059,13 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Khata Linked: ${_matchedKhataCustomer!.name}',
+                      context.isHindi ? 'खाता जुड़ा: ${_matchedKhataCustomer!.name}' : 'Khata Linked: ${_matchedKhataCustomer!.name}',
                       style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Text(
-                    'Udhar: ₹${_matchedKhataCustomer!.balance.toStringAsFixed(0)}',
+                    context.isHindi ? 'उधार: ₹${_matchedKhataCustomer!.balance.toStringAsFixed(0)}' : 'Udhar: ₹${_matchedKhataCustomer!.balance.toStringAsFixed(0)}',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -1385,31 +2079,61 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           const SizedBox(height: 14),
 
           // 2. PAYMENT METHOD SELECTOR
-          Text('PAYMENT METHOD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted)),
+          Text(
+            context.isHindi ? 'भुगतान माध्यम' : 'PAYMENT METHOD',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+          ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              _PaymentModeChip(
-                label: '💵 Cash',
-                selected: pos.paymentMethod == 'cash',
-                onTap: () => pos.setPaymentMethod('cash'),
-              ),
-              const SizedBox(width: 8),
-              _PaymentModeChip(
-                label: '📱 UPI QR',
-                selected: pos.paymentMethod == 'upi',
-                onTap: () {
-                  pos.setPaymentMethod('upi');
-                  showDynamicUpiQrDialog(context, amount: pos.grandTotal);
-                },
-              ),
-              const SizedBox(width: 8),
-              _PaymentModeChip(
-                label: '📖 Khata Udhar',
-                selected: pos.paymentMethod == 'khata',
-                onTap: () => pos.setPaymentMethod('khata'),
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _PaymentModeChip(
+                  label: context.isHindi ? '💵 नकद' : '💵 Cash',
+                  selected: pos.paymentMethod == 'cash',
+                  onTap: () => pos.setPaymentMethod('cash'),
+                ),
+                const SizedBox(width: 8),
+                _PaymentModeChip(
+                  label: context.isHindi ? '📱 यूपीआई' : '📱 UPI QR',
+                  selected: pos.paymentMethod == 'upi',
+                  onTap: () {
+                    pos.setPaymentMethod('upi');
+                    if (pos.grandTotal > 0) {
+                      showDynamicUpiQrDialog(context, amount: pos.grandTotal);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.isHindi
+                              ? 'UPI QR दिखाने के लिए कार्ट में उत्पाद जोड़ें'
+                              : 'Add items to cart to generate dynamic UPI QR code'),
+                          backgroundColor: AppColors.primary,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                _PaymentModeChip(
+                  label: context.isHindi ? '⚡ स्प्लिट (नकद+UPI)' : '⚡ Split (Cash+UPI)',
+                  selected: pos.paymentMethod == 'split',
+                  onTap: () {
+                    pos.setPaymentMethod('split');
+                    if (pos.splitCashAmount <= 0 && pos.grandTotal > 0) {
+                      final half = (pos.grandTotal / 2).roundToDouble();
+                      pos.setSplitCashAmount(half);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                _PaymentModeChip(
+                  label: context.isHindi ? '📖 खाता उधार' : '📖 Khata Udhar',
+                  selected: pos.paymentMethod == 'khata',
+                  onTap: () => pos.setPaymentMethod('khata'),
+                ),
+              ],
+            ),
           ),
           if (pos.paymentMethod == 'upi' && pos.cart.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1453,10 +2177,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               ),
             ),
           ],
-          const SizedBox(height: 14),
-
-          // Cash Tendered & Change Due Calculator (Only for Cash Payment)
-          if (pos.paymentMethod == 'cash' && pos.cart.isNotEmpty) ...[
+          if (pos.paymentMethod == 'split' && pos.cart.isNotEmpty) ...[
+            const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1470,20 +2192,125 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Cash Received (Tendered):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      if (pos.changeDue > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.successLight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'Change Due: ₹${pos.changeDue.toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
-                          ),
+                      Expanded(
+                        child: Text(
+                          context.isHindi ? '⚡ स्प्लिट भुगतान (नकद + यूपीआई):' : '⚡ Split Settlement (Cash + UPI):',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '₹${pos.grandTotal.toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.isHindi ? '1. नकद हिस्सा:' : '1. Cash Portion:',
+                              style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 4),
+                            TextField(
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                prefixText: '₹ ',
+                                hintText: pos.splitCashAmount.toStringAsFixed(0),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              ),
+                              onChanged: (val) {
+                                final parsed = double.tryParse(val) ?? 0.0;
+                                pos.setSplitCashAmount(parsed);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.isHindi ? '2. यूपीआई हिस्सा:' : '2. UPI Portion:',
+                              style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              height: 44,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: context.colorPrimaryLight,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                              ),
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '₹${pos.splitUpiAmount.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.primary),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (pos.splitUpiAmount > 0) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.qr_code_rounded, size: 16),
+                        label: Text(
+                          context.isHindi
+                              ? '📱 यूपीआई क्यूआर दिखाएं (₹${pos.splitUpiAmount.toStringAsFixed(0)})'
+                              : '📱 Show UPI QR (₹${pos.splitUpiAmount.toStringAsFixed(0)})',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => showDynamicUpiQrDialog(context, amount: pos.splitUpiAmount),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          if (pos.paymentMethod == 'cash' && pos.cart.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.colorSurfaceSubtle,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.colorBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.isHindi ? 'नकद प्राप्त राशि (Tendered Cash):' : 'Cash Received (Tendered):',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
                   TextField(
@@ -1498,24 +2325,151 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                       pos.setCashTendered(c);
                     },
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
                     child: Row(
-                      children: [
-                        _buildCashChip(context, 'Exact (₹${pos.grandTotal.toStringAsFixed(0)})', pos.grandTotal, pos),
-                        _buildCashChip(context, '₹100', 100, pos),
-                        _buildCashChip(context, '₹200', 200, pos),
-                        _buildCashChip(context, '₹500', 500, pos),
-                        _buildCashChip(context, '₹2000', 2000, pos),
-                      ],
+                      children: pos.getSmartCashSuggestions().map((amount) {
+                        final isExact = (amount - pos.grandTotal).abs() < 0.01;
+                        final label = isExact
+                            ? (context.isHindi
+                                ? 'बराबर (₹${amount.toStringAsFixed(0)})'
+                                : 'Exact (₹${amount.toStringAsFixed(0)})')
+                            : '₹${amount.toStringAsFixed(0)}';
+                        return _buildCashChip(context, label, amount, pos);
+                      }).toList(),
                     ),
                   ),
+                  if (pos.changeDue > 0) ...[
+                    Container(
+                      margin: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.success.withValues(alpha: 0.35), width: 1.2),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  context.isHindi ? '🟢 ग्राहक को वापस करें (वापसी राशि):' : '🟢 Return to Customer (Change):',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.success),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  context.isHindi
+                                      ? '₹${pos.cashTendered.toStringAsFixed(0)} प्राप्त − ₹${pos.grandTotal.toStringAsFixed(0)} बिल'
+                                      : '₹${pos.cashTendered.toStringAsFixed(0)} Tendered − ₹${pos.grandTotal.toStringAsFixed(0)} Bill',
+                                  style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '₹${pos.changeDue.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (pos.cashTendered > 0 && (pos.cashTendered - pos.grandTotal).abs() < 0.01) ...[
+                    Container(
+                      margin: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              context.isHindi ? '✓ पूर्ण बराबर नकद भुगतान प्राप्त' : '✓ Full exact cash received',
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (pos.cashShortage > 0) ...[
+                    Container(
+                      margin: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  context.isHindi ? '⚠️ शेष बकाया राशि:' : '⚠️ Remaining Shortage:',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.warning),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '₹${pos.cashShortage.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.warning),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                    side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
+                                  ),
+                                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 14, color: AppColors.primary),
+                                  label: Text(
+                                    context.isHindi ? 'शेष UPI से लें' : 'Take via UPI',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                  ),
+                                  onPressed: () {
+                                    pos.setPaymentMethod('split');
+                                    pos.setSplitCashAmount(pos.cashTendered);
+                                    showDynamicUpiQrDialog(context, amount: pos.cashShortage);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 14),
           ],
+          const SizedBox(height: 14),
 
           // 3. BILL BREAKDOWN
           Container(
@@ -1530,7 +2484,14 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Subtotal (${pos.totalItemCount} items):', style: TextStyle(color: context.colorTextMuted)),
+                    Expanded(
+                      child: Text(
+                        '${context.isHindi ? "उप-योग" : "Subtotal"} (${pos.totalItemCount} ${context.isHindi ? "वस्तुएं" : "items"}):',
+                        style: TextStyle(color: context.colorTextMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Text('₹${pos.subtotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
                 ),
@@ -1538,16 +2499,29 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Text('Discount:', style: TextStyle(color: context.colorTextMuted)),
-                        const SizedBox(width: 6),
-                        InkWell(
-                          onTap: () => _showDiscountDialog(context, pos),
-                          child: const Text('✏️ Edit Discount', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                        ),
-                      ],
+                    Expanded(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              context.isHindi ? 'छूट:' : 'Discount:',
+                              style: TextStyle(color: context.colorTextMuted),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            onTap: () => _showDiscountDialog(context, pos),
+                            child: Text(
+                              context.isHindi ? '✏️ छूट बदलें' : '✏️ Edit Discount',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text('-₹${pos.discount.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
                   ],
                 ),
@@ -1555,10 +2529,20 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('GRAND TOTAL:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
-                    Text(
-                      '₹${pos.grandTotal.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.primary),
+                    Expanded(
+                      child: Text(
+                        context.isHindi ? 'कुल राशि:' : 'GRAND TOTAL:',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '₹${pos.grandTotal.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.primary),
+                      ),
                     ),
                   ],
                 ),
@@ -1584,7 +2568,11 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                 : const Icon(Icons.bolt_rounded, size: 22, color: Colors.white),
             label: Text(
-              pos.isLoading ? 'Processing Sale...' : '⚡ Complete Sale & Print Bill (₹${pos.grandTotal.toStringAsFixed(0)})',
+              pos.isLoading
+                  ? (context.isHindi ? 'बिक्री प्रक्रिया जारी...' : 'Processing Sale...')
+                  : (context.isHindi
+                      ? '⚡ बिक्री पूर्ण करें और बिल बनाएं (₹${pos.grandTotal.toStringAsFixed(0)})'
+                      : '⚡ Complete Sale & Print Bill (₹${pos.grandTotal.toStringAsFixed(0)})'),
               style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: Colors.white),
             ),
             onPressed: (pos.cart.isEmpty || pos.isLoading)
@@ -1597,7 +2585,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                     } else if (context.mounted && pos.hasError) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(pos.errorMessage ?? 'Sale generation failed'),
+                          content: Text(pos.errorMessage ?? (context.isHindi ? 'बिक्री असफल रही' : 'Sale generation failed')),
                           backgroundColor: AppColors.error,
                           duration: const Duration(seconds: 4),
                         ),
@@ -1611,6 +2599,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   }
 
   Widget _buildCashChip(BuildContext context, String label, double amount, PosController pos) {
+    final isSelected = (pos.cashTendered - amount).abs() < 0.01;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: InkWell(
@@ -1618,21 +2607,31 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           _cashController.text = amount.toStringAsFixed(0);
           pos.setCashTendered(amount);
         },
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: context.colorSurface,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: context.colorBorder),
+            color: isSelected ? AppColors.primary : context.colorSurface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : context.colorBorder,
+              width: isSelected ? 1.5 : 1,
+            ),
           ),
-          child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextPrimary)),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? Colors.white : context.colorTextPrimary,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  /// Mobile Bottom Checkout Bar
+  /// Mobile Bottom Checkout Bar with Zero Flex Overflow Protection
   Widget _buildMobileBottomCheckoutBar(BuildContext context, PosController pos) {
     if (pos.cart.isEmpty) return const SizedBox.shrink();
 
@@ -1645,19 +2644,33 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       ),
       child: Row(
         children: [
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${pos.totalItemCount} Items in Bill', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
-              Text('₹${pos.grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary)),
-            ],
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${pos.totalItemCount} ${context.isHindi ? "वस्तुएं बिल में" : "Items in Bill"}',
+                  style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '₹${pos.grandTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              minimumSize: const Size(160, 46),
+              minimumSize: const Size(150, 46),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () {
               showModalBottomSheet(
@@ -1671,13 +2684,159 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   ),
                   padding: EdgeInsets.only(
                     bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-                    top: 20, left: 20, right: 20,
+                    top: 20,
+                    left: 20,
+                    right: 20,
                   ),
                   child: _buildCheckoutPanel(ctx, pos),
                 ),
               );
             },
-            child: const Text('Checkout Bill', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(
+              context.isHindi ? 'बिल चेकआउट' : 'Checkout Bill',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 🛒 Dedicated POS Cart Item Tile with 0ms Tactile Steppers & Zero Repaint Cascading
+class _PosCartItemTile extends StatelessWidget {
+  final PosCartItem item;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
+  final VoidCallback onRemove;
+
+  const _PosCartItemTile({
+    super.key,
+    required this.item,
+    required this.onIncrement,
+    required this.onDecrement,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          // Item Image Thumbnail
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: AppProductImage(
+              imageUrl: item.product.imageUrl,
+              width: 38,
+              height: 38,
+              fit: BoxFit.cover,
+              fallbackIcon: Icons.inventory_2_outlined,
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Item Name & Unit Price
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.product.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: context.colorTextPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '₹${item.customPrice.toStringAsFixed(0)} / ${item.product.unit}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.colorTextMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Quantity Stepper (0ms Direct Tactile Response without UI toast lag)
+          Expanded(
+            flex: 3,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                InkWell(
+                  onTap: onDecrement,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: context.colorSurfaceSubtle,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: context.colorBorder),
+                    ),
+                    child: const Icon(Icons.remove_rounded, size: 14),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    '${item.quantity}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      color: context.colorTextPrimary,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: onIncrement,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: context.colorPrimaryLight,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: const Icon(Icons.add_rounded, size: 14, color: AppColors.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Item Total
+          Expanded(
+            flex: 3,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                '₹${item.total.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                  color: context.colorTextPrimary,
+                ),
+              ),
+            ),
+          ),
+
+          // 🗑️ Item Deletion Button
+          IconButton(
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+            tooltip: context.isHindi ? 'वस्तु हटाएं' : 'Remove Item',
+            onPressed: onRemove,
           ),
         ],
       ),
@@ -1698,28 +2857,26 @@ class _PaymentModeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? context.colorPrimaryLight : context.colorSurface,
-            border: Border.all(
-              color: selected ? AppColors.primary : context.colorBorder,
-              width: selected ? 1.5 : 1,
-            ),
-            borderRadius: BorderRadius.circular(10),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? context.colorPrimaryLight : context.colorSurface,
+          border: Border.all(
+            color: selected ? AppColors.primary : context.colorBorder,
+            width: selected ? 1.5 : 1,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-              color: selected ? AppColors.primary : context.colorTextPrimary,
-            ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+            color: selected ? AppColors.primary : context.colorTextPrimary,
           ),
         ),
       ),

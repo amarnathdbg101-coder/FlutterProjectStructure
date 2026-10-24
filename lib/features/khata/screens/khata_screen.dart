@@ -12,6 +12,7 @@ import '../../../core/widgets/merchant_shell.dart';
 import '../controllers/khata_controller.dart';
 import '../models/khata_model.dart';
 import '../repositories/khata_repository.dart';
+import '../services/smart_khata_reminder_service.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -217,57 +218,63 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                   // Customer Selection Section
                   if (customer != null) ...[
                     // Locked Customer Card
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isDark ? AppColors.darkBorder : AppColors.border,
+                    Builder(builder: (context) {
+                      final live = customers.firstWhere(
+                        (c) => c.mobile == customer.mobile || (customer.id.toString().isNotEmpty && c.id == customer.id),
+                        orElse: () => customer,
+                      );
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? AppColors.darkBorder : AppColors.border,
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                            child: Text(
-                              customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
-                              style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                              child: Text(
+                                live.name.isNotEmpty ? live.name[0].toUpperCase() : '?',
+                                style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  customer.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  customer.mobile,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    live.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              ],
+                                  Text(
+                                    live.mobile,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          Text(
-                            '₹${customer.balance.abs().toStringAsFixed(0)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                              color: customer.balance > 0 ? AppColors.error : AppColors.success,
+                            Text(
+                              '₹${live.balance.abs().toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: live.balance > 0 ? AppColors.error : AppColors.success,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
+                          ],
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 12),
                   ] else ...[
                     // Quick Recent Customer Chips (if available)
@@ -381,12 +388,56 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                         labelText: context.tr('khata_field_customer_phone'),
                         prefixIcon: const Icon(Icons.phone_outlined),
                       ),
-                      onChanged: (_) {
+                      onChanged: (val) {
+                        final clean = KhataRepository.normalizePhone(val);
+                        if (clean.length == 10) {
+                          final match = customers.firstWhere(
+                            (c) => c.mobile == clean || c.mobile.endsWith(clean),
+                            orElse: () => KhataCustomerModel(id: '', name: '', mobile: '', balance: 0),
+                          );
+                          if (match.mobile.isNotEmpty) {
+                            setModalState(() {
+                              selectedCustomer = match;
+                              if (nameCtrl.text.trim().isEmpty) {
+                                nameCtrl.text = match.name;
+                              }
+                            });
+                            return;
+                          }
+                        }
                         if (selectedCustomer != null) {
                           setModalState(() => selectedCustomer = null);
                         }
                       },
                     ),
+                    if (selectedCustomer != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${selectedCustomer!.name} (${selectedCustomer!.mobile})',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              'Current: ₹${selectedCustomer!.balance.abs().toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: selectedCustomer!.balance > 0 ? AppColors.error : AppColors.success,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                   ],
 
@@ -618,10 +669,43 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                             if (success) {
                               Navigator.pop(ctx);
 
-                              if (!currentIsCredit && cleanPhone.length >= 10) {
-                                final remainingBal = khataController.getCustomerBalance(cleanPhone);
-                                final shop = LocalCacheService.getShop();
-                                final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Store';
+                              final remainingBal = khataController.getCustomerBalance(cleanPhone);
+                              final shop = LocalCacheService.getShop();
+                              final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Store';
+
+                              if (currentIsCredit && cleanPhone.length >= 10) {
+                                final msg = Uri.encodeComponent(
+                                  '📖 *Khata Udhar Slip - $shopName*\n'
+                                  'Dear $name,\n'
+                                  '₹${amount.toStringAsFixed(0)} has been added to your khata ledger.\n'
+                                  'Total Outstanding Balance: ₹${remainingBal.toStringAsFixed(0)}.\n\n'
+                                  'Thank you for shopping with us!',
+                                );
+                                final waUrl = Uri.parse('https://wa.me/91$cleanPhone?text=$msg');
+
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Credit of ₹${amount.toStringAsFixed(0)} added! Total: ₹${remainingBal.toStringAsFixed(0)}'),
+                                    backgroundColor: AppColors.error,
+                                    duration: const Duration(seconds: 5),
+                                    action: SnackBarAction(
+                                      label: 'WhatsApp Slip',
+                                      textColor: Colors.white,
+                                      onPressed: () async {
+                                        try {
+                                          if (await canLaunchUrl(waUrl)) {
+                                            await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+                                          } else {
+                                            await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
+                                          }
+                                        } catch (_) {
+                                          await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              } else if (!currentIsCredit && cleanPhone.length >= 10) {
                                 final msg = Uri.encodeComponent(
                                   '🧾 *Khata Payment Receipt*\n'
                                   'Dear $name,\n'
@@ -633,7 +717,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
 
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Payment of ₹${amount.toStringAsFixed(0)} received!'),
+                                    content: Text('Payment of ₹${amount.toStringAsFixed(0)} received! Remaining: ₹${remainingBal.toStringAsFixed(0)}'),
                                     backgroundColor: AppColors.success,
                                     duration: const Duration(seconds: 5),
                                     action: SnackBarAction(
@@ -699,24 +783,28 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
           final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
           final keyboardHeight = MediaQuery.of(sheetCtx).viewInsets.bottom;
           final screenHeight = MediaQuery.of(sheetCtx).size.height;
-          final availableHeight = (screenHeight - keyboardHeight).clamp(380.0, screenHeight);
-          final modalHeight = (availableHeight * 0.88).clamp(380.0, 720.0);
+          final maxModalHeight = (screenHeight - keyboardHeight - 24).clamp(280.0, screenHeight * 0.88);
 
-          return Padding(
+          return AnimatedPadding(
             padding: EdgeInsets.only(bottom: keyboardHeight),
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
             child: Align(
               alignment: Alignment.bottomCenter,
               child: Material(
                 color: Colors.transparent,
                 child: Container(
-                  height: modalHeight,
+                  height: maxModalHeight,
                   constraints: const BoxConstraints(maxWidth: 580),
                   decoration: BoxDecoration(
                     color: isDark ? AppColors.darkSurface : Colors.white,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                   ),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                  child: buildFormContent(sheetCtx, setModalState),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                  child: SafeArea(
+                    top: false,
+                    child: buildFormContent(sheetCtx, setModalState),
+                  ),
                 ),
               ),
             ),
@@ -951,401 +1039,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
   // ==========================================
   void _showCustomerStatementSheet(BuildContext context, KhataCustomerModel customer) {
     context.read<KhataController>().loadStatement(customer.mobile);
-
-    Widget buildSheet(BuildContext ctx) {
-      return Consumer<KhataController>(
-        builder: (context, khata, _) {
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
-          final isOverdue = customer.isOverdue;
-          final utilization = customer.creditUtilizationPercent;
-
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                      child: Text(
-                        customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            customer.name,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            customer.mobile,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const Divider(height: 20),
-
-                // Pending Dues Banner
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: (customer.balance > 0 ? AppColors.error : AppColors.success)
-                        .withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: (customer.balance > 0 ? AppColors.error : AppColors.success)
-                          .withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.tr('khata_statement_dues'),
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                          ),
-                          if (isOverdue) ...[
-                            const SizedBox(height: 4),
-                            AppBadge(
-                              label: context.tr('khata_tab_overdue'),
-                              type: AppBadgeType.error,
-                            ),
-                          ],
-                        ],
-                      ),
-                      FittedBox(
-                        child: Text(
-                          '₹${customer.balance.abs().toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            color: customer.balance > 0 ? AppColors.error : AppColors.success,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Credit Limit & Promise Date Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => _showSetCreditLimitDialog(context, customer),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    context.tr('khata_credit_limit_label'),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const Icon(Icons.edit_outlined, size: 13, color: AppColors.primary),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '₹${customer.creditLimit.toStringAsFixed(0)} (${utilization.toStringAsFixed(0)}%)',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => _showSetPromiseDateDialog(context, customer),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    context.tr('khata_promise_label'),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                customer.promiseDate != null
-                                    ? DateFormat('dd MMM yyyy').format(customer.promiseDate!)
-                                    : 'Not Set',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Quick Action Buttons Row (WhatsApp, PDF, +Udhar, +Jama)
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-                        label: Text(context.tr('khata_btn_whatsapp_reminder')),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF25D366),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                        ),
-                        onPressed: () => khata.sendWhatsAppReminder(context, customer),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                      label: Text(context.tr('khata_btn_download_pdf')),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                      ),
-                      onPressed: () => khata.openStatementPdf(context, customer.mobile, customer: customer),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                      ),
-                      onPressed: () {
-                        final isHindi = context.isHindi;
-                        final shop = LocalCacheService.getShop();
-                        final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
-                        final balance = customer.balance.toStringAsFixed(0);
-                        final text = isHindi
-                            ? '📖 खाता विवरण - $shopName\nग्राहक: ${customer.name}\nमोबाइल: ${customer.mobile}\nकुल बकाया: ₹$balance\nस्थिति: ${customer.hasPendingUdhar ? "उधारी शेष" : "कोई बकाया नहीं"}'
-                            : '📖 Khata Statement - $shopName\nCustomer: ${customer.name}\nMobile: ${customer.mobile}\nBalance: ₹$balance\nStatus: ${customer.hasPendingUdhar ? "Pending Credit" : "Settled"}';
-                        Clipboard.setData(ClipboardData(text: text));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(context.tr('khata_copied_summary')),
-                            backgroundColor: AppColors.success,
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: const Icon(Icons.copy_rounded, size: 16, color: AppColors.primary),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.arrow_outward_rounded, size: 16),
-                        label: Text(context.tr('khata_dialog_give_credit')),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.error,
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                        ),
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await Future.delayed(const Duration(milliseconds: 150));
-                          if (context.mounted) {
-                            _showAddTransactionModal(context, customer: customer, isCredit: true);
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.arrow_downward_rounded, size: 16),
-                        label: Text(context.tr('khata_dialog_receive_payment')),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                        ),
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await Future.delayed(const Duration(milliseconds: 150));
-                          if (context.mounted) {
-                            _showAddTransactionModal(context, customer: customer, isCredit: false);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Transactions History Header
-                AppSectionHeader(
-                  title: context.tr('khata_history_title'),
-                  padding: const EdgeInsets.only(bottom: 8),
-                ),
-
-                // Transactions List
-                SizedBox(
-                  height: 250,
-                  child: khata.isStatementLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : khata.currentCustomerStatement.isEmpty
-                          ? Center(
-                              child: Text(
-                                context.tr('khata_history_empty'),
-                                style: TextStyle(
-                                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              itemCount: khata.currentCustomerStatement.length,
-                              separatorBuilder: (_, _) => const Divider(height: 1),
-                              itemBuilder: (context, idx) {
-                                final tx = khata.currentCustomerStatement[idx];
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Container(
-                                    padding: const EdgeInsets.all(7),
-                                    decoration: BoxDecoration(
-                                      color: (tx.isCredit ? AppColors.error : AppColors.success)
-                                          .withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(
-                                      tx.isCredit
-                                          ? Icons.arrow_outward_rounded
-                                          : Icons.arrow_downward_rounded,
-                                      color: tx.isCredit ? AppColors.error : AppColors.success,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  title: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          tx.isCredit
-                                              ? context.tr('khata_dialog_give_credit')
-                                              : context.tr('khata_dialog_receive_payment'),
-                                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                                        ),
-                                      ),
-                                      Text(
-                                        '${tx.isCredit ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                          color: tx.isCredit ? AppColors.error : AppColors.success,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 2),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            DateFormat('dd MMM yyyy, hh:mm a').format(tx.createdAt),
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
-                                            ),
-                                          ),
-                                          if (tx.billNumber != null && tx.billNumber!.isNotEmpty)
-                                            Text(
-                                              'Bill: ${tx.billNumber}',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      if (tx.notes.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          tx.notes,
-                                          style: const TextStyle(fontSize: 11),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.undo_rounded, size: 16),
-                                    tooltip: context.tr('khata_btn_reverse'),
-                                    onPressed: () => _showReverseDialog(
-                                      context,
-                                      tx,
-                                      customer.id.toString(),
-                                      customer.mobile,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    }
+    String activeFilter = 'all'; // 'all', 'credit', 'payment'
 
     showModalBottomSheet(
       context: context,
@@ -1354,34 +1048,673 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
       builder: (sheetCtx) => StatefulBuilder(
         builder: (ctx, setModalState) {
           final isDark = Theme.of(ctx).brightness == Brightness.dark;
-          return Align(
-            alignment: Alignment.bottomCenter,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : Colors.white,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-                  top: 20,
-                  left: 20,
-                  right: 20,
-                ),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(ctx).size.height * 0.88,
-                    maxWidth: 580,
+
+          return Consumer<KhataController>(
+            builder: (context, khata, _) {
+              final liveCustomer = khata.customers.firstWhere(
+                (c) => c.mobile == customer.mobile || (customer.id.toString().isNotEmpty && c.id == customer.id),
+                orElse: () => customer,
+              );
+              final isOverdue = liveCustomer.isOverdue;
+              final utilization = liveCustomer.creditUtilizationPercent;
+
+              // Filter transactions based on active pill
+              final allTxs = khata.currentCustomerStatement;
+              final filteredTxs = allTxs.where((tx) {
+                if (activeFilter == 'credit') return tx.isCredit;
+                if (activeFilter == 'payment') return tx.isPayment;
+                return true;
+              }).toList();
+
+              return Align(
+                alignment: Alignment.bottomCenter,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : Colors.white,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(ctx).size.height * 0.90,
+                      maxWidth: 620,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Drag Handle Pill
+                        Center(
+                          child: Container(
+                            width: 38,
+                            height: 4,
+                            margin: const EdgeInsets.only(top: 12, bottom: 8),
+                            decoration: BoxDecoration(
+                              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+
+                        // Header Row (Customer info & Close)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                                child: Text(
+                                  liveCustomer.name.isNotEmpty ? liveCustomer.name[0].toUpperCase() : '?',
+                                  style: const TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      liveCustomer.name,
+                                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 1),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          liveCustomer.mobile,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                          ),
+                                        ),
+                                        Text(
+                                          ' • ${allTxs.length} ${context.tr('khata_entries_count')}',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 20),
+                                splashRadius: 18,
+                                onPressed: () => Navigator.pop(ctx),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+
+                        // Scrollable Content
+                        Flexible(
+                          child: SingleChildScrollView(
+                            padding: EdgeInsets.only(
+                              left: 20,
+                              right: 20,
+                              top: 14,
+                              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // 1. Net Outstanding Dues Hero Card
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: (liveCustomer.balance > 0 ? AppColors.error : AppColors.success)
+                                        .withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: (liveCustomer.balance > 0 ? AppColors.error : AppColors.success)
+                                          .withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            context.tr('khata_statement_dues'),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          if (isOverdue)
+                                            AppBadge(
+                                              label: context.tr('khata_tab_overdue'),
+                                              type: AppBadgeType.error,
+                                            )
+                                          else if (liveCustomer.balance == 0)
+                                            AppBadge(
+                                              label: context.tr('khata_settled_badge'),
+                                              type: AppBadgeType.success,
+                                            )
+                                          else
+                                            AppBadge(
+                                              label: context.tr('khata_status_due'),
+                                              type: AppBadgeType.neutral,
+                                            ),
+                                        ],
+                                      ),
+                                      FittedBox(
+                                        child: Text(
+                                          '₹${liveCustomer.balance.abs().toStringAsFixed(0)}',
+                                          style: TextStyle(
+                                            fontSize: 26,
+                                            fontWeight: FontWeight.w900,
+                                            color: liveCustomer.balance > 0 ? AppColors.error : AppColors.success,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // 2. Credit Limit & Promise Date Row
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () => _showSetCreditLimitDialog(context, liveCustomer),
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: isDark ? AppColors.darkBorder : AppColors.border,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    context.tr('khata_credit_limit_label'),
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                                    ),
+                                                  ),
+                                                  const Icon(Icons.edit_outlined, size: 13, color: AppColors.primary),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                '₹${liveCustomer.creditLimit.toStringAsFixed(0)} (${utilization.toStringAsFixed(0)}%)',
+                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () => _showSetPromiseDateDialog(context, liveCustomer),
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: isDark ? AppColors.darkBorder : AppColors.border,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    context.tr('khata_promise_label'),
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                                    ),
+                                                  ),
+                                                  const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.primary),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                liveCustomer.promiseDate != null
+                                                    ? DateFormat('dd MMM yyyy').format(liveCustomer.promiseDate!)
+                                                    : 'Not Set',
+                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+
+                                // 3. Primary Quick Action Buttons (+Udhar & +Jama)
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        icon: const Icon(Icons.arrow_outward_rounded, size: 16),
+                                        label: Text(
+                                          context.tr('khata_dialog_give_credit'),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.error,
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        onPressed: () async {
+                                          Navigator.pop(ctx);
+                                          await Future.delayed(const Duration(milliseconds: 150));
+                                          if (context.mounted) {
+                                            _showAddTransactionModal(context, customer: liveCustomer, isCredit: true);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        icon: const Icon(Icons.arrow_downward_rounded, size: 16),
+                                        label: Text(
+                                          context.tr('khata_dialog_receive_payment'),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.success,
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        onPressed: () async {
+                                          Navigator.pop(ctx);
+                                          await Future.delayed(const Duration(milliseconds: 150));
+                                          if (context.mounted) {
+                                            _showAddTransactionModal(context, customer: liveCustomer, isCredit: false);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+
+                                // 4. Secondary Utilities Toolbar (PDF, WhatsApp, Copy)
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 15),
+                                        label: Text(
+                                          context.tr('khata_btn_download_pdf'),
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        onPressed: () => khata.openStatementPdf(context, liveCustomer.mobile, customer: liveCustomer),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15, color: Color(0xFF25D366)),
+                                        label: Text(
+                                          context.tr('khata_btn_whatsapp_reminder'),
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF25D366)),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Color(0xFF25D366)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        onPressed: () => khata.sendWhatsAppReminder(context, liveCustomer, transactions: allTxs),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      onPressed: () {
+                                        final isHindi = context.isHindi;
+                                        final shop = LocalCacheService.getShop();
+                                        final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
+                                        final text = SmartKhataReminderService.formatReminderMessage(
+                                          customer: liveCustomer,
+                                          shopName: shopName,
+                                          shopUpiId: shop?.upiId,
+                                          recentTransactions: allTxs,
+                                          isHindi: isHindi,
+                                        );
+                                        Clipboard.setData(ClipboardData(text: text));
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(context.tr('khata_copied_summary')),
+                                            backgroundColor: AppColors.success,
+                                            duration: const Duration(seconds: 2),
+                                          ),
+                                        );
+                                      },
+                                      child: const Icon(Icons.copy_rounded, size: 16, color: AppColors.primary),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 18),
+
+                                // 5. Transactions History Header & Filter Pills
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      context.tr('khata_history_title'),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    if (allTxs.length > 1)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          _buildFilterPill(
+                                            label: context.tr('khata_filter_all'),
+                                            isSelected: activeFilter == 'all',
+                                            isDark: isDark,
+                                            onTap: () => setModalState(() => activeFilter = 'all'),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          _buildFilterPill(
+                                            label: context.tr('khata_filter_credit'),
+                                            isSelected: activeFilter == 'credit',
+                                            isDark: isDark,
+                                            onTap: () => setModalState(() => activeFilter = 'credit'),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          _buildFilterPill(
+                                            label: context.tr('khata_filter_payment'),
+                                            isSelected: activeFilter == 'payment',
+                                            isDark: isDark,
+                                            onTap: () => setModalState(() => activeFilter = 'payment'),
+                                          ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+
+                                // 6. Transactions Passbook List (Zero nested scroll-fighting)
+                                if (khata.isStatementLoading)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 36),
+                                    child: Center(child: CircularProgressIndicator()),
+                                  )
+                                else if (filteredTxs.isEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: isDark ? AppColors.darkBorder : AppColors.border,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.receipt_long_outlined,
+                                          size: 36,
+                                          color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          context.tr('khata_history_empty'),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          context.tr('khata_empty_statement_action'),
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: filteredTxs.length,
+                                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                                    itemBuilder: (context, idx) {
+                                      final tx = filteredTxs[idx];
+                                      final isCredit = tx.isCredit;
+
+                                      return Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isDark ? AppColors.darkBorder : AppColors.border,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            // Status Icon Indicator
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: (isCredit ? AppColors.error : AppColors.success)
+                                                    .withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Icon(
+                                                isCredit
+                                                    ? Icons.arrow_outward_rounded
+                                                    : Icons.arrow_downward_rounded,
+                                                color: isCredit ? AppColors.error : AppColors.success,
+                                                size: 18,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+
+                                            // Details Column
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Text(
+                                                        isCredit
+                                                            ? context.tr('khata_dialog_give_credit')
+                                                            : context.tr('khata_dialog_receive_payment'),
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.w700,
+                                                          fontSize: 13,
+                                                        ),
+                                                      ),
+                                                      if (tx.paymentMode.isNotEmpty && tx.paymentMode.toLowerCase() != 'cash') ...[
+                                                        const SizedBox(width: 6),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                          decoration: BoxDecoration(
+                                                            color: AppColors.primary.withValues(alpha: 0.1),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                          ),
+                                                          child: Text(
+                                                            tx.paymentMode.toUpperCase(),
+                                                            style: const TextStyle(
+                                                              fontSize: 9,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: AppColors.primary,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Row(
+                                                    children: [
+                                                      Text(
+                                                        DateFormat('dd MMM yyyy, hh:mm a').format(tx.createdAt),
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                                        ),
+                                                      ),
+                                                      if (tx.billNumber != null && tx.billNumber!.isNotEmpty) ...[
+                                                        Text(
+                                                          ' • #${tx.billNumber}',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                  if (tx.notes.isNotEmpty) ...[
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      tx.notes,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontStyle: FontStyle.italic,
+                                                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+
+                                            // Amounts & Running Balance Column
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              children: [
+                                                Text(
+                                                  '${isCredit ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 14,
+                                                    color: isCredit ? AppColors.error : AppColors.success,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '${context.tr('khata_running_balance')}: ₹${tx.balanceAfter.toStringAsFixed(0)}',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+
+                                            // Reversal Undo Button
+                                            const SizedBox(width: 4),
+                                            IconButton(
+                                              icon: const Icon(Icons.undo_rounded, size: 16),
+                                              splashRadius: 16,
+                                              tooltip: context.tr('khata_btn_reverse'),
+                                              onPressed: () => _showReverseDialog(
+                                                context,
+                                                tx,
+                                                liveCustomer.id.toString(),
+                                                liveCustomer.mobile,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: SingleChildScrollView(
-                    child: buildSheet(ctx),
-                  ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildFilterPill({
+    required String label,
+    required bool isSelected,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary
+              : (isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+          ),
+        ),
       ),
     );
   }
@@ -1401,26 +1734,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
         appBar: AppBar(
           title: Text(
             context.tr('khata_title'),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.campaign_rounded, color: Color(0xFF25D366)),
-              tooltip: 'Broadcast WhatsApp Reminders to Overdue Debtors',
-              onPressed: () => khata.broadcastWhatsAppOverdueReminders(context),
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-              tooltip: 'Refresh Khata Ledger',
-              onPressed: () async {
-                await khata.loadCustomers();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('✓ Khata Customer Dues Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
-                  );
-                }
-              },
-            ),
+            if (khata.overdueCount > 0)
+              IconButton(
+                icon: const Icon(Icons.campaign_rounded, color: Color(0xFF25D366)),
+                tooltip: 'Broadcast WhatsApp Reminders to Overdue Debtors',
+                onPressed: () => khata.broadcastWhatsAppOverdueReminders(context),
+              ),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
@@ -1432,172 +1754,265 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
           ),
           onPressed: () => _showAddTransactionModal(context, isCredit: true),
         ),
-        body: ResponsiveContainer(
-          maxWidth: 1200,
-          child: Column(
-            children: [
-              // Executive Summary Banner
-              AppSummaryBanner(
-                title: context.tr('khata_banner_title'),
-                amount: '₹${khata.totalMarketDebt.toStringAsFixed(0)}',
-                subtitle:
-                    '${khata.debtorsCount} ${context.tr('khata_kpi_debtors')} • ${khata.overdueCount} ${context.tr('khata_kpi_overdue')}',
-                icon: Icons.menu_book_rounded,
-                actionLabel: context.tr('khata_add_btn'),
-                onAction: () => _showAddTransactionModal(context, isCredit: true),
-              ),
+        body: RefreshIndicator(
+          onRefresh: () => khata.loadCustomers(),
+          color: AppColors.primary,
+          child: ResponsiveContainer(
+            maxWidth: 1200,
+            child: Column(
+              children: [
+                // Top 2 KPI Stat Cards Row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AppStatCard(
+                          title: context.tr('khata_banner_title'),
+                          value: '₹${khata.totalMarketDebt.toStringAsFixed(0)}',
+                          subtitle: '${khata.debtorsCount} ${context.tr('khata_kpi_debtors')}',
+                          icon: Icons.account_balance_wallet_rounded,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AppStatCard(
+                          title: context.tr('khata_aging_60_plus'),
+                          value: '₹${khata.aging?.days61Plus.toStringAsFixed(0) ?? '0'}',
+                          subtitle: '${khata.overdueCount} ${context.tr('khata_kpi_overdue')}',
+                          icon: Icons.warning_amber_rounded,
+                          isAlert: (khata.aging?.days61Plus ?? 0) > 0 || khata.overdueCount > 0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-              // Aging Analysis Stat Cards Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: AppStatCard(
-                        title: context.tr('khata_aging_0_30'),
-                        value: '₹${khata.aging?.currentDays0To30.toStringAsFixed(0) ?? '0'}',
-                        subtitle: 'Current dues',
+                // Aging Analysis Breakdown Pills
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    children: [
+                      _buildAgingPill(
+                        label: context.tr('khata_aging_0_30'),
+                        amount: '₹${khata.aging?.currentDays0To30.toStringAsFixed(0) ?? '0'}',
                         icon: Icons.timelapse_rounded,
+                        color: AppColors.primary,
+                        isDark: isDark,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: AppStatCard(
-                        title: context.tr('khata_aging_31_60'),
-                        value: '₹${khata.aging?.days31To60.toStringAsFixed(0) ?? '0'}',
-                        subtitle: 'Follow up',
+                      const SizedBox(width: 8),
+                      _buildAgingPill(
+                        label: context.tr('khata_aging_31_60'),
+                        amount: '₹${khata.aging?.days31To60.toStringAsFixed(0) ?? '0'}',
                         icon: Icons.alarm_rounded,
+                        color: AppColors.warning,
+                        isDark: isDark,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: AppStatCard(
-                        title: context.tr('khata_aging_60_plus'),
-                        value: '₹${khata.aging?.days61Plus.toStringAsFixed(0) ?? '0'}',
-                        subtitle: 'Urgent collection',
+                      const SizedBox(width: 8),
+                      _buildAgingPill(
+                        label: context.tr('khata_aging_60_plus'),
+                        amount: '₹${khata.aging?.days61Plus.toStringAsFixed(0) ?? '0'}',
                         icon: Icons.warning_amber_rounded,
+                        color: AppColors.error,
+                        isDark: isDark,
                         isAlert: (khata.aging?.days61Plus ?? 0) > 0,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Search Input
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: context.tr('khata_search_hint'),
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              khata.setSearchQuery('');
-                            },
-                          )
-                        : null,
+                    ],
                   ),
-                  onChanged: (query) => khata.setSearchQuery(query),
                 ),
-              ),
-              const SizedBox(height: 8),
+                const SizedBox(height: 8),
 
-              // Horizontal Segment Filter Chips
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    _buildFilterChip(
-                      label: context.tr('khata_tab_all'),
-                      count: khata.customers.length,
-                      isSelected: khata.activeFilter == 'all',
-                      onSelected: () => khata.setActiveFilter('all'),
+                // Search Input
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: context.tr('khata_search_hint'),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                khata.setSearchQuery('');
+                              },
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      label: context.tr('khata_tab_dues'),
-                      count: khata.debtorsCount,
-                      isSelected: khata.activeFilter == 'dues',
-                      onSelected: () => khata.setActiveFilter('dues'),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      label: context.tr('khata_tab_overdue'),
-                      count: khata.overdueCount,
-                      isSelected: khata.activeFilter == 'overdue',
-                      onSelected: () => khata.setActiveFilter('overdue'),
-                      isAlert: khata.overdueCount > 0,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      label: context.tr('khata_tab_settled'),
-                      count: khata.customers.where((c) => c.balance <= 0).length,
-                      isSelected: khata.activeFilter == 'settled',
-                      onSelected: () => khata.setActiveFilter('settled'),
-                    ),
-                  ],
+                    onChanged: (query) => khata.setSearchQuery(query),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
+                const SizedBox(height: 8),
 
-              // Customer Ledger List / Grid
-              Expanded(
-                child: khata.isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : khata.filteredCustomers.isEmpty
-                        ? Center(
-                            child: Text(
-                              context.tr('khata_empty_title'),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                // Horizontal Segment Filter Chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _buildFilterChip(
+                        label: context.tr('khata_tab_all'),
+                        count: khata.customers.length,
+                        isSelected: khata.activeFilter == 'all',
+                        onSelected: () => khata.setActiveFilter('all'),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: context.tr('khata_tab_dues'),
+                        count: khata.debtorsCount,
+                        isSelected: khata.activeFilter == 'dues',
+                        onSelected: () => khata.setActiveFilter('dues'),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: context.tr('khata_tab_overdue'),
+                        count: khata.overdueCount,
+                        isSelected: khata.activeFilter == 'overdue',
+                        onSelected: () => khata.setActiveFilter('overdue'),
+                        isAlert: khata.overdueCount > 0,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        label: context.tr('khata_tab_settled'),
+                        count: khata.customers.where((c) => c.balance <= 0).length,
+                        isSelected: khata.activeFilter == 'settled',
+                        onSelected: () => khata.setActiveFilter('settled'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Customer Ledger List / Grid
+                Expanded(
+                  child: khata.isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : khata.filteredCustomers.isEmpty
+                          ? Center(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.menu_book_outlined,
+                                      size: 42,
+                                      color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      context.tr('khata_empty_title'),
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    OutlinedButton.icon(
+                                      icon: const Icon(Icons.person_add_outlined, size: 15),
+                                      label: Text(context.tr('khata_add_btn')),
+                                      onPressed: () => _showAddTransactionModal(context, isCredit: true),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          )
-                        : LayoutBuilder(
-                            builder: (context, constraints) {
-                              final width = constraints.maxWidth;
-                              final isMultiColumn = width > 750;
+                            )
+                          : LayoutBuilder(
+                              builder: (context, constraints) {
+                                final width = constraints.maxWidth;
+                                final isMultiColumn = width > 750;
 
-                              if (isMultiColumn) {
-                                final crossAxisCount = width > 1050 ? 3 : 2;
-                                return GridView.builder(
+                                if (isMultiColumn) {
+                                  final crossAxisCount = width > 1050 ? 3 : 2;
+                                  return GridView.builder(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: crossAxisCount,
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
+                                      childAspectRatio: 2.1,
+                                    ),
+                                    itemCount: khata.filteredCustomers.length,
+                                    itemBuilder: (context, index) {
+                                      final c = khata.filteredCustomers[index];
+                                      return _buildCustomerCard(context, c);
+                                    },
+                                  );
+                                }
+
+                                return ListView.separated(
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: crossAxisCount,
-                                    crossAxisSpacing: 12,
-                                    mainAxisSpacing: 12,
-                                    childAspectRatio: 2.1,
-                                  ),
                                   itemCount: khata.filteredCustomers.length,
+                                  separatorBuilder: (_, _) => const SizedBox(height: 10),
                                   itemBuilder: (context, index) {
                                     final c = khata.filteredCustomers[index];
                                     return _buildCustomerCard(context, c);
                                   },
                                 );
-                              }
-
-                              return ListView.separated(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                itemCount: khata.filteredCustomers.length,
-                                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                                itemBuilder: (context, index) {
-                                  final c = khata.filteredCustomers[index];
-                                  return _buildCustomerCard(context, c);
-                                },
-                              );
-                            },
-                          ),
-              ),
-            ],
+                              },
+                            ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // WIDGET: AGING BREAKDOWN PILL
+  // ==========================================
+  Widget _buildAgingPill({
+    required String label,
+    required String amount,
+    required IconData icon,
+    required Color color,
+    required bool isDark,
+    bool isAlert = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isAlert
+            ? color.withValues(alpha: 0.12)
+            : (isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isAlert
+              ? color.withValues(alpha: 0.4)
+              : (isDark ? AppColors.darkBorder : AppColors.border),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            amount,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: isAlert ? color : (isDark ? Colors.white : AppColors.textPrimary),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1658,6 +2073,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
       onTap: () => _showCustomerStatementSheet(context, c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Top Row: Avatar, Name, Mobile & Balance
           Row(
@@ -1666,11 +2082,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                 radius: 20,
                 backgroundColor: hasDues
                     ? AppColors.error.withValues(alpha: 0.12)
-                    : AppColors.primary.withValues(alpha: 0.12),
+                    : (isAdvance
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : AppColors.success.withValues(alpha: 0.12)),
                 child: Text(
                   c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
                   style: TextStyle(
-                    color: hasDues ? AppColors.error : AppColors.primary,
+                    color: hasDues
+                        ? AppColors.error
+                        : (isAdvance ? AppColors.primary : AppColors.success),
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -1702,6 +2122,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -1736,11 +2157,12 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
           // Metadata Badges Row (Overdue warning / Promise Date)
           if (c.isOverdue || c.promiseDate != null) ...[
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
               children: [
                 if (c.isOverdue)
                   Container(
-                    margin: const EdgeInsets.only(right: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppColors.error.withValues(alpha: 0.12),
@@ -1789,21 +2211,28 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
             ),
           ],
 
-          const Spacer(),
+          const SizedBox(height: 12),
 
           // Bottom Action Row (WhatsApp Reminder, +Udhar, +Jama)
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              // 1-Tap WhatsApp Reminder
-              if (hasDues) ...[
+              if (hasDues)
                 InkWell(
                   onTap: () => khata.sendWhatsAppReminder(context, c),
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF25D366).withValues(alpha: 0.14),
+                      color: const Color(0xFF25D366).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF25D366).withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1813,8 +2242,8 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                         Text(
                           'WhatsApp',
                           style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
                             color: Color(0xFF1EBE5D),
                           ),
                         ),
@@ -1822,66 +2251,75 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
-              ],
 
-              const Spacer(),
-
-              // Quick + Udhar
-              InkWell(
-                onTap: () => _showAddTransactionModal(context, customer: c, isCredit: true),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.12),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Quick + Udhar
+                  InkWell(
+                    onTap: () => _showAddTransactionModal(context, customer: c, isCredit: true),
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.arrow_outward_rounded, size: 13, color: AppColors.error),
-                      const SizedBox(width: 4),
-                      Text(
-                        context.tr('khata_dialog_give_credit'),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.error,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.2),
+                          width: 0.8,
                         ),
                       ),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.arrow_outward_rounded, size: 11, color: AppColors.error),
+                          const SizedBox(width: 3),
+                          Text(
+                            context.tr('khata_give_credit_short'),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.error,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 6),
+                  const SizedBox(width: 6),
 
-              // Quick + Jama
-              InkWell(
-                onTap: () => _showAddTransactionModal(context, customer: c, isCredit: false),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.12),
+                  // Quick + Jama
+                  InkWell(
+                    onTap: () => _showAddTransactionModal(context, customer: c, isCredit: false),
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.arrow_downward_rounded, size: 13, color: AppColors.success),
-                      const SizedBox(width: 4),
-                      Text(
-                        context.tr('khata_dialog_receive_payment'),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.success,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.success.withValues(alpha: 0.2),
+                          width: 0.8,
                         ),
                       ),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.arrow_downward_rounded, size: 11, color: AppColors.success),
+                          const SizedBox(width: 3),
+                          Text(
+                            context.tr('khata_receive_payment_short'),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ),

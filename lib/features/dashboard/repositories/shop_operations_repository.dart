@@ -115,9 +115,10 @@ class ShopOperationsRepository {
   }
 
   // --- 3. In-Store Reservations (Shopkeeper Counter Pickup) ---
-  Future<ApiResponse<List<Map<String, dynamic>>>> listReservations({String status = ''}) async {
+  Future<ApiResponse<List<Map<String, dynamic>>>> listReservations({String status = '', int limit = 50}) async {
     try {
-      final queryParams = status.isNotEmpty ? {'status': status} : null;
+      final queryParams = <String, dynamic>{'limit': limit};
+      if (status.isNotEmpty) queryParams['status'] = status;
       final res = await _dio.get(ApiConstants.shopReservations, queryParameters: queryParams);
       final raw = res.data;
       List list = [];
@@ -144,9 +145,23 @@ class ShopOperationsRepository {
     String? reservationNumber,
   }) async {
     try {
-      final payload = <String, dynamic>{'pickup_code': pickupCode.trim()};
-      if (reservationNumber != null && reservationNumber.isNotEmpty) {
-        payload['reservation_number'] = reservationNumber.trim();
+      var code = pickupCode.trim();
+      if (code.toUpperCase().startsWith('SHOP-PICKUP:')) {
+        code = code.substring('SHOP-PICKUP:'.length).trim();
+      }
+      if (code.startsWith('#')) {
+        code = code.substring(1).trim();
+      }
+
+      final payload = <String, dynamic>{'pickup_code': code};
+
+      final resNum = (reservationNumber ?? '').trim();
+      if (resNum.isNotEmpty) {
+        payload['reservation_number'] = resNum;
+      } else if (code.toUpperCase().startsWith('HLD') || code.contains('-')) {
+        payload['reservation_number'] = code;
+      } else {
+        payload['reservation_number'] = code;
       }
 
       final res = await _dio.post(ApiConstants.shopReservationVerify, data: payload);

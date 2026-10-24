@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../auth/controllers/auth_controller.dart';
 import '../controllers/product_controller.dart';
+import '../services/smart_stock_reorder_service.dart';
 import 'product_detail_screen.dart';
 
 /// Dedicated Low Stock & Out of Stock Alerts Page.
@@ -76,7 +79,7 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
             },
           ),
           title: Text(
-            '⚠️ Low Stock Alerts (${lowStockProducts.length})',
+            '⚠️ ${context.tr('low_stock_title')} (${lowStockProducts.length})',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -86,15 +89,15 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-              tooltip: 'Refresh Low Stock Alerts',
+              tooltip: 'Refresh',
               onPressed: () async {
                 await prodController.loadProducts();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('✓ Low Stock Alerts Refreshed'),
+                    SnackBar(
+                      content: Text('✓ ${context.tr('low_stock_refreshed')}'),
                       backgroundColor: AppColors.success,
-                      duration: Duration(seconds: 1),
+                      duration: const Duration(seconds: 1),
                     ),
                   );
                 }
@@ -137,7 +140,7 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${lowStockProducts.length} Items Require Stock Refill',
+                                  '${lowStockProducts.length} ${context.tr('low_stock_banner_title')}',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w800,
@@ -146,7 +149,7 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Restock items directly here or adjust alert thresholds in product settings.',
+                                  context.tr('low_stock_banner_subtitle'),
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     color: context.colorTextSecondary,
@@ -158,12 +161,66 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                         ],
                       ),
                     ),
+
+                    // Bulk Reorder & WhatsApp Share Action Bar
+                    if (lowStockProducts.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 0,
+                            ),
+                            icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                            label: Text(
+                              context.tr('stock_reorder_bulk_btn'),
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                            ),
+                            onPressed: () {
+                              SmartStockReorderService.addAllLowStockToProcurement(context, lowStockProducts);
+                            },
+                          ),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.success,
+                              side: const BorderSide(color: AppColors.success),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.share_rounded, size: 17, color: AppColors.success),
+                            label: Text(
+                              context.tr('stock_share_whatsapp_order'),
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                            ),
+                            onPressed: () {
+                              final auth = context.read<AuthController>();
+                              final shopName = auth.shop?.name ?? '';
+                              final msg = SmartStockReorderService.formatSupplierOrderMessage(
+                                products: lowStockProducts,
+                                shopName: shopName,
+                                isHindi: context.isHindi,
+                              );
+                              SmartStockReorderService.shareSupplierOrderOnWhatsApp(
+                                context: context,
+                                message: msg,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 14),
 
                     // Search Filter
                     AppProductSearchBar(
                       controller: _searchController,
-                      hintText: 'Search low stock items by name, SKU or barcode...',
+                      hintText: context.tr('low_stock_search_hint'),
                       onChanged: (val) => setState(() => _searchQuery = val),
                       onClear: () => setState(() => _searchQuery = ''),
                     ),
@@ -186,7 +243,7 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                             ),
                             const SizedBox(height: 14),
                             Text(
-                              '🎉 All Products Are Well Stocked!',
+                              '🎉 ${context.tr('low_stock_empty_title')}',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -195,7 +252,7 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'No products currently hit low stock or out of stock alert limits.',
+                              context.tr('low_stock_empty_subtitle'),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: context.colorTextMuted,
@@ -210,7 +267,10 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               icon: const Icon(Icons.inventory_2_rounded, size: 16, color: Colors.white),
-                              label: const Text('View All Active Products', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              label: Text(
+                                context.tr('low_stock_view_active'),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
                               onPressed: () => context.go('/merchant/inventory'),
                             ),
                           ],
@@ -228,7 +288,9 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
 
                           final badgeColor = isOutOfStock ? AppColors.error : AppColors.warning;
                           final badgeBg = isOutOfStock ? context.colorErrorLight : context.colorWarningLight;
-                          final statusText = isOutOfStock ? '❌ Out of Stock' : '⚠️ Low Stock (${p.stock})';
+                          final statusText = isOutOfStock
+                              ? '❌ ${context.tr('inv_status_out_of_stock')}'
+                              : '⚠️ ${context.tr('inv_status_low_stock')} (${p.stock})';
 
                           return AppCard(
                             padding: const EdgeInsets.all(12),
@@ -298,7 +360,10 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                           ),
                                           const SizedBox(height: 3),
 
-                                          Row(
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 2,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
                                             children: [
                                               Text(
                                                 'Price: ₹${p.price.toStringAsFixed(0)}',
@@ -308,9 +373,8 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                                   color: AppColors.primary,
                                                 ),
                                               ),
-                                              const SizedBox(width: 10),
                                               Text(
-                                                'Alert Limit: ≤ ${p.lowStockThreshold} ${p.unit}s',
+                                                '• ${context.tr('low_stock_alert_limit')}: ≤ ${p.lowStockThreshold} ${p.unit}s',
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w600,
@@ -329,10 +393,13 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                 const SizedBox(height: 10),
 
                                 // Quick Restock Stepper Row
-                                Row(
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 6,
                                   children: [
                                     Text(
-                                      'Quick Restock:',
+                                      '${context.tr('stock_quick_restock')}:',
                                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextSecondary),
                                     ),
                                     const SizedBox(width: 8),
@@ -386,7 +453,7 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                           if (context.mounted) {
                                             ScaffoldMessenger.of(context).showSnackBar(
                                               SnackBar(
-                                                content: Text('+$count ${p.unit} added to ${p.name}!'),
+                                                content: Text('+$count ${p.unit} ${context.tr('low_stock_restock_added')} ${p.name}!'),
                                                 backgroundColor: AppColors.success,
                                                 duration: const Duration(seconds: 1),
                                               ),
@@ -411,19 +478,62 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                           ),
                                         ),
                                       ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
 
-                                    const Spacer(),
+                                // Card Bottom Actions: Wholesale Reorder & Edit
+                                Row(
+                                  children: [
+                                    // 1-Tap Reorder to Wholesale Procurement List
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          side: BorderSide(color: AppColors.primary.withValues(alpha: 0.6)),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          backgroundColor: context.colorPrimaryLight.withValues(alpha: 0.4),
+                                        ),
+                                        icon: const Icon(Icons.playlist_add_rounded, size: 16, color: AppColors.primary),
+                                        label: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            '${context.tr('stock_reorder_btn')} (+${SmartStockReorderService.getRecommendedReorderQuantity(p)})',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          SmartStockReorderService.addToProcurementList(context, p);
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
 
                                     // Edit Product Button
                                     OutlinedButton.icon(
                                       style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                         minimumSize: Size.zero,
                                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        side: const BorderSide(color: AppColors.primary),
+                                        side: BorderSide(color: context.colorBorder),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                       ),
-                                      icon: const Icon(Icons.edit_note_rounded, size: 16, color: AppColors.primary),
-                                      label: const Text('Edit', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                      icon: Icon(Icons.edit_note_rounded, size: 16, color: context.colorTextPrimary),
+                                      label: Text(
+                                        context.tr('btn_edit'),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: context.colorTextPrimary,
+                                        ),
+                                      ),
                                       onPressed: () {
                                         Navigator.push(
                                           context,

@@ -1,6 +1,8 @@
 import 'dart:async';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/event_bus_service.dart';
+import '../../../core/services/offline_sync_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../models/expense_model.dart';
@@ -124,7 +126,21 @@ class ExpenseController extends BaseController {
       AppEventBus().emit(AppCacheEventType.expenseMutated);
       return true;
     } else {
-      // Keep optimistic item in local cache for offline usage
+      // Keep optimistic item in local cache and enqueue for automatic background sync
+      await OfflineSyncService.instance.enqueue(
+        action: SyncActionType.expenseCreate,
+        endpoint: ApiConstants.expenses,
+        method: 'POST',
+        payload: {
+          'category': category,
+          'amount': amount,
+          'notes': notes.trim(),
+          'payment_method': paymentMethod,
+          'expense_date': DateTime.now().toIso8601String(),
+        },
+        title: 'Expense: ${category.toUpperCase()} (₹${amount.toStringAsFixed(0)})',
+        amount: amount,
+      );
       notifyListeners();
       return true;
     }

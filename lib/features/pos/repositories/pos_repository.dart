@@ -74,16 +74,20 @@ class PosRepository {
 
   Future<ApiResponse<SaleModel>> createSale({
     required String customerPhone,
+    String customerName = '',
     required List<PosCartItem> items,
     required double discountAmount,
     required String paymentMethod,
+    PosSplitPayment? splitPayments,
   }) async {
     try {
       final payload = {
         'customer_phone': customerPhone.trim(),
+        if (customerName.trim().isNotEmpty) 'customer_name': customerName.trim(),
         'items': items.map((i) => i.toJson()).toList(),
         'discount_amount': discountAmount,
         'payment_method': paymentMethod.toLowerCase(),
+        if (splitPayments != null) 'split_payments': splitPayments.toJson(),
       };
 
       final res = await _dio.post(ApiConstants.posSale, data: payload);
@@ -235,23 +239,31 @@ class PosRepository {
     }
   }
 
-  // --- Parked Bills (Hold & Resume Bills) ---
+  // --- Parked Bills (Hold & Resume Bills / Floor Assisted Baskets) ---
   Future<ApiResponse<Map<String, dynamic>>> parkBill({
+    String label = '',
     required List<PosCartItem> items,
+    double discountAmount = 0.0,
     String customerPhone = '',
+    String paymentMethod = 'cash',
     String notes = '',
   }) async {
     try {
-      final res = await _dio.post(
-        ApiConstants.posPark,
-        data: {
-          'items': items.map((i) => i.toJson()).toList(),
-          'customer_phone': customerPhone.trim(),
-          'notes': notes.trim(),
-        },
-      );
-      final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
-      return ApiResponse(success: true, data: data as Map<String, dynamic>);
+      final payload = {
+        'label': label.trim().isNotEmpty ? label.trim() : notes.trim(),
+        'customer_phone': customerPhone.trim(),
+        'items': items.map((i) => i.toJson()).toList(),
+        'discount_amount': discountAmount,
+        'payment_method': paymentMethod.toLowerCase(),
+        if (notes.isNotEmpty) 'notes': notes.trim(),
+      };
+      final res = await _dio.post(ApiConstants.posPark, data: payload);
+      final raw = res.data;
+      Map<String, dynamic> data = {};
+      if (raw is Map<String, dynamic>) {
+        data = raw['data'] is Map<String, dynamic> ? raw['data'] as Map<String, dynamic> : raw;
+      }
+      return ApiResponse(success: true, data: data);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
@@ -275,9 +287,23 @@ class PosRepository {
     }
   }
 
-  Future<ApiResponse<bool>> deleteParkedBill(String id) async {
+  Future<ApiResponse<Map<String, dynamic>>> getParkedBill(String idOrToken) async {
     try {
-      await _dio.delete(ApiConstants.posParkById(id));
+      final res = await _dio.get(ApiConstants.posParkById(idOrToken));
+      final raw = res.data;
+      Map<String, dynamic> data = {};
+      if (raw is Map<String, dynamic>) {
+        data = raw['data'] is Map<String, dynamic> ? raw['data'] as Map<String, dynamic> : raw;
+      }
+      return ApiResponse(success: true, data: data);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<bool>> deleteParkedBill(String idOrToken) async {
+    try {
+      await _dio.delete(ApiConstants.posParkById(idOrToken));
       return ApiResponse(success: true, data: true);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));

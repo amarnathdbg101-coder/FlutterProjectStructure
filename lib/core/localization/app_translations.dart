@@ -115,6 +115,10 @@ class AppTranslations {
       'en': 'Cancel',
       'hi': 'रद्द करें',
     },
+    'btn_delete': {
+      'en': 'Delete',
+      'hi': 'हटाएं',
+    },
     'btn_close': {
       'en': 'Close',
       'hi': 'बंद करें',
@@ -1060,6 +1064,110 @@ class AppTranslations {
       'en': 'Daily Quick Presets (1-Tap):',
       'hi': 'दैनिक त्वरित प्रविष्टियां (1-टैप):',
     },
+    'exp_quick_amounts': {
+      'en': 'Quick Amounts',
+      'hi': 'त्वरित राशि',
+    },
+    'exp_kpi_sales': {
+      'en': "Today's Sales",
+      'hi': 'आज की बिक्री',
+    },
+    'exp_kpi_net_profit': {
+      'en': "Today's Net Profit",
+      'hi': 'आज का शुद्ध मुनाफा',
+    },
+    'exp_kpi_net_balance': {
+      'en': 'Net In-Hand Balance',
+      'hi': 'हाथ में शुद्ध बचत',
+    },
+    'exp_delete_title': {
+      'en': 'Delete Expense Record',
+      'hi': 'खर्च का रिकॉर्ड हटाएं',
+    },
+    'exp_delete_confirm': {
+      'en': 'Are you sure you want to delete this expense record?',
+      'hi': 'क्या आप वाकई इस खर्च के रिकॉर्ड को हटाना चाहते हैं?',
+    },
+    'exp_toast_deleted': {
+      'en': 'Expense record deleted',
+      'hi': 'खर्च रिकॉर्ड हटा दिया गया',
+    },
+    'exp_filter_all': {
+      'en': 'All',
+      'hi': 'सभी',
+    },
+
+    // Multi-Store Switcher & Branch Management
+    'store_switcher_title': {
+      'en': 'Switch Store / Branch',
+      'hi': 'दुकान / शाखा बदलें',
+    },
+    'store_switcher_subtitle': {
+      'en': 'Manage outlets and godown inventories',
+      'hi': 'शाखाओं एवं गोदामों को प्रबंधित करें',
+    },
+    'store_switcher_active': {
+      'en': 'Active Store',
+      'hi': 'सक्रिय दुकान',
+    },
+    'store_switcher_add_branch': {
+      'en': 'Add New Branch',
+      'hi': 'नई शाखा जोड़ें',
+    },
+    'store_switcher_branch_name': {
+      'en': 'Branch / Store Name',
+      'hi': 'शाखा / दुकान का नाम',
+    },
+    'store_switcher_branch_address': {
+      'en': 'Branch Address / Location',
+      'hi': 'शाखा का पता / स्थान',
+    },
+    'store_switcher_switch_success': {
+      'en': 'Switched active store',
+      'hi': 'सक्रिय दुकान बदल दी गई',
+    },
+    'store_switcher_create_success': {
+      'en': 'New branch added successfully',
+      'hi': 'नई शाखा सफलतापूर्वक जोड़ी गई',
+    },
+
+    // Offline Cloud Sync Queue
+    'sync_status_synced': {
+      'en': 'All Synced',
+      'hi': 'सब सुरक्षित व सिंक है',
+    },
+    'sync_status_pending': {
+      'en': 'Changes Queued Offline',
+      'hi': 'बदलाव ऑफ़लाइन सुरक्षित हैं',
+    },
+    'sync_status_syncing': {
+      'en': 'Syncing with cloud...',
+      'hi': 'क्लाउड पर सिंक हो रहा है...',
+    },
+    'sync_sheet_title': {
+      'en': 'Offline Cloud Sync Queue',
+      'hi': 'ऑफ़लाइन क्लाउड सिंक कतार',
+    },
+    'sync_sheet_subtitle': {
+      'en': 'Offline sales and expenses auto-sync when online',
+      'hi': 'ऑफ़लाइन बिक्री व खर्चे इंटरनेट आने पर स्वतः सिंक होंगे',
+    },
+    'sync_btn_sync_now': {
+      'en': 'Sync Now',
+      'hi': 'अभी सिंक करें',
+    },
+    'sync_toast_synced': {
+      'en': 'All offline changes synced with cloud',
+      'hi': 'सभी ऑफ़लाइन बदलाव क्लाउड पर सिंक हो गए',
+    },
+    'sync_toast_offline': {
+      'en': 'Device is offline. Will auto-sync when connected',
+      'hi': 'डिवाइस ऑफ़लाइन है। इंटरनेट आने पर स्वतः सिंक होगा',
+    },
+    'sync_empty': {
+      'en': 'No pending changes. All data is up to date.',
+      'hi': 'कोई लंबित बदलाव नहीं है। सभी डेटा अपडेटेड है।',
+    },
 
     // Additional Storefront & Catalog Action Keys
     'storefront_call_store': {
@@ -1165,6 +1273,14 @@ class AppTranslations {
     'khata_dialog_receive_payment': {
       'en': 'Receive Payment (Jama Kiya)',
       'hi': 'जमा प्राप्त किया (पेमेंट)',
+    },
+    'khata_give_credit_short': {
+      'en': '+ Credit',
+      'hi': '+ उधार दें',
+    },
+    'khata_receive_payment_short': {
+      'en': '+ Payment',
+      'hi': '+ जमा लें',
     },
     'khata_field_customer_name': {
       'en': 'Customer Name',
@@ -1366,6 +1482,42 @@ class AppTranslations {
       'en': 'Set Credit Limit (₹)',
       'hi': 'उधार सीमा दर्ज करें (₹)',
     },
+    'khata_running_balance': {
+      'en': 'Balance',
+      'hi': 'शेष',
+    },
+    'khata_opening_pdf': {
+      'en': 'Opening official PDF statement...',
+      'hi': 'आधिकारिक पीडीएफ पासबुक खोली जा रही है...',
+    },
+    'khata_pdf_error': {
+      'en': 'Unable to open PDF statement',
+      'hi': 'पीडीएफ पासबुक नहीं खोली जा सकी',
+    },
+    'khata_filter_all': {
+      'en': 'All',
+      'hi': 'सभी',
+    },
+    'khata_filter_credit': {
+      'en': 'Udhar (-)',
+      'hi': 'उधार (-)',
+    },
+    'khata_filter_payment': {
+      'en': 'Jama (+)',
+      'hi': 'जमा (+)',
+    },
+    'khata_entries_count': {
+      'en': 'entries',
+      'hi': 'प्रविष्टियां',
+    },
+    'khata_empty_statement_action': {
+      'en': 'Record first credit or payment using buttons above',
+      'hi': 'ऊपर दिए गए बटनों से पहला उधार या भुगतान दर्ज करें',
+    },
+    'khata_settled_badge': {
+      'en': 'Settled',
+      'hi': 'चुकता',
+    },
     'khata_recent_customers': {
       'en': 'Recent Customers',
       'hi': 'हाल के ग्राहक',
@@ -1381,6 +1533,114 @@ class AppTranslations {
     'khata_quick_presets': {
       'en': 'Quick Amount',
       'hi': 'त्वरित राशि',
+    },
+    'khata_reminder_modal_title': {
+      'en': 'Smart Payment Reminder',
+      'hi': 'भुगतान तकाजा व पासबुक',
+    },
+    'khata_reminder_preview_label': {
+      'en': 'Message Preview',
+      'hi': 'संदेश पूर्वावलोकन',
+    },
+    'khata_reminder_include_history': {
+      'en': 'Include Recent Activity (Last 3 entries)',
+      'hi': 'हालिया लेन-देन शामिल करें (पिछले 3 लेन-देन)',
+    },
+    'khata_reminder_include_upi': {
+      'en': 'Include 1-Tap UPI Payment Link',
+      'hi': '1-टैप UPI भुगतान लिंक शामिल करें',
+    },
+    'khata_reminder_btn_send_whatsapp': {
+      'en': 'Send on WhatsApp',
+      'hi': 'व्हाट्सएप पर भेजें',
+    },
+    'khata_reminder_btn_copy_message': {
+      'en': 'Copy Statement',
+      'hi': 'विवरण कॉपी करें',
+    },
+    'khata_reminder_btn_copy_upi': {
+      'en': 'Copy UPI Link',
+      'hi': 'UPI लिंक कॉपी करें',
+    },
+    'khata_reminder_toast_copied': {
+      'en': 'Statement copied to clipboard',
+      'hi': 'खाता विवरण क्लिपबोर्ड पर कॉपी हो गया',
+    },
+    'khata_reminder_upi_copied': {
+      'en': 'UPI payment link copied to clipboard',
+      'hi': 'UPI भुगतान लिंक क्लिपबोर्ड पर कॉपी हो गया',
+    },
+    'khata_reminder_no_dues': {
+      'en': 'This customer has zero pending dues!',
+      'hi': 'इस ग्राहक पर कोई बकाया उधारी नहीं है!',
+    },
+    'stock_reorder_btn': {
+      'en': 'Add to Reorder List',
+      'hi': 'खरीद लिस्ट में जोड़ें',
+    },
+    'stock_reorder_bulk_btn': {
+      'en': 'Add All to Reorder List',
+      'hi': 'सभी को खरीद लिस्ट में जोड़ें',
+    },
+    'stock_reorder_toast_added': {
+      'en': 'Added to Wholesale Reorder List',
+      'hi': 'थोक खरीद लिस्ट में जुड़ गया',
+    },
+    'stock_reorder_toast_bulk': {
+      'en': 'All low stock items added to Reorder List',
+      'hi': 'सभी कम स्टॉक वाले सामान खरीद लिस्ट में जुड़ गए',
+    },
+    'stock_reorder_view_btn': {
+      'en': 'View List',
+      'hi': 'लिस्ट देखें',
+    },
+    'stock_share_whatsapp_order': {
+      'en': 'Share Supplier Order',
+      'hi': 'सप्लायर को ऑर्डर भेजें',
+    },
+    'stock_quick_restock': {
+      'en': 'Quick Restock',
+      'hi': 'त्वरित स्टॉक जोड़ें',
+    },
+    'low_stock_title': {
+      'en': 'Low Stock Alerts',
+      'hi': 'कम स्टॉक अलर्ट',
+    },
+    'low_stock_banner_title': {
+      'en': 'Items Require Stock Refill',
+      'hi': 'सामानों में स्टॉक भरने की आवश्यकता है',
+    },
+    'low_stock_banner_subtitle': {
+      'en': 'Restock items directly here or adjust alert thresholds in product settings.',
+      'hi': 'सामान सीधे यहाँ से रीस्टॉक करें या उत्पाद सेटिंग्स में अलर्ट सीमा बदलें।',
+    },
+    'low_stock_empty_title': {
+      'en': 'All Products Are Well Stocked!',
+      'hi': 'सभी सामान पर्याप्त स्टॉक में हैं!',
+    },
+    'low_stock_empty_subtitle': {
+      'en': 'No products currently hit low stock or out of stock alert limits.',
+      'hi': 'वर्तमान में कोई भी उत्पाद कम स्टॉक या समाप्त स्टॉक सीमा पर नहीं है।',
+    },
+    'low_stock_view_active': {
+      'en': 'View All Active Products',
+      'hi': 'सभी सक्रिय सामान देखें',
+    },
+    'low_stock_search_hint': {
+      'en': 'Search low stock items by name, SKU or barcode...',
+      'hi': 'नाम, SKU या बारकोड से कम स्टॉक खोजें...',
+    },
+    'low_stock_alert_limit': {
+      'en': 'Alert Limit',
+      'hi': 'अलर्ट सीमा',
+    },
+    'low_stock_restock_added': {
+      'en': 'added to stock',
+      'hi': 'स्टॉक में जुड़ गया',
+    },
+    'low_stock_refreshed': {
+      'en': 'Low Stock Alerts Refreshed',
+      'hi': 'कम स्टॉक अलर्ट अपडेट हो गए',
     },
     'pos_product_not_found': {
       'en': 'Product not found. Please choose from catalog or add a custom item.',
@@ -1421,6 +1681,46 @@ class AppTranslations {
     'proc_val_name': {
       'en': 'Please enter item name',
       'hi': 'कृपया आइटम का नाम दर्ज करें',
+    },
+    'mandi_title': {
+      'en': 'Mandi Sourcing & Wholesale',
+      'hi': 'मंडी थोक खरीद (Sourcing)',
+    },
+    'mandi_sub': {
+      'en': 'Wholesale Reorder & Procurement List',
+      'hi': 'थोक सामान ऑर्डर व रीऑर्डर लिस्ट',
+    },
+    'mandi_import_low': {
+      'en': 'Auto-Import Low Stock',
+      'hi': 'कम स्टॉक ऑटो-इंपोर्ट',
+    },
+    'mandi_whatsapp_sheet': {
+      'en': 'WhatsApp Sheet',
+      'hi': 'व्हाट्सएप लिस्ट',
+    },
+    'mandi_pdf_sheet': {
+      'en': 'Mandi PDF Sheet',
+      'hi': 'मंडी पीडीएफ लिस्ट',
+    },
+    'mandi_add_title': {
+      'en': 'Add Item to Mandi List',
+      'hi': 'मंडी लिस्ट में नया सामान जोड़ें',
+    },
+    'mandi_item_name': {
+      'en': 'Item / Commodity Name',
+      'hi': 'सामान या फसल का नाम',
+    },
+    'mandi_qty': {
+      'en': 'Quantity / Weight',
+      'hi': 'मात्रा या वजन',
+    },
+    'mandi_budget': {
+      'en': 'Est. Mandi Budget',
+      'hi': 'अनुमानित मंडी बजट',
+    },
+    'mandi_items': {
+      'en': 'Sourcing Items',
+      'hi': 'खरीद का सामान',
     },
     'today_sales_title': {
       'en': "Today's Sales (24 Hours)",
@@ -1539,6 +1839,122 @@ class AppTranslations {
     'khata_share_whatsapp_title': {
       'en': 'Share on WhatsApp',
       'hi': 'व्हाट्सएप पर भेजें',
+    },
+
+    // Price Checker & Exact Product Finder
+    'price_checker_title': {
+      'en': 'Price & Product Checker',
+      'hi': 'मूल्य एवं वस्तु जाँचें',
+    },
+    'price_checker_sub': {
+      'en': 'Instant scanner for price, stock & details',
+      'hi': 'मूल्य, स्टॉक और विवरण की त्वरित जाँच',
+    },
+    'price_checker_input_hint': {
+      'en': 'Scan barcode or enter SKU / Name...',
+      'hi': 'बारकोड स्कैन करें या SKU / नाम लिखें...',
+    },
+    'price_checker_scan_btn': {
+      'en': 'Scan / Search',
+      'hi': 'स्कैन / खोजें',
+    },
+    'price_checker_not_found': {
+      'en': 'No product found with this barcode or SKU',
+      'hi': 'इस बारकोड या SKU से कोई वस्तु नहीं मिली',
+    },
+    'price_checker_selling_price': {
+      'en': 'Selling Price',
+      'hi': 'बिक्री मूल्य',
+    },
+    'price_checker_mrp': {
+      'en': 'MRP',
+      'hi': 'अधिकतम खुदरा मूल्य (MRP)',
+    },
+    'price_checker_you_save': {
+      'en': 'Customer Saves',
+      'hi': 'ग्राहक बचत',
+    },
+    'price_checker_margin': {
+      'en': 'Profit Margin',
+      'hi': 'मुनाफ़ा मार्जिन',
+    },
+    'price_checker_cost': {
+      'en': 'Cost Price',
+      'hi': 'लागत मूल्य',
+    },
+    'price_checker_btn_pos': {
+      'en': 'Add to POS Bill',
+      'hi': 'बिल में जोड़ें',
+    },
+    'price_checker_btn_stock': {
+      'en': 'Adjust Stock',
+      'hi': 'स्टॉक बदलें',
+    },
+    'price_checker_btn_edit': {
+      'en': 'Edit Price',
+      'hi': 'मूल्य बदलें',
+    },
+    'price_checker_btn_labels': {
+      'en': 'Print Barcodes',
+      'hi': 'बारकोड स्टीकर',
+    },
+    'price_checker_added_to_cart': {
+      'en': 'Item added to active POS cart',
+      'hi': 'वस्तु बिल में जोड़ दी गई',
+    },
+    'price_checker_scan_again': {
+      'en': 'Scan Next Item',
+      'hi': 'अगली वस्तु स्कैन करें',
+    },
+    'price_checker_hardware_ready': {
+      'en': 'Hardware Scanner Ready',
+      'hi': 'हार्डवेयर स्कैनर तैयार है',
+    },
+
+    // Barcode Sticker Generator
+    'barcode_label_title': {
+      'en': 'Barcode Sticker Generator',
+      'hi': 'बारकोड स्टीकर जनरेटर',
+    },
+    'barcode_label_sub': {
+      'en': 'Print price tags & scannable barcodes',
+      'hi': 'मूल्य टैग और बारकोड स्टीकर प्रिंट करें',
+    },
+    'barcode_format': {
+      'en': 'Label Format',
+      'hi': 'स्टीकर फॉर्मेट',
+    },
+    'barcode_format_a4': {
+      'en': 'A4 Sheet (24 Labels - 70x37mm)',
+      'hi': 'A4 शीट (24 स्टीकर - 70x37मिमी)',
+    },
+    'barcode_format_thermal': {
+      'en': 'Thermal Roll (Single - 50x25mm)',
+      'hi': 'थर्मल रोल (एकल - 50x25मिमी)',
+    },
+    'barcode_qty_copies': {
+      'en': 'Number of Stickers',
+      'hi': 'स्टीकर की संख्या',
+    },
+    'barcode_preview': {
+      'en': 'Sticker Preview',
+      'hi': 'स्टीकर पूर्वावलोकन',
+    },
+    'barcode_btn_print': {
+      'en': 'Print Stickers',
+      'hi': 'स्टीकर प्रिंट करें',
+    },
+    'barcode_btn_share_pdf': {
+      'en': 'Share / Save PDF',
+      'hi': 'PDF साझा करें',
+    },
+    'barcode_incl_taxes': {
+      'en': 'Incl. of all taxes',
+      'hi': 'सभी कर सहित',
+    },
+    'barcode_pkd': {
+      'en': 'PKD',
+      'hi': 'पैकिंग',
     },
   };
 

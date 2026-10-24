@@ -6,7 +6,7 @@ class ApiConstants {
   // Set isProduction to false for local Go backend testing (http://localhost:8080)
   // Set isProduction to true for live production deployment
   static const bool isProduction = true;
-  static const String productionUrl = 'https://api.shopsilo.in';
+  static const String productionUrl = 'https://shopsiloapi.shopsilo.in';
   static const String localUrl = 'http://localhost:8080';
 
   static String get baseUrl {
@@ -92,6 +92,8 @@ class ApiConstants {
   static const String productsImportTemplateCsv = '/shops/me/products/import-template.csv';
   static const String productsImportTemplateXlsx = '/shops/me/products/import-template.xlsx';
   static const String scanBarcode = '/products/scan';
+  static String masterCatalogBarcode(String code) => '/catalog/barcode/${Uri.encodeComponent(code)}';
+  static const String masterCatalogLookup = '/catalog/lookup'; // ?barcode=... fallback
 
   // --- 8. Inventory & Stock Restock (Shop) ---
   static const String adjustStock = '/shops/me/inventory/adjust';

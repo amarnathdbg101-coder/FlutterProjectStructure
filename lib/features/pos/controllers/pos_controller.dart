@@ -2,12 +2,17 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/audio_haptic_service.dart';
+import '../../../core/services/counter_websocket_service.dart';
 import '../../../core/services/event_bus_service.dart';
+import '../../../core/services/offline_sync_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../../core/utils/date_time_utils.dart';
 import '../../products/models/product_model.dart';
+import '../../products/repositories/product_repository.dart';
 import '../models/pos_model.dart';
 import '../repositories/pos_repository.dart';
 
@@ -22,6 +27,20 @@ class PosController extends BaseController {
 
   final List<PosHeldBill> _heldBills = [];
   List<PosHeldBill> get heldBills => List.unmodifiable(_heldBills);
+
+  // --- Real-time Floor Assisted Selling & Parallel Active Baskets ---
+  String _currentActiveToken = 'T-01';
+  String get currentActiveToken => _currentActiveToken;
+
+  List<PosParkedBill> _activeBaskets = [];
+  List<PosParkedBill> get activeBaskets => List.unmodifiable(_activeBaskets);
+
+  bool _isLoadingBaskets = false;
+  bool get isLoadingBaskets => _isLoadingBaskets;
+
+  Timer? _autoSyncDebounce;
+  bool _isSyncingToServer = false;
+  StreamSubscription? _posParkedSub;
 
   String _customerPhone = '';
   String get customerPhone => _customerPhone;
@@ -54,6 +73,64 @@ class PosController extends BaseController {
     if (_paymentMethod != 'cash') return 0.0;
     final diff = _cashTendered - grandTotal;
     return diff > 0 ? diff : 0.0;
+  }
+
+  /// Cash shortage when customer gives less than grand total in cash mode
+  double get cashShortage {
+    if (_paymentMethod != 'cash') return 0.0;
+    if (_cashTendered <= 0) return 0.0;
+    final diff = grandTotal - _cashTendered;
+    return diff > 0 ? diff : 0.0;
+  }
+
+  double _splitCashAmount = 0.0;
+  double get splitCashAmount => _splitCashAmount;
+
+  double get splitUpiAmount {
+    final diff = grandTotal - _splitCashAmount;
+    return diff > 0 ? diff : 0.0;
+  }
+
+  void setSplitCashAmount(double val) {
+    _splitCashAmount = val >= 0 ? val : 0.0;
+    notifyListeners();
+  }
+
+  /// Generates dynamic, realistic cash tendered suggestions based on Indian currency denominations
+  List<double> getSmartCashSuggestions() {
+    final total = grandTotal;
+    if (total <= 0) return [];
+
+    final Set<double> suggestions = {};
+
+    // 1. Exact amount
+    suggestions.add(total);
+
+    // 2. Next nearest Round 50
+    final next50 = (total / 50).ceil() * 50.0;
+    if (next50 > total) suggestions.add(next50);
+
+    // 3. Next nearest Round 100
+    final next100 = (total / 100).ceil() * 100.0;
+    if (next100 > total) suggestions.add(next100);
+
+    // 4. Standard Indian currency notes
+    for (final note in [100.0, 200.0, 500.0, 1000.0, 2000.0]) {
+      if (note > total) {
+        suggestions.add(note);
+      }
+    }
+
+    // 5. If total > 500, suggest next 500 steps
+    if (total > 500) {
+      final next500 = (total / 500).ceil() * 500.0;
+      if (next500 > total) suggestions.add(next500);
+      final nextNext500 = next500 + 500.0;
+      if (nextNext500 > total) suggestions.add(nextNext500);
+    }
+
+    final list = suggestions.toList()..sort();
+    return list.take(5).toList();
   }
 
   List<SaleModel> _serverSales = [];
@@ -97,17 +174,27 @@ class PosController extends BaseController {
   }
 
   StreamSubscription<AppCacheEvent>? _productsSub;
+  StreamSubscription<AppCacheEvent>? _inventorySub;
+  StreamSubscription<AppCacheEvent>? _reservationSub;
   StreamSubscription<AppCacheEvent>? _logoutSub;
 
   PosController() {
     _initFromCache();
     loadCatalog();
     fetchBackendSales();
+    CounterWebSocketService.instance.connect();
+    fetchActiveBaskets();
     _subscribeToEvents();
   }
 
   void _subscribeToEvents() {
     _productsSub = AppEventBus().on(AppCacheEventType.productsMutated, (_) {
+      loadCatalog(forceRefresh: true);
+    });
+    _inventorySub = AppEventBus().on(AppCacheEventType.inventoryMutated, (_) {
+      loadCatalog(forceRefresh: true);
+    });
+    _reservationSub = AppEventBus().on(AppCacheEventType.reservationMutated, (_) {
       loadCatalog(forceRefresh: true);
     });
     _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
@@ -116,11 +203,27 @@ class PosController extends BaseController {
       clearCart();
       notifyListeners();
     });
+    _posParkedSub = CounterWebSocketService.instance.posParkedStream.listen((eventData) {
+      _handleParkedStreamEvent(eventData);
+    });
+  }
+
+  bool _isDisposed = false;
+
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    super.notifyListeners();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _autoSyncDebounce?.cancel();
+    _posParkedSub?.cancel();
     _productsSub?.cancel();
+    _inventorySub?.cancel();
+    _reservationSub?.cancel();
     _logoutSub?.cancel();
     super.dispose();
   }
@@ -174,21 +277,25 @@ class PosController extends BaseController {
 
   void setCustomerPhone(String phone) {
     _customerPhone = phone;
+    scheduleAutoSync();
     notifyListeners();
   }
 
   void setCustomerName(String name) {
     _customerName = name;
+    scheduleAutoSync();
     notifyListeners();
   }
 
   void setPaymentMethod(String method) {
     _paymentMethod = method;
+    scheduleAutoSync();
     notifyListeners();
   }
 
   void setDiscount(double amount) {
     _discount = amount;
+    scheduleAutoSync();
     notifyListeners();
   }
 
@@ -204,6 +311,8 @@ class PosController extends BaseController {
     } else {
       _cart.add(PosCartItem(product: product, quantity: quantity));
     }
+    AppAudioHapticFeedback.scanSuccess();
+    scheduleAutoSync();
     notifyListeners();
   }
 
@@ -218,18 +327,22 @@ class PosController extends BaseController {
       category: 'Services & Others',
     );
     _cart.add(PosCartItem(product: customProduct, quantity: quantity, customPrice: price));
+    AppAudioHapticFeedback.scanSuccess();
+    scheduleAutoSync();
     notifyListeners();
   }
 
   void updateCartItemPrice(PosCartItem item, double newPrice) {
     if (newPrice >= 0) {
       item.customPrice = newPrice;
+      scheduleAutoSync();
       notifyListeners();
     }
   }
 
   void incrementQuantity(PosCartItem item) {
     item.quantity += 1;
+    scheduleAutoSync();
     notifyListeners();
   }
 
@@ -239,22 +352,201 @@ class PosController extends BaseController {
     } else {
       _cart.remove(item);
     }
+    scheduleAutoSync();
     notifyListeners();
   }
 
   void removeFromCart(PosCartItem item) {
     _cart.remove(item);
+    scheduleAutoSync();
     notifyListeners();
   }
 
-  void clearCart() {
+  void clearCart({bool syncWithBackend = true}) {
     _cart.clear();
     _discount = 0.0;
     _customerPhone = '';
     _customerName = '';
     _cashTendered = 0.0;
+    _splitCashAmount = 0.0;
     _paymentMethod = 'cash';
+    if (syncWithBackend) {
+      scheduleAutoSync();
+    }
     notifyListeners();
+  }
+
+  // --- Real-time Floor Multi-Basket Synchronization Engine ---
+
+  void _handleParkedStreamEvent(Map<String, dynamic> eventData) {
+    final event = eventData['event']?.toString() ?? '';
+    final payload = eventData['payload'] is Map<String, dynamic>
+        ? eventData['payload'] as Map<String, dynamic>
+        : <String, dynamic>{};
+
+    if (event == 'POS_PARKED_BILLS_CHANGED') {
+      final token = payload['token']?.toString() ?? '';
+      fetchActiveBaskets(silent: true);
+
+      // If another family member updated the active token on their phone:
+      if (!_isSyncingToServer && token.isNotEmpty && token.toUpperCase() == _currentActiveToken.toUpperCase()) {
+        if (payload['bill'] is Map<String, dynamic>) {
+          final bill = PosParkedBill.fromJson(payload['bill'] as Map<String, dynamic>);
+          final serverCount = bill.totalItemCount;
+          final localCount = totalItemCount;
+          if (bill.items.length != _cart.length || serverCount != localCount) {
+            _cart.clear();
+            for (final item in bill.items) {
+              _cart.add(PosCartItem(
+                product: item.product,
+                quantity: item.quantity,
+                customPrice: item.customPrice,
+              ));
+            }
+            if (bill.customerPhone.isNotEmpty) _customerPhone = bill.customerPhone;
+            if (bill.customerName.isNotEmpty) _customerName = bill.customerName;
+            _discount = bill.discountAmount;
+            _paymentMethod = bill.paymentMethod;
+            notifyListeners();
+          }
+        }
+      }
+    } else if (event == 'POS_PARKED_BILL_DELETED') {
+      final idOrToken = payload['id_or_token']?.toString() ?? '';
+      _activeBaskets.removeWhere((b) =>
+          b.id == idOrToken || b.label.toUpperCase() == idOrToken.toUpperCase());
+      if (_currentActiveToken.toUpperCase() == idOrToken.toUpperCase()) {
+        clearCart(syncWithBackend: false);
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchActiveBaskets({bool silent = false}) async {
+    if (!silent) {
+      _isLoadingBaskets = true;
+      notifyListeners();
+    }
+    try {
+      final res = await _repo.listParkedBills();
+      if (res.success && res.data != null) {
+        _activeBaskets = res.data!.map((e) => PosParkedBill.fromJson(e)).toList();
+
+        // If local cart is empty, check if active token already has items on server
+        if (_cart.isEmpty) {
+          final match = _activeBaskets.firstWhere(
+            (b) => b.label.toUpperCase() == _currentActiveToken.toUpperCase(),
+            orElse: () => PosParkedBill(id: '', label: '', items: [], totalAmount: 0),
+          );
+          if (match.items.isNotEmpty) {
+            _cart.clear();
+            for (final item in match.items) {
+              _cart.add(PosCartItem(
+                product: item.product,
+                quantity: item.quantity,
+                customPrice: item.customPrice,
+              ));
+            }
+            _customerPhone = match.customerPhone;
+            _customerName = match.customerName;
+            _discount = match.discountAmount;
+            _paymentMethod = match.paymentMethod;
+          }
+        }
+      }
+    } catch (_) {}
+    if (!silent) {
+      _isLoadingBaskets = false;
+    }
+    notifyListeners();
+  }
+
+  Future<void> switchToken(String newToken) async {
+    final clean = newToken.trim().toUpperCase();
+    if (clean.isEmpty || clean == _currentActiveToken) return;
+
+    // Flush any pending sync on old token
+    _autoSyncDebounce?.cancel();
+    if (_cart.isNotEmpty) {
+      await syncCurrentTokenToBackend();
+    }
+
+    _currentActiveToken = clean;
+
+    final match = _activeBaskets.firstWhere(
+      (b) => b.label.toUpperCase() == clean,
+      orElse: () => PosParkedBill(id: '', label: '', items: [], totalAmount: 0),
+    );
+
+    if (match.items.isNotEmpty) {
+      _cart.clear();
+      for (final item in match.items) {
+        _cart.add(PosCartItem(
+          product: item.product,
+          quantity: item.quantity,
+          customPrice: item.customPrice,
+        ));
+      }
+      _customerPhone = match.customerPhone;
+      _customerName = match.customerName;
+      _discount = match.discountAmount;
+      _paymentMethod = match.paymentMethod;
+      _cashTendered = 0.0;
+    } else {
+      clearCart(syncWithBackend: false);
+    }
+
+    notifyListeners();
+  }
+
+  void scheduleAutoSync() {
+    final token = TokenStorage.getToken();
+    if (token == null || token.isEmpty) return;
+
+    _autoSyncDebounce?.cancel();
+    _autoSyncDebounce = Timer(const Duration(milliseconds: 300), () {
+      syncCurrentTokenToBackend();
+    });
+  }
+
+  Future<void> syncCurrentTokenToBackend() async {
+    if (_isSyncingToServer) return;
+    if (_currentActiveToken.trim().isEmpty) return;
+
+    if (_cart.isEmpty) {
+      final existed = _activeBaskets.any((b) => b.label.toUpperCase() == _currentActiveToken.toUpperCase());
+      if (existed) {
+        _activeBaskets.removeWhere((b) => b.label.toUpperCase() == _currentActiveToken.toUpperCase());
+        notifyListeners();
+        try {
+          await _repo.deleteParkedBill(_currentActiveToken);
+        } catch (_) {}
+      }
+      return;
+    }
+
+    _isSyncingToServer = true;
+    try {
+      final res = await _repo.parkBill(
+        label: _currentActiveToken,
+        items: _cart,
+        discountAmount: _discount,
+        customerPhone: _customerPhone,
+        paymentMethod: _paymentMethod,
+      );
+      if (res.success && res.data != null) {
+        final bill = PosParkedBill.fromJson(res.data!);
+        final idx = _activeBaskets.indexWhere((b) => b.label.toUpperCase() == _currentActiveToken.toUpperCase());
+        if (idx >= 0) {
+          _activeBaskets[idx] = bill;
+        } else {
+          _activeBaskets.add(bill);
+        }
+        notifyListeners();
+      }
+    } catch (_) {} finally {
+      _isSyncingToServer = false;
+    }
   }
 
   /// Parks current active bill cart so another customer can be billed at the counter
@@ -316,9 +608,29 @@ class PosController extends BaseController {
     }
   }
 
+  String _lastScannedActionMessage = '';
+  String get lastScannedActionMessage => _lastScannedActionMessage;
+
   Future<bool> scanAndAddToCart(String barcode) async {
     final cleanBarcode = barcode.trim();
     if (cleanBarcode.isEmpty) return false;
+    _lastScannedActionMessage = '';
+
+    // Check if scanned code is a Floor Basket Token QR Code (e.g. SHOP-TOKEN:T-05 or TOKEN:T-05 or T-05)
+    final upper = cleanBarcode.toUpperCase();
+    if (upper.startsWith('SHOP-TOKEN:') || upper.startsWith('TOKEN:') || RegExp(r'^T-\d{2}$').hasMatch(upper)) {
+      String token = upper;
+      if (token.startsWith('SHOP-TOKEN:')) {
+        token = token.substring('SHOP-TOKEN:'.length).trim();
+      } else if (token.startsWith('TOKEN:')) {
+        token = token.substring('TOKEN:'.length).trim();
+      }
+      if (token.isNotEmpty) {
+        await switchToken(token);
+        _lastScannedActionMessage = 'TOKEN:$token';
+        return true;
+      }
+    }
 
     // 1. Try local memory search first (0ms)
     final localMatch = _products.firstWhere(
@@ -330,6 +642,7 @@ class PosController extends BaseController {
 
     if (localMatch.id.toString().isNotEmpty) {
       addToCart(localMatch);
+      _lastScannedActionMessage = 'PRODUCT:${localMatch.name}';
       return true;
     }
 
@@ -337,9 +650,79 @@ class PosController extends BaseController {
     final response = await _repo.scanBarcode(cleanBarcode);
     if (response.success && response.data != null) {
       addToCart(response.data!);
+      _lastScannedActionMessage = 'PRODUCT:${response.data!.name}';
       return true;
     }
     return false;
+  }
+
+  /// Quickly registers a brand-new unlisted barcode item directly on the floor
+  /// and adds it to the current active customer's cart
+  Future<bool> quickRegisterBarcodeAndAddToCart({
+    required String barcode,
+    required String name,
+    required double price,
+    double mrp = 0.0,
+    String category = 'General Store',
+  }) async {
+    final cleanBarcode = barcode.trim();
+    final cleanName = name.trim().isNotEmpty ? name.trim() : 'Item $cleanBarcode';
+    if (cleanBarcode.isEmpty || price < 0) return false;
+
+    try {
+      final newProduct = ProductModel(
+        id: 'quick_${DateTime.now().millisecondsSinceEpoch}',
+        name: cleanName,
+        barcode: cleanBarcode,
+        sku: cleanBarcode,
+        price: price,
+        comparePrice: mrp > 0 ? mrp : price,
+        stock: 999,
+        category: category,
+        unit: 'piece',
+        isActive: true,
+      );
+
+      // 1. Add to local memory catalog for instant subsequent scans
+      _products.insert(0, newProduct);
+      LocalCacheService.saveProducts(_products);
+
+      // 2. Add to active cart
+      addToCart(newProduct);
+      _lastScannedActionMessage = 'PRODUCT:$cleanName';
+
+      // 3. Silently persist to backend in background
+      final productData = {
+        'name': cleanName,
+        'barcode': cleanBarcode,
+        'sku': cleanBarcode,
+        'price': price,
+        'mrp': mrp > 0 ? mrp : price,
+        'stock': 999,
+        'category': category,
+        'unit': 'piece',
+        'is_active': true,
+      };
+
+      final sessionToken = TokenStorage.getToken();
+      if (sessionToken != null && sessionToken.isNotEmpty) {
+        ProductRepository().createProduct(productData).then((res) {
+          if (res.success && res.data != null) {
+            final idx = _products.indexWhere((p) => p.barcode == cleanBarcode);
+            if (idx >= 0) {
+              _products[idx] = res.data!;
+              LocalCacheService.saveProducts(_products);
+            }
+          }
+          AppEventBus().emit(AppCacheEventType.productsMutated);
+        }).catchError((_) {});
+      }
+
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<SaleModel?> completeSale() async {
@@ -356,19 +739,37 @@ class PosController extends BaseController {
     setLoading(true);
     clearError();
 
+    PosSplitPayment? split;
+    if (_paymentMethod == 'split') {
+      split = PosSplitPayment(
+        cashAmount: _splitCashAmount,
+        onlineAmount: splitUpiAmount,
+      );
+    }
+
     final response = await _repo.createSale(
       customerPhone: _customerPhone,
+      customerName: _customerName,
       items: _cart,
       discountAmount: _discount,
       paymentMethod: _paymentMethod,
+      splitPayments: split,
     );
     setLoading(false);
 
     if (response.success && response.data != null) {
+      final billedToken = _currentActiveToken;
       _lastCompletedSale = response.data;
       await LocalCacheService.saveCompletedSale(_lastCompletedSale!);
       _serverSales.insert(0, _lastCompletedSale!);
-      clearCart();
+
+      // Delete the billed running basket from GoBackend so all devices clear it immediately
+      try {
+        await _repo.deleteParkedBill(billedToken);
+      } catch (_) {}
+      _activeBaskets.removeWhere((b) => b.label.toUpperCase() == billedToken.toUpperCase());
+
+      clearCart(syncWithBackend: false);
       fetchBackendSales();
       notifyListeners();
 
@@ -380,11 +781,53 @@ class PosController extends BaseController {
       }
       return _lastCompletedSale;
     } else {
-      setError((response.message != null && response.message!.isNotEmpty)
-          ? response.message!
-          : (TokenStorage.getLanguage() == 'hi' ? 'सर्वर पर बिल दर्ज करने में विफल' : 'Failed to record bill on server'));
+      // Offline fallback: generate local offline bill and queue for background sync
+      final now = DateTime.now();
+      final offlineBillNum = 'OFF-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
+
+      _lastCompletedSale = SaleModel(
+        billNumber: offlineBillNum,
+        customerPhone: _customerPhone,
+        items: List.from(_cart),
+        subtotal: subtotal,
+        discountAmount: _discount,
+        totalAmount: grandTotal,
+        paymentMethod: _paymentMethod,
+        splitPayments: split,
+        createdAt: now,
+      );
+
+      await LocalCacheService.saveCompletedSale(_lastCompletedSale!);
+      _serverSales.insert(0, _lastCompletedSale!);
+
+      // Enqueue to OfflineSyncService for background reconciliation
+      await OfflineSyncService.instance.enqueue(
+        action: SyncActionType.posSale,
+        endpoint: ApiConstants.posSale,
+        method: 'POST',
+        payload: {
+          'customer_phone': _customerPhone,
+          'customer_name': _customerName,
+          'items': _cart.map((e) => e.toJson()).toList(),
+          'discount_amount': _discount,
+          'payment_method': _paymentMethod,
+          if (split != null) 'split_payments': split.toJson(),
+        },
+        title: 'POS Bill #$offlineBillNum',
+        amount: grandTotal,
+      );
+
+      final billedToken = _currentActiveToken;
+      _activeBaskets.removeWhere((b) => b.label.toUpperCase() == billedToken.toUpperCase());
+      clearCart(syncWithBackend: false);
       notifyListeners();
-      return null;
+
+      AppEventBus().emit(AppCacheEventType.posSaleCompleted, payload: _lastCompletedSale);
+      AppEventBus().emit(AppCacheEventType.inventoryMutated);
+      if (_paymentMethod == 'khata') {
+        AppEventBus().emit(AppCacheEventType.khataMutated);
+      }
+      return _lastCompletedSale;
     }
   }
 
@@ -479,4 +922,5 @@ class PosController extends BaseController {
       await launchUrl(uri);
     }
   }
+
 }

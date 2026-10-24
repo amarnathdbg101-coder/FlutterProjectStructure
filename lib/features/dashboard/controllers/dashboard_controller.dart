@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../pos/models/pos_model.dart';
 import '../repositories/dashboard_repository.dart';
 
 /// High-performance Dashboard Controller with 0ms load speed.
@@ -36,7 +37,20 @@ class DashboardController extends BaseController {
   void _subscribeToEvents() {
     final bus = AppEventBus();
 
-    _posSub = bus.on(AppCacheEventType.posSaleCompleted, (_) => fetchDashboardData(silent: true));
+    _posSub = bus.on(AppCacheEventType.posSaleCompleted, (event) {
+      if (event.payload is SaleModel) {
+        final sale = event.payload as SaleModel;
+        final isCredit = sale.paymentMethod == 'khata' || sale.paymentMethod == 'credit';
+        _stats = _stats.copyWith(
+          todaySales: _stats.todaySales + sale.totalAmount,
+          salesCount: _stats.salesCount + 1,
+          totalUdhar: isCredit ? _stats.totalUdhar + sale.totalAmount : _stats.totalUdhar,
+        );
+        LocalCacheService.saveDashboardStats(_stats);
+        notifyListeners();
+      }
+      fetchDashboardData(silent: true);
+    });
     _prodSub = bus.on(AppCacheEventType.productsMutated, (_) => fetchDashboardData(silent: true));
     _invSub = bus.on(AppCacheEventType.inventoryMutated, (_) => fetchDashboardData(silent: true));
     _khataSub = bus.on(AppCacheEventType.khataMutated, (_) => fetchDashboardData(silent: true));

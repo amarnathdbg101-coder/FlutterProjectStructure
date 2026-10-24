@@ -37,6 +37,24 @@ class DashboardStats {
     lowStockCount: (json['low_stock_count'] as num?)?.toInt() ?? 0,
     catalogCount: (json['catalog_count'] as num?)?.toInt() ?? 0,
   );
+
+  DashboardStats copyWith({
+    double? todaySales,
+    int? salesCount,
+    double? totalUdhar,
+    int? udharCustomersCount,
+    int? lowStockCount,
+    int? catalogCount,
+  }) {
+    return DashboardStats(
+      todaySales: todaySales ?? this.todaySales,
+      salesCount: salesCount ?? this.salesCount,
+      totalUdhar: totalUdhar ?? this.totalUdhar,
+      udharCustomersCount: udharCustomersCount ?? this.udharCustomersCount,
+      lowStockCount: lowStockCount ?? this.lowStockCount,
+      catalogCount: catalogCount ?? this.catalogCount,
+    );
+  }
 }
 
 class DashboardRepository {

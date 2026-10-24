@@ -6,8 +6,12 @@ import '../../../core/localization/language_controller.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../auth/controllers/auth_controller.dart';
+import '../../dashboard/controllers/dashboard_controller.dart';
+import '../../pos/controllers/pos_controller.dart';
 import '../controllers/expense_controller.dart';
 import '../models/expense_model.dart';
+import '../services/smart_expense_service.dart';
 
 class ExpenseScreen extends StatefulWidget {
   const ExpenseScreen({super.key});
@@ -112,7 +116,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                       DropdownMenuItem(value: 'electricity', child: Text(sheetCtx.tr('exp_cat_electricity'), overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(value: 'rent', child: Text(sheetCtx.tr('exp_cat_rent'), overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(value: 'salary', child: Text(sheetCtx.tr('exp_cat_salary'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'transport', child: Text('Transport / Petrol', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(value: 'transport', child: Text(sheetCtx.tr('exp_cat_transport'), overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(value: 'packaging', child: Text(sheetCtx.tr('exp_cat_packaging'), overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(value: 'maintenance', child: Text(sheetCtx.tr('exp_cat_maintenance'), overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(value: 'other', child: Text(sheetCtx.tr('exp_cat_other'), overflow: TextOverflow.ellipsis)),
@@ -132,6 +136,49 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                       labelText: '${sheetCtx.tr('exp_field_amount')} *',
                       prefixText: '₹ ',
                     ),
+                    onChanged: (_) => setModalState(() {}),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // 1-Tap Quick Amount Chips
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final preset in SmartExpenseService.quickAmountPresets)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            setModalState(() {
+                              amountCtrl.text = preset.toStringAsFixed(0);
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: (double.tryParse(amountCtrl.text) == preset)
+                                  ? AppColors.primary
+                                  : sheetCtx.colorPrimaryLight,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: (double.tryParse(amountCtrl.text) == preset)
+                                    ? AppColors.primary
+                                    : AppColors.primary.withValues(alpha: 0.25),
+                              ),
+                            ),
+                            child: Text(
+                              '₹${preset.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: (double.tryParse(amountCtrl.text) == preset)
+                                    ? Colors.white
+                                    : AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
@@ -219,12 +266,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Expense'),
-        content: const Text('Are you sure you want to delete this expense record?'),
+        title: Text(context.tr('exp_delete_title')),
+        content: Text(context.tr('exp_delete_confirm')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(context.tr('btn_cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
@@ -233,11 +280,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
               final success = await context.read<ExpenseController>().deleteExpense(id);
               if (success && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Expense record deleted')),
+                  SnackBar(content: Text(context.tr('exp_toast_deleted'))),
                 );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: Text(context.tr('btn_delete'), style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -255,7 +302,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
       case 'salary':
         return context.tr('exp_cat_salary');
       case 'transport':
-        return 'Transport / Petrol';
+        return context.tr('exp_cat_transport');
       case 'packaging':
         return context.tr('exp_cat_packaging');
       case 'maintenance':
@@ -339,6 +386,30 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
     super.build(context);
     final expController = context.watch<ExpenseController>();
 
+    DashboardController? dashCtrl;
+    try {
+      dashCtrl = context.watch<DashboardController>();
+    } catch (_) {}
+
+    PosController? posCtrl;
+    try {
+      posCtrl = context.watch<PosController>();
+    } catch (_) {}
+
+    AuthController? authCtrl;
+    try {
+      authCtrl = context.watch<AuthController>();
+    } catch (_) {}
+
+    final todaySales = (dashCtrl != null && dashCtrl.stats.todaySales > 0)
+        ? dashCtrl.stats.todaySales
+        : (posCtrl?.today24hRevenue ?? 0.0);
+
+    final profitSummary = SmartExpenseService.calculateDailyProfit(
+      todaySales: todaySales,
+      todayExpenses: expController.todayExpenses,
+    );
+
     final displayExpenses = _selectedFilter == 'all'
         ? expController.expenses
         : expController.expenses.where((e) => e.category.toLowerCase() == _selectedFilter).toList();
@@ -370,6 +441,27 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
           ),
           actions: [
             IconButton(
+              icon: const Icon(Icons.share_rounded, color: AppColors.primary),
+              tooltip: context.isHindi ? 'दैनिक सारांश शेयर करें' : 'Share Daily Summary',
+              onPressed: () {
+                final summaryMessage = SmartExpenseService.formatDailyExpenseSummary(
+                  shopName: authCtrl?.currentShop?.name ?? '',
+                  todaySales: todaySales,
+                  todayExpenses: expController.todayExpenses,
+                  todayExpensesList: expController.expenses.where((e) {
+                    final now = DateTime.now();
+                    final dt = e.expenseDate;
+                    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+                  }).toList(),
+                  isHindi: context.isHindi,
+                );
+                SmartExpenseService.shareExpenseSummaryOnWhatsApp(
+                  context: context,
+                  message: summaryMessage,
+                );
+              },
+            ),
+            IconButton(
               icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
               tooltip: 'Refresh Expenses',
               onPressed: () async {
@@ -397,29 +489,73 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
           maxWidth: 1200,
           child: Column(
             children: [
-              // 1. EXECUTIVE EXPENSE SUMMARY KPI CARDS
+              // 1. EXECUTIVE EXPENSE SUMMARY & NET PROFIT KPI CARDS
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: AppStatCard(
-                        title: context.tr('exp_kpi_today'),
-                        value: '₹${expController.todayExpenses.toStringAsFixed(0)}',
-                        subtitle: context.isHindi ? 'आज के खर्चे' : "Today's Expenses",
-                        icon: Icons.receipt_long_rounded,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: AppStatCard(
-                        title: context.tr('exp_kpi_monthly'),
-                        value: '₹${expController.monthlyExpenses.toStringAsFixed(0)}',
-                        subtitle: '${expController.expenses.length} ${context.isHindi ? 'प्रविष्टियां' : 'Records'}',
-                        icon: Icons.account_balance_wallet_rounded,
-                      ),
-                    ),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isDesktop = constraints.maxWidth >= 720;
+                    final salesCard = AppStatCard(
+                      title: context.tr('exp_kpi_sales'),
+                      value: '₹${todaySales.toStringAsFixed(0)}',
+                      subtitle: context.isHindi ? 'आज की बिक्री' : "Today's Sales",
+                      icon: Icons.point_of_sale_rounded,
+                    );
+                    final expensesCard = AppStatCard(
+                      title: context.tr('exp_kpi_today'),
+                      value: '₹${expController.todayExpenses.toStringAsFixed(0)}',
+                      subtitle: context.isHindi ? 'आज के खर्चे' : "Today's Expenses",
+                      icon: Icons.receipt_long_rounded,
+                    );
+                    final profitCard = AppStatCard(
+                      title: profitSummary.isLoss ? context.tr('exp_kpi_net_balance') : context.tr('exp_kpi_net_profit'),
+                      value: '${profitSummary.netProfit < 0 ? "-" : (profitSummary.netProfit > 0 ? "+" : "")}₹${profitSummary.netProfit.abs().toStringAsFixed(0)}',
+                      subtitle: profitSummary.isLoss
+                          ? (context.isHindi ? 'घाटा' : 'Net Loss')
+                          : (context.isHindi ? 'शुद्ध बचत' : 'Net In-Hand'),
+                      icon: profitSummary.isLoss ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+                    );
+                    final monthlyCard = AppStatCard(
+                      title: context.tr('exp_kpi_monthly'),
+                      value: '₹${expController.monthlyExpenses.toStringAsFixed(0)}',
+                      subtitle: '${expController.expenses.length} ${context.isHindi ? 'प्रविष्टियां' : 'Records'}',
+                      icon: Icons.account_balance_wallet_rounded,
+                    );
+
+                    if (isDesktop) {
+                      return Row(
+                        children: [
+                          Expanded(child: salesCard),
+                          const SizedBox(width: 10),
+                          Expanded(child: expensesCard),
+                          const SizedBox(width: 10),
+                          Expanded(child: profitCard),
+                          const SizedBox(width: 10),
+                          Expanded(child: monthlyCard),
+                        ],
+                      );
+                    } else {
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: salesCard),
+                              const SizedBox(width: 10),
+                              Expanded(child: expensesCard),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(child: profitCard),
+                              const SizedBox(width: 10),
+                              Expanded(child: monthlyCard),
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+                  },
                 ),
               ),
 
@@ -466,7 +602,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                   children: [
                     _buildFilterChip(
                       context: context,
-                      label: context.isHindi ? 'सभी' : 'All',
+                      label: context.tr('exp_filter_all'),
                       count: expController.expenses.length,
                       isSelected: _selectedFilter == 'all',
                       onSelected: () => setState(() => _selectedFilter = 'all'),
@@ -501,7 +637,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                     ),
                     _buildFilterChip(
                       context: context,
-                      label: context.isHindi ? '⛽ परिवहन' : '⛽ Transport',
+                      label: context.tr('exp_cat_transport'),
                       count: expController.expenses.where((e) => e.category.toLowerCase() == 'transport').length,
                       isSelected: _selectedFilter == 'transport',
                       onSelected: () => setState(() => _selectedFilter = 'transport'),

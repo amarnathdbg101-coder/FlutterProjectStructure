@@ -75,10 +75,190 @@ class CategoryRegistry {
     final clean = uuid.trim().toLowerCase();
     return _dynamicIdToName[clean] ?? _knownUuidToName[clean];
   }
+
+  /// 21 Standard Canonical Categories displayed across merchant and customer flows
+  static const List<String> canonicalCategories = [
+    'General Store',
+    'Grocery & Staples',
+    'Dairy, Bakery & Frozen',
+    'Snacks & Munchies',
+    'Beverages & Drinks',
+    'Fruits & Vegetables',
+    'Personal Care & Beauty',
+    'Household & Cleaning',
+    'Home & Kitchen',
+    'Pooja & Spiritual',
+    'Clothing & Fashion',
+    'Footwear & Leather',
+    'Electronics & Appliances',
+    'Mobile & Accessories',
+    'Medicine & Healthcare',
+    'Toys & Baby Products',
+    'Stationery & Office Supplies',
+    'Hardware & Building Material',
+    'Sports & Fitness',
+    'Automotive & Spare Parts',
+    'Pet Supplies',
+    'Services & Others',
+  ];
+
+  /// Normalizes any category string (UUID, slug, English name, Hindi name, or alias)
+  /// into a canonical slug key (e.g. 'kirana-grocery', 'dairy-breakfast')
+  static String normalizeCategoryKey(String? raw) {
+    if (raw == null) return 'general-store';
+    final s = raw.trim().toLowerCase();
+    if (s.isEmpty || s == 'all') return 'all';
+
+    // 1. If UUID, check if resolved to a known name
+    if (isUuid(s)) {
+      final name = resolveUuid(s);
+      if (name != null) {
+        return getCategorySlug(name);
+      }
+      return 'general-store';
+    }
+
+    // 2. Normalize punctuation and symbols
+    final clean = s
+        .replaceAll('&', 'and')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+
+    // 3. Match against canonical slug buckets
+    if (clean.contains('kirana') || clean.contains('grocery') || clean.contains('staple') ||
+        clean.contains('pulses') || clean.contains('lentils') || clean.contains('atta') ||
+        clean.contains('rice') || clean.contains('grain') || clean.contains('edible-oil') ||
+        clean.contains('masala') || clean.contains('spice')) {
+      return 'kirana-grocery';
+    }
+    if (clean.contains('dairy') || clean.contains('breakfast') || clean.contains('milk') ||
+        clean.contains('curd') || clean.contains('paneer') || clean.contains('butter') ||
+        clean.contains('cheese') || clean.contains('egg')) {
+      return 'dairy-breakfast';
+    }
+    if (clean.contains('snack') || clean.contains('munch') || clean.contains('namkeen') ||
+        clean.contains('biscuit') || clean.contains('cookie') || clean.contains('chip') ||
+        clean.contains('chocolate')) {
+      return 'snacks-beverages';
+    }
+    if (clean.contains('beverage') || clean.contains('drink') || clean.contains('juice') ||
+        clean.contains('tea') || clean.contains('coffee')) {
+      return 'beverages';
+    }
+    if (clean.contains('bakery') || clean.contains('cake') || clean.contains('pastry') || clean.contains('rusk')) {
+      return 'bakery-cakes';
+    }
+    if (clean.contains('fruit') || clean.contains('vegetable') || clean.contains('sabji')) {
+      return 'fruits-vegetables';
+    }
+    if (clean.contains('beauty') || clean.contains('cosmetic') || clean.contains('makeup')) {
+      return 'beauty-cosmetics';
+    }
+    if (clean.contains('personal') || clean.contains('shampoo') || clean.contains('soap') ||
+        clean.contains('bath') || clean.contains('skin') || clean.contains('oral') ||
+        clean.contains('toothpaste') || clean.contains('hair')) {
+      return 'personal-care';
+    }
+    if (clean.contains('household') || clean.contains('cleaning') || clean.contains('laundry') ||
+        clean.contains('detergent') || clean.contains('dishwash')) {
+      return 'household-cleaning';
+    }
+    if (clean.contains('kitchen') || clean.contains('cookware') || clean.contains('utensil')) {
+      return 'home-kitchen';
+    }
+    if (clean.contains('pooja') || clean.contains('puja') || clean.contains('spiritual') ||
+        clean.contains('agarbatti') || clean.contains('camphor') || clean.contains('diya')) {
+      return 'pooja-spiritual';
+    }
+    if (clean.contains('baby') || clean.contains('diaper') || clean.contains('wipes')) {
+      return 'baby-care';
+    }
+    if (clean.contains('pharmacy') || clean.contains('medicine') || clean.contains('health') ||
+        clean.contains('doctor') || clean.contains('vitamin') || clean.contains('supplement') ||
+        clean.contains('medical') || clean.contains('first-aid')) {
+      return 'pharmacy-healthcare';
+    }
+    if (clean.contains('electronics') || clean.contains('electronic') || clean.contains('appliance') ||
+        clean.contains('gadget')) {
+      return 'electronics-accessories';
+    }
+    if (clean.contains('mobile') || clean.contains('charger') || clean.contains('earphone')) {
+      return 'electronics-and-mobile';
+    }
+    if (clean.contains('clothing') || clean.contains('cloth') || clean.contains('fashion') ||
+        clean.contains('apparel') || clean.contains('shirt') || clean.contains('pant') ||
+        clean.contains('wear')) {
+      return 'clothing-apparel';
+    }
+    if (clean.contains('footwear') || clean.contains('shoe') || clean.contains('sandal') ||
+        clean.contains('slipper') || clean.contains('leather')) {
+      return 'footwear';
+    }
+    if (clean.contains('stationery') || clean.contains('office') || clean.contains('notebook') ||
+        clean.contains('pen') || clean.contains('paper') || clean.contains('book')) {
+      return 'stationery-office';
+    }
+    if (clean.contains('hardware') || clean.contains('tool') || clean.contains('building') ||
+        clean.contains('electrical') || clean.contains('lock')) {
+      return 'hardware-tools';
+    }
+    if (clean.contains('automotive') || clean.contains('spare') || clean.contains('vehicle')) {
+      return 'automotive-spare-parts';
+    }
+    if (clean.contains('sport') || clean.contains('fitness') || clean.contains('gym') || clean.contains('cricket')) {
+      return 'sports-fitness';
+    }
+    if (clean.contains('toy') || clean.contains('game') || clean.contains('puzzle')) {
+      return 'toys-games';
+    }
+    if (clean.contains('pet') || clean.contains('dog') || clean.contains('cat')) {
+      return 'pet-care';
+    }
+    if (clean.contains('service') || clean.contains('other')) {
+      return 'services-others';
+    }
+
+    return clean.isNotEmpty ? clean : 'general-store';
+  }
+
+  /// 0ms bidirectional category matching across merchant and customer categories
+  static bool isCategoryMatch(String? cat1, String? cat2) {
+    if (cat1 == null || cat2 == null) return true;
+    final c1 = cat1.trim();
+    final c2 = cat2.trim();
+    if (c1.isEmpty || c2.isEmpty) return true;
+    if (c1.toLowerCase() == 'all' || c2.toLowerCase() == 'all') return true;
+    if (c1.toLowerCase() == c2.toLowerCase()) return true;
+
+    final key1 = normalizeCategoryKey(c1);
+    final key2 = normalizeCategoryKey(c2);
+    if (key1 == key2) return true;
+
+    // Cross-bucket compatibility (e.g. beverages under snacks-beverages)
+    if ((key1 == 'beverages' && key2 == 'snacks-beverages') ||
+        (key2 == 'beverages' && key1 == 'snacks-beverages')) {
+      return true;
+    }
+    if ((key1 == 'automotive-spare-parts' && key2 == 'hardware-tools') ||
+        (key2 == 'automotive-spare-parts' && key1 == 'hardware-tools')) {
+      return true;
+    }
+    if ((key1 == 'services-others' && key2 == 'general-store') ||
+        (key2 == 'services-others' && key1 == 'general-store')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Formats raw database category codes, UUIDs, or slugs into clean, human-readable Title Names
+  static String formatCategoryName(String raw) => _formatCategoryNameInternal(raw);
 }
 
 /// Formats raw database category codes, UUIDs, or slugs into clean, human-readable Title Names
-String formatCategoryName(String raw) {
+String formatCategoryName(String raw) => _formatCategoryNameInternal(raw);
+
+String _formatCategoryNameInternal(String raw) {
   final s = raw.trim();
   if (s.isEmpty) return 'General Store';
 
@@ -127,6 +307,9 @@ String formatCategoryName(String raw) {
 
     case 'snacks_and_munchies':
     case 'snacks_munchies':
+    case 'snacks_and_branded_foods':
+    case 'snacks_branded_foods':
+    case 'branded_foods':
     case 'snacks_and_beverages':
     case 'snacks_beverages':
     case 'snacks_and_chocolates':
@@ -311,10 +494,11 @@ String getCategorySlug(String category) {
   if (clean.contains('general')) return 'general-store';
 
   // Generic clean slugify fallback
-  return clean
+  final slug = clean
       .replaceAll('&', 'and')
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
+  return slug.isNotEmpty ? slug : 'general-store';
 }
 
 /// Enterprise Privacy Shield that prevents leakage of internal merchant metrics
@@ -440,6 +624,7 @@ class ProductModel {
   }) : category = formatCategoryName(category);
 
   String get brand => attributes['brand']?.toString() ?? '';
+  String get supplier => attributes['supplier']?.toString() ?? '';
 
   bool get isLowStock => stock <= lowStockThreshold && stock > 0;
   bool get isOutOfStock => stock <= 0;

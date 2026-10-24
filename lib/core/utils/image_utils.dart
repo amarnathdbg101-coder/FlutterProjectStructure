@@ -50,6 +50,14 @@ String formatImageUrl(String? url) {
     return trimmed;
   }
 
+  // Rewrite Cloudflare .r2.dev URLs (which return 401 Unauthorized for direct browser requests)
+  // to the authenticated backend /images proxy endpoint
+  if (trimmed.contains('.r2.dev/')) {
+    final idx = trimmed.indexOf('.r2.dev/');
+    final path = trimmed.substring(idx + '.r2.dev/'.length);
+    return '${ApiConstants.baseUrl}/images/$path';
+  }
+
   // Remote URLs
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;

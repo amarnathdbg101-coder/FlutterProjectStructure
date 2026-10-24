@@ -178,8 +178,11 @@ class MerchantShell extends StatelessWidget {
                 ),
               ),
               child: NavigationBar(
-                selectedIndex: currentIndex.clamp(0, 3),
-                onDestinationSelected: (idx) => _onNavigate(context, idx),
+                selectedIndex: currentIndex == 5 ? 4 : (currentIndex.clamp(0, 4)),
+                onDestinationSelected: (idx) {
+                  final targetIdx = idx == 4 ? 5 : idx;
+                  _onNavigate(context, targetIdx);
+                },
                 elevation: 0,
                 backgroundColor: Colors.transparent,
                 destinations: [
@@ -202,6 +205,11 @@ class MerchantShell extends StatelessWidget {
                     icon: const Icon(Icons.menu_book_outlined),
                     selectedIcon: const Icon(Icons.menu_book_rounded),
                     label: context.tr('nav_khata'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.settings_outlined),
+                    selectedIcon: const Icon(Icons.settings_rounded),
+                    label: context.tr('nav_settings'),
                   ),
                 ],
               ),

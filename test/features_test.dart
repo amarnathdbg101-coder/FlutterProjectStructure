@@ -376,6 +376,49 @@ void main() {
       expect(getCategorySlug('Toys & Baby Products'), equals('toys-games'));
     });
 
+    test('CategoryRegistry.isCategoryMatch correctly links cross-platform category synonyms', () {
+      // Kirana & Grocery vs Grocery & Staples vs slugs
+      expect(CategoryRegistry.isCategoryMatch('Grocery & Staples', 'Kirana & Grocery'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('Grocery & Staples', 'kirana-grocery'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('kirana-grocery', 'Grocery & Staples'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('dal-pulses', 'Grocery & Staples'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('edible-oils', 'Kirana & Grocery'), isTrue);
+
+      // Dairy & Breakfast vs Dairy, Bakery & Frozen
+      expect(CategoryRegistry.isCategoryMatch('Dairy, Bakery & Frozen', 'Dairy & Breakfast'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('dairy-breakfast', 'Dairy, Bakery & Frozen'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('milk-curd', 'Dairy & Breakfast'), isTrue);
+
+      // Snacks & Munchies vs Snacks & Beverages
+      expect(CategoryRegistry.isCategoryMatch('Snacks & Munchies', 'Snacks & Beverages'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('snacks-beverages', 'Snacks & Munchies'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('Beverages & Drinks', 'Snacks & Beverages'), isTrue);
+
+      // Medicine vs Pharmacy
+      expect(CategoryRegistry.isCategoryMatch('Medicine & Healthcare', 'Pharmacy & Healthcare'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('pharmacy-healthcare', 'Medicine & Healthcare'), isTrue);
+
+      // Clothing vs Fashion
+      expect(CategoryRegistry.isCategoryMatch('Clothing & Fashion', 'Clothing & Apparel'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('clothing-apparel', 'Clothing & Fashion'), isTrue);
+
+      // Hardware vs Tools
+      expect(CategoryRegistry.isCategoryMatch('Hardware & Building Material', 'Hardware & Tools'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('hardware-tools', 'Hardware & Building Material'), isTrue);
+
+      // Footwear
+      expect(CategoryRegistry.isCategoryMatch('Footwear & Leather', 'Footwear'), isTrue);
+
+      // All wildcards
+      expect(CategoryRegistry.isCategoryMatch('All', 'Grocery & Staples'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch('Grocery & Staples', 'ALL'), isTrue);
+      expect(CategoryRegistry.isCategoryMatch(null, 'Grocery & Staples'), isTrue);
+
+      // Negative check
+      expect(CategoryRegistry.isCategoryMatch('Grocery & Staples', 'Electronics & Appliances'), isFalse);
+      expect(CategoryRegistry.isCategoryMatch('Clothing & Fashion', 'Dairy & Breakfast'), isFalse);
+    });
+
     test('ProductModel.fromJson resolves category from category_id UUID cleanly', () {
       final json = {
         'id': 'prod_999',
@@ -1022,6 +1065,81 @@ void main() {
       expect(LocalCacheService.getExpenses(), isEmpty);
       expect(LocalCacheService.getOffers(), isEmpty);
     });
+
+    test('19. Counter Pickup & Reservation Full-Code Lifecycle Tests: ReservationModel.fromJson preserves 6-digit code', () {
+      final json = {
+        'id': 'res_001_uuid',
+        'pickup_code': '582914',
+        'reservation_number': 'HLD-49102-3921',
+        'customer_name': 'Amit Kumar',
+        'customer_phone': '9876543210',
+        'product_name': 'Fortune Sunlite Oil 1L',
+        'quantity': 3,
+        'price': 140.0,
+        'total_amount': 420.0,
+        'status': 'active',
+        'created_at': DateTime.now().toIso8601String(),
+        'notes': 'Keep packed for 6 PM pickup',
+      };
+
+      final model = ReservationModel.fromJson(json);
+      expect(model.pickupCode, equals('582914'));
+      expect(model.reservationNumber, equals('HLD-49102-3921'));
+      expect(model.customerName, equals('Amit Kumar'));
+      expect(model.quantity, equals(3));
+      expect(model.totalPrice, equals(420.0));
+      expect(model.isPending, isTrue);
+
+      final serialized = model.toJson();
+      expect(serialized['pickup_code'], equals('582914'));
+      expect(serialized['reservation_number'], equals('HLD-49102-3921'));
+    });
+
+    test('19. Counter Pickup & Reservation: Resolves product images, relative URLs, SKU, category, and item breakdown', () {
+      final json = {
+        'id': 'res_002_uuid',
+        'pickup_code': '922794',
+        'reservation_number': 'HLD-32696-7356',
+        'customer_name': 'Mr. Professor',
+        'customer_phone': '8051545558',
+        'product': {
+          'id': 'prod_99',
+          'name': 'Stylish Kids Green Vest Set',
+          'sku': 'KID-VEST-01',
+          'category_name': 'Clothing & Apparel',
+          'price': 400.0,
+          'images': [
+            '/images/products/b6d8208a/1791798973194410261.png',
+            '/images/products/b6d8208a/1791798970289718318.jpg',
+          ],
+        },
+        'quantity': 2,
+        'product_price': 400.0,
+        'total_amount': 800.0,
+        'status': 'active',
+        'created_at': DateTime.now().toIso8601String(),
+        'notes': 'Pickup Token: #861398 | Customer: Mr. Professor (8051545558) | Items: Kids Green Vest (x2), Cotton Socks (x1) | Payable: ₹800',
+      };
+
+      final model = ReservationModel.fromJson(json);
+      expect(model.pickupCode, equals('922794'));
+      expect(model.productName, equals('Stylish Kids Green Vest Set'));
+      expect(model.productSku, equals('KID-VEST-01'));
+      expect(model.categoryName, equals('Clothing & Apparel'));
+      expect(model.productImages.length, equals(2));
+      expect(model.productImageUrl, startsWith('http'));
+      expect(model.productImageUrl, contains('/images/products/b6d8208a/1791798973194410261.png'));
+      expect(model.itemsBreakdown, contains('Kids Green Vest (x2)'));
+      expect(model.itemsBreakdown, contains('Cotton Socks (x1)'));
+      expect(model.unitPrice, equals(400.0));
+      expect(model.totalPrice, equals(800.0));
+
+      final jsonOut = model.toJson();
+      expect(jsonOut['product_sku'], equals('KID-VEST-01'));
+      expect(jsonOut['product_image_url'], contains('/images/products/'));
+      expect(jsonOut['items_breakdown'], isNotEmpty);
+    });
   });
 }
+
 

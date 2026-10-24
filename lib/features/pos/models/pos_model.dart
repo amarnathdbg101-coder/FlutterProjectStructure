@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../../core/utils/date_time_utils.dart';
 import '../../products/models/product_model.dart';
 
@@ -26,6 +27,30 @@ class PosCartItem {
   }
 }
 
+class PosSplitPayment {
+  final double cashAmount;
+  final double onlineAmount;
+  final double khataAmount;
+
+  const PosSplitPayment({
+    this.cashAmount = 0.0,
+    this.onlineAmount = 0.0,
+    this.khataAmount = 0.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'cash_amount': cashAmount,
+    'online_amount': onlineAmount,
+    'khata_amount': khataAmount,
+  };
+
+  factory PosSplitPayment.fromJson(Map<String, dynamic> json) => PosSplitPayment(
+    cashAmount: (json['cash_amount'] as num?)?.toDouble() ?? 0.0,
+    onlineAmount: (json['online_amount'] as num?)?.toDouble() ?? 0.0,
+    khataAmount: (json['khata_amount'] as num?)?.toDouble() ?? 0.0,
+  );
+}
+
 class SaleModel {
   final String? billNumber;
   final String customerPhone;
@@ -33,7 +58,8 @@ class SaleModel {
   final double subtotal;
   final double discountAmount;
   final double totalAmount;
-  final String paymentMethod; // 'cash', 'upi', 'khata'
+  final String paymentMethod; // 'cash', 'upi', 'khata', 'split'
+  final PosSplitPayment? splitPayments;
   final DateTime createdAt;
 
   SaleModel({
@@ -44,6 +70,7 @@ class SaleModel {
     required this.discountAmount,
     required this.totalAmount,
     required this.paymentMethod,
+    this.splitPayments,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -106,6 +133,15 @@ class SaleModel {
           ? (target['total_amount'] as num).toDouble()
           : ((target['total'] is num) ? (target['total'] as num).toDouble() : 0.0),
       paymentMethod: target['payment_method']?.toString() ?? 'cash',
+      splitPayments: target['split_payments'] is Map<String, dynamic>
+          ? PosSplitPayment.fromJson(target['split_payments'] as Map<String, dynamic>)
+          : (target['cash_amount'] != null || target['online_amount'] != null)
+              ? PosSplitPayment(
+                  cashAmount: (target['cash_amount'] as num?)?.toDouble() ?? 0.0,
+                  onlineAmount: (target['online_amount'] as num?)?.toDouble() ?? 0.0,
+                  khataAmount: (target['khata_amount'] as num?)?.toDouble() ?? 0.0,
+                )
+              : null,
       createdAt: AppDateTimeUtils.parseToLocal(target['created_at']),
     );
   }
@@ -119,6 +155,7 @@ class SaleModel {
       'discount_amount': discountAmount,
       'total_amount': totalAmount,
       'payment_method': paymentMethod,
+      if (splitPayments != null) 'split_payments': splitPayments!.toJson(),
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -152,3 +189,95 @@ class PosHeldBill {
     return t > 0 ? t : 0.0;
   }
 }
+
+class PosParkedBill {
+  final String id;
+  final String label;
+  final String customerPhone;
+  final String customerName;
+  final List<PosCartItem> items;
+  final double discountAmount;
+  final double totalAmount;
+  final String paymentMethod;
+  final DateTime updatedAt;
+
+  PosParkedBill({
+    required this.id,
+    required this.label,
+    this.customerPhone = '',
+    this.customerName = '',
+    required this.items,
+    this.discountAmount = 0.0,
+    required this.totalAmount,
+    this.paymentMethod = 'cash',
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
+
+  int get totalItemCount => items.fold(0, (sum, i) => sum + i.quantity);
+
+  factory PosParkedBill.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic> cartData = {};
+    if (json['cart_data'] is Map<String, dynamic>) {
+      cartData = json['cart_data'] as Map<String, dynamic>;
+    } else if (json['cart_data'] is String && (json['cart_data'] as String).trim().isNotEmpty) {
+      try {
+        cartData = jsonDecode(json['cart_data'] as String);
+      } catch (_) {}
+    }
+
+    final rawItems = cartData['items'] ?? json['items'];
+    List<PosCartItem> cartItems = [];
+    if (rawItems is List) {
+      for (var item in rawItems) {
+        if (item is Map<String, dynamic>) {
+          final pName = item['name']?.toString() ?? item['product_name']?.toString() ?? 'Product';
+          final qty = (item['quantity'] is num) ? (item['quantity'] as num).toInt() : 1;
+          double price = 0.0;
+          if (item['custom_price'] is num && (item['custom_price'] as num) > 0) {
+            price = (item['custom_price'] as num).toDouble();
+          } else if (item['unit_price'] is num && (item['unit_price'] as num) > 0) {
+            price = (item['unit_price'] as num).toDouble();
+          } else if (item['price'] is num && (item['price'] as num) > 0) {
+            price = (item['price'] as num).toDouble();
+          }
+
+          final prodId = item['product_id']?.toString() ?? '';
+          cartItems.add(
+            PosCartItem(
+              product: ProductModel(
+                id: prodId,
+                name: pName,
+                price: price,
+                stock: 0,
+                category: 'General Store',
+                sku: item['sku']?.toString() ?? item['product_sku']?.toString() ?? '',
+                barcode: item['barcode']?.toString() ?? '',
+              ),
+              quantity: qty,
+              customPrice: price,
+            ),
+          );
+        }
+      }
+    }
+
+    final total = (json['total_amount'] is num)
+        ? (json['total_amount'] as num).toDouble()
+        : ((cartData['total_amount'] is num)
+            ? (cartData['total_amount'] as num).toDouble()
+            : cartItems.fold(0.0, (sum, i) => sum + i.total));
+
+    return PosParkedBill(
+      id: json['id']?.toString() ?? '',
+      label: (json['label']?.toString() ?? cartData['label']?.toString() ?? '').trim(),
+      customerPhone: json['customer_phone']?.toString() ?? cartData['customer_phone']?.toString() ?? '',
+      customerName: cartData['customer_name']?.toString() ?? '',
+      items: cartItems,
+      discountAmount: (cartData['discount_amount'] is num) ? (cartData['discount_amount'] as num).toDouble() : 0.0,
+      totalAmount: total,
+      paymentMethod: cartData['payment_method']?.toString() ?? 'cash',
+      updatedAt: AppDateTimeUtils.parseToLocal(json['updated_at'] ?? json['created_at']),
+    );
+  }
+}
+

@@ -37,18 +37,34 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
     final int totalUnitsSold = soldProducts.fold(0, (sum, item) => sum + (item['qty'] as int));
 
+    // Calculate Payment Method Breakdown (Cash vs UPI vs Khata)
+    double cashRevenue = 0;
+    double upiRevenue = 0;
+    double khataRevenue = 0;
+    for (final sale in recentSales) {
+      final method = sale.paymentMethod.toLowerCase();
+      if (method == 'cash') {
+        cashRevenue += sale.totalAmount;
+      } else if (method == 'upi') {
+        upiRevenue += sale.totalAmount;
+      } else if (method == 'khata') {
+        khataRevenue += sale.totalAmount;
+      }
+    }
+
     return MerchantShell(
       currentIndex: 0,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: context.colorSurface,
+        surfaceTintColor: Colors.transparent,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
           child: Container(color: context.colorBorder, height: 1.0),
         ),
         leading: IconButton(
           icon: Icon(Icons.arrow_back_rounded, color: context.colorTextPrimary, size: 22),
-          tooltip: 'Back',
+          tooltip: context.isHindi ? 'वापस जाएं' : 'Back',
           onPressed: () {
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
@@ -58,44 +74,15 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
           },
         ),
         title: Text(
-          context.tr('today_sales_title'),
+          context.isHindi ? 'आज की बिक्री' : "Today's Sales",
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 17,
             fontWeight: FontWeight.w800,
             color: context.colorTextPrimary,
+            letterSpacing: -0.2,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
-            tooltip: 'Refresh Sales History',
-            onPressed: () async {
-              await context.read<PosController>().fetchBackendSales();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('✓ Today Sales History Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
-                );
-              }
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.point_of_sale_rounded, size: 16),
-              label: Text(
-                context.tr('today_sales_open_pos'),
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () => context.go('/merchant/pos'),
-            ),
-          ),
-        ],
+        actions: const [],
       ),
       child: SafeArea(
         child: RefreshIndicator(
@@ -110,40 +97,88 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Top Executive Summary Metric Cards
+                  // 1. Executive Summary Metric Cards (Total Revenue & Bills)
                   Row(
                     children: [
                       Expanded(
                         child: AppStatCard(
                           title: context.tr('today_sales_total_rev'),
                           value: '₹${totalRevenue.toStringAsFixed(0)}',
-                          subtitle: context.tr('today_sales_subtitle'),
+                          subtitle: context.isHindi ? 'आज के 24 घंटों की बिक्री' : 'Last 24 hours sales',
                           icon: Icons.currency_rupee_rounded,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: AppStatCard(
                           title: context.tr('today_sales_total_bills'),
                           value: '$totalBills',
-                          subtitle: '$totalUnitsSold ${context.tr('today_sales_items_sold')}',
+                          subtitle: '$totalUnitsSold ${context.isHindi ? 'सामान बिके' : 'Units Sold'}',
                           icon: Icons.receipt_long_rounded,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
 
-                  // 2. Section Header: Sold Products List
+                  // 2. Payment Method Breakdown Strip (Cash, UPI, Khata)
+                  if (totalRevenue > 0) ...[
+                    AppCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _PaymentPill(
+                              label: context.isHindi ? 'नकद' : 'Cash',
+                              amount: cashRevenue,
+                              icon: Icons.payments_rounded,
+                              color: AppColors.success,
+                            ),
+                          ),
+                          Container(
+                            height: 28,
+                            width: 1,
+                            color: context.colorBorder,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          Expanded(
+                            child: _PaymentPill(
+                              label: 'UPI',
+                              amount: upiRevenue,
+                              icon: Icons.qr_code_2_rounded,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          Container(
+                            height: 28,
+                            width: 1,
+                            color: context.colorBorder,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          Expanded(
+                            child: _PaymentPill(
+                              label: context.isHindi ? 'उधार' : 'Credit',
+                              amount: khataRevenue,
+                              icon: Icons.menu_book_rounded,
+                              color: AppColors.warning,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+
+                  // 3. Section Header: Sold Products Ranking
                   AppSectionHeader(
-                    title: context.tr('today_sales_products_header'),
+                    title: context.isHindi ? 'बिके हुए उत्पाद (24 घंटे)' : 'Products Sold (Last 24 Hours)',
                     trailing: AppBadge(
-                      label: '${soldProducts.length} Products',
-                      type: AppBadgeType.primary,
+                      label: '${soldProducts.length} ${context.isHindi ? 'उत्पाद' : 'Products'}',
+                      type: AppBadgeType.neutral,
                     ),
                   ),
 
-                  // 3. Products List or Empty State
+                  // 4. Products List or Empty State
                   if (soldProducts.isEmpty)
                     _buildEmptyState(context)
                   else
@@ -157,9 +192,9 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                       final pct = totalRevenue > 0 ? (total / totalRevenue) : 0.0;
 
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.only(bottom: 8),
                         child: AppCard(
-                          padding: const EdgeInsets.all(14),
+                          padding: const EdgeInsets.all(12),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -167,11 +202,11 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                 children: [
                                   // Rank badge
                                   Container(
-                                    width: 32,
-                                    height: 32,
+                                    width: 30,
+                                    height: 30,
                                     decoration: BoxDecoration(
                                       color: index == 0
-                                          ? AppColors.primaryLight
+                                          ? context.colorPrimaryLight
                                           : context.colorSurfaceSubtle,
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
@@ -184,13 +219,13 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                     child: Text(
                                       '#${index + 1}',
                                       style: TextStyle(
-                                        fontSize: 12,
+                                        fontSize: 11.5,
                                         fontWeight: FontWeight.bold,
                                         color: index == 0 ? AppColors.primary : context.colorTextSecondary,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 10),
 
                                   // Product name & details
                                   Expanded(
@@ -200,18 +235,20 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                         Text(
                                           name,
                                           style: TextStyle(
-                                            fontSize: 14.5,
+                                            fontSize: 14,
                                             fontWeight: FontWeight.w700,
                                             color: context.colorTextPrimary,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
-                                        const SizedBox(height: 3),
+                                        const SizedBox(height: 2),
                                         Text(
-                                          'Rate: ₹${unitPrice.toStringAsFixed(0)} • Qty: $qty units',
+                                          context.isHindi
+                                              ? 'दर: ₹${unitPrice.toStringAsFixed(0)} • मात्रा: $qty इकाई'
+                                              : 'Rate: ₹${unitPrice.toStringAsFixed(0)} • Qty: $qty units',
                                           style: TextStyle(
-                                            fontSize: 12,
+                                            fontSize: 11.5,
                                             color: context.colorTextSecondary,
                                           ),
                                         ),
@@ -226,16 +263,18 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                       Text(
                                         '₹${total.toStringAsFixed(0)}',
                                         style: const TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 15,
                                           fontWeight: FontWeight.w900,
                                           color: AppColors.primary,
                                         ),
                                       ),
-                                      const SizedBox(height: 2),
+                                      const SizedBox(height: 1),
                                       Text(
-                                        '${(pct * 100).toStringAsFixed(1)}% of sales',
+                                        context.isHindi
+                                            ? 'कुल का ${(pct * 100).toStringAsFixed(1)}%'
+                                            : '${(pct * 100).toStringAsFixed(1)}% of sales',
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: 10.5,
                                           fontWeight: FontWeight.w600,
                                           color: context.colorTextMuted,
                                         ),
@@ -244,15 +283,15 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 8),
 
                               // Visual progress bar of contribution
                               ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
+                                borderRadius: BorderRadius.circular(3),
                                 child: LinearProgressIndicator(
                                   value: pct.clamp(0.0, 1.0),
-                                  minHeight: 5,
-                                  backgroundColor: context.colorBorder.withValues(alpha: 0.4),
+                                  minHeight: 4,
+                                  backgroundColor: context.colorBorder.withValues(alpha: 0.35),
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                     index == 0 ? AppColors.primary : AppColors.primary.withValues(alpha: 0.65),
                                   ),
@@ -264,21 +303,23 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                       );
                     }),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
 
-                  // 4. Section: Recent Completed Bills
+                  // 5. Section: Recent Completed Bills
                   if (recentSales.isNotEmpty) ...[
                     AppSectionHeader(
                       title: context.tr('today_sales_recent_bills_header'),
                       trailing: AppBadge(
-                        label: '${recentSales.length} Bills',
-                        type: AppBadgeType.success,
+                        label: '${recentSales.length} ${context.isHindi ? 'बिल' : 'Bills'}',
+                        type: AppBadgeType.neutral,
                       ),
                     ),
-                    ...(List<SaleModel>.from(recentSales)..sort((a, b) => b.createdAt.compareTo(a.createdAt))).take(30).map((sale) => _buildSaleBillTile(context, sale)),
+                    ...(List<SaleModel>.from(recentSales)..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
+                        .take(30)
+                        .map((sale) => _buildSaleBillTile(context, sale)),
                   ],
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
                 ],
               ),
             ),
@@ -295,10 +336,18 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
     Color modeColor = isCash ? AppColors.success : (isUpi ? AppColors.primary : AppColors.warning);
 
+    String paymentLabel = isCash
+        ? (context.isHindi ? 'नकद' : 'CASH')
+        : (isUpi ? 'UPI' : (context.isHindi ? 'उधार' : 'KHATA'));
+
+    String customerText = sale.customerPhone.isNotEmpty
+        ? sale.customerPhone
+        : (context.isHindi ? 'काउंटर ग्राहक' : 'Walk-in Customer');
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: AppCard(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         child: Row(
           children: [
             Container(
@@ -310,7 +359,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               child: Icon(
                 isCash ? Icons.payments_rounded : (isUpi ? Icons.qr_code_2_rounded : Icons.menu_book_rounded),
                 color: modeColor,
-                size: 18,
+                size: 17,
               ),
             ),
             const SizedBox(width: 12),
@@ -320,15 +369,19 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        'Bill #${sale.billNumber ?? "1001"}',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.bold,
-                          color: context.colorTextPrimary,
+                      Expanded(
+                        child: Text(
+                          '${context.isHindi ? 'बिल' : 'Bill'} #${sale.billNumber ?? "1001"}',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: context.colorTextPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Text(
                         timeStr,
                         style: TextStyle(fontSize: 11, color: context.colorTextMuted),
@@ -337,7 +390,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${sale.items.length} items • ${sale.customerPhone.isNotEmpty ? sale.customerPhone : "Walk-in Customer"}',
+                    '${sale.items.length} ${context.isHindi ? 'सामान' : 'items'} • $customerText',
                     style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
                   ),
                 ],
@@ -356,10 +409,10 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                 ),
                 const SizedBox(height: 2),
                 AppBadge(
-                  label: sale.paymentMethod.toUpperCase(),
-                  type: sale.paymentMethod == 'cash'
+                  label: paymentLabel,
+                  type: isCash
                       ? AppBadgeType.success
-                      : (sale.paymentMethod == 'upi' ? AppBadgeType.primary : AppBadgeType.warning),
+                      : (isUpi ? AppBadgeType.primary : AppBadgeType.warning),
                 ),
               ],
             ),
@@ -376,14 +429,14 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: context.colorPrimaryLight,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 40),
+            child: const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 36),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Text(
             context.tr('today_sales_empty_title'),
             textAlign: TextAlign.center,
@@ -393,7 +446,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               color: context.colorTextPrimary,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             context.tr('today_sales_empty_sub'),
             textAlign: TextAlign.center,
@@ -402,20 +455,73 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               color: context.colorTextSecondary,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           ElevatedButton.icon(
-            icon: const Icon(Icons.point_of_sale_rounded, size: 18),
-            label: Text(context.tr('today_sales_open_pos')),
+            icon: const Icon(Icons.point_of_sale_rounded, size: 17),
+            label: Text(
+              context.tr('today_sales_open_pos'),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () => context.go('/merchant/pos'),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Compact payment breakdown pill inside Today's Sales
+class _PaymentPill extends StatelessWidget {
+  final String label;
+  final double amount;
+  final IconData icon;
+  final Color color;
+
+  const _PaymentPill({
+    required this.label,
+    required this.amount,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: context.colorTextSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '₹${amount.toStringAsFixed(0)}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: context.colorTextPrimary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

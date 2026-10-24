@@ -64,6 +64,11 @@ class AppEventBus {
         break;
       case AppCacheEventType.shopProfileUpdated:
         LocalCacheService.invalidateDashboardStats();
+        LocalCacheService.invalidateProducts();
+        LocalCacheService.invalidateKhata();
+        LocalCacheService.invalidateExpenses();
+        LocalCacheService.invalidateOffers();
+        LocalCacheService.invalidateReservations();
         break;
     }
   }

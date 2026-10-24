@@ -11,6 +11,8 @@ import '../../../core/utils/image_utils.dart';
 import '../models/bulk_import_result.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
+import '../services/smart_barcode_catalog_service.dart';
+import '../../pos/models/pos_model.dart';
 
 /// High-performance, offline-first Product Controller with 0ms load speed.
 /// Uses Stale-While-Revalidate caching, optimistic local updates, and silent background sync.
@@ -19,6 +21,12 @@ class ProductController extends BaseController {
 
   List<ProductModel> _products = [];
   List<ProductModel> get products => _products;
+
+  @visibleForTesting
+  void setProductsForTesting(List<ProductModel> list) {
+    _products = List.from(list);
+    notifyListeners();
+  }
 
   String _searchQuery = '';
   String _selectedCategory = '';
@@ -49,7 +57,26 @@ class ProductController extends BaseController {
   }
 
   void _subscribeToEvents() {
-    _posSaleSub = AppEventBus().on(AppCacheEventType.posSaleCompleted, (_) {
+    _posSaleSub = AppEventBus().on(AppCacheEventType.posSaleCompleted, (event) {
+      if (event.payload is SaleModel) {
+        final sale = event.payload as SaleModel;
+        bool changed = false;
+        for (final item in sale.items) {
+          if (item.product.id.isNotEmpty) {
+            final idx = _products.indexWhere((p) => p.id == item.product.id);
+            if (idx != -1) {
+              final cur = _products[idx];
+              final newStock = (cur.stock - item.quantity).clamp(0, 999999);
+              _products[idx] = cur.copyWith(stock: newStock);
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          LocalCacheService.saveProducts(_products);
+          notifyListeners();
+        }
+      }
       loadProducts(silent: true);
     });
     _inventorySub = AppEventBus().on(AppCacheEventType.inventoryMutated, (_) {
@@ -78,7 +105,24 @@ class ProductController extends BaseController {
     final cached = LocalCacheService.getProducts();
     if (cached.isNotEmpty) {
       _products = cached;
+      _syncBarcodesToSmartCatalog(_products);
       notifyListeners();
+    }
+  }
+
+  void _syncBarcodesToSmartCatalog(List<ProductModel> list) {
+    for (final p in list) {
+      if (p.barcode.trim().isNotEmpty) {
+        SmartBarcodeCatalogService.registerDynamicItem(SmartCatalogItem(
+          barcode: p.barcode.trim(),
+          name: p.name,
+          brand: p.brand.isNotEmpty ? p.brand : (p.attributes['brand']?.toString() ?? ''),
+          category: p.category,
+          unit: p.unit,
+          mrp: p.comparePrice > 0 ? p.comparePrice : p.price,
+          sellingPrice: p.price,
+        ));
+      }
     }
   }
 
@@ -100,6 +144,7 @@ class ProductController extends BaseController {
       final cached = LocalCacheService.getProducts();
       if (cached.isNotEmpty) {
         _products = cached;
+        _syncBarcodesToSmartCatalog(_products);
       }
     }
 
@@ -229,6 +274,7 @@ class ProductController extends BaseController {
 
     // Immediately insert in memory & write to device storage
     _products.insert(0, optimisticProduct);
+    _syncBarcodesToSmartCatalog([optimisticProduct]);
     await LocalCacheService.saveProducts(_products);
     notifyListeners();
 
@@ -498,6 +544,7 @@ class ProductController extends BaseController {
         isFeatured: updateData['is_featured'] ?? original.isFeatured,
         isPricePublic: updateData['is_price_public'] != null ? (updateData['is_price_public'] == true) : original.isPricePublic,
       );
+      _syncBarcodesToSmartCatalog([_products[index]]);
       await LocalCacheService.saveProducts(_products);
       notifyListeners();
     }

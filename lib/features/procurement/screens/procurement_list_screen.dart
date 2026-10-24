@@ -9,6 +9,7 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../products/controllers/product_controller.dart';
+import '../../products/models/product_model.dart';
 import '../controllers/procurement_controller.dart';
 import '../models/procurement_model.dart';
 
@@ -28,6 +29,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
   final TextEditingController _notesCtrl = TextEditingController();
 
   String _selectedCategory = 'General Store';
+  bool _isFormExpanded = false;
+  String _activeFilter = 'ALL'; // 'ALL' | 'PENDING' | 'COMPLETED' | Category Name
 
   @override
   void dispose() {
@@ -43,7 +46,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
   Future<void> _sendWhatsAppOrderSheet(BuildContext context, List<ProcurementItemModel> items, String shopName) async {
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mandi procurement list is empty')),
+        SnackBar(content: Text(context.isHindi ? 'मंडी लिस्ट अभी खाली है' : 'Mandi procurement list is empty')),
       );
       return;
     }
@@ -86,7 +89,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     } else {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cannot launch WhatsApp')),
+          SnackBar(content: Text(context.isHindi ? 'व्हाट्सएप नहीं खोला जा सका' : 'Cannot launch WhatsApp')),
         );
       }
     }
@@ -113,28 +116,15 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     // Real Low Stock Products from Inventory
     final lowStockProducts = prodController.products.where((p) => p.isLowStock || p.isOutOfStock).toList();
 
-    final categoriesList = [
-      'General Store',
-      'Grocery & Staples',
-      'Snacks & Munchies',
-      'Beverages & Drinks',
-      'Dairy, Bakery & Frozen',
-      'Personal Care & Beauty',
-      'Household & Cleaning',
-      'Fruits & Vegetables',
-      'Electronics & Appliances',
-      'Mobile & Accessories',
-      'Clothing & Fashion',
-      'Footwear & Leather',
-      'Stationery & Office Supplies',
-      'Hardware & Building Material',
-      'Medicine & Healthcare',
-      'Toys & Baby Products',
-      'Sports & Fitness',
-      'Automotive & Spare Parts',
-      'Pet Supplies',
-      'Services & Others',
-    ];
+    final categoriesList = List<String>.from(CategoryRegistry.canonicalCategories);
+
+    // Filter items based on active chip
+    final filteredItems = items.where((item) {
+      if (_activeFilter == 'PENDING') return !item.isCompleted;
+      if (_activeFilter == 'COMPLETED') return item.isCompleted;
+      if (_activeFilter != 'ALL') return CategoryRegistry.isCategoryMatch(item.category, _activeFilter);
+      return true;
+    }).toList();
 
     return MerchantShell(
       currentIndex: -1,
@@ -158,17 +148,21 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
             },
           ),
           title: Text(
-            'Mandi Procurement & Sourcing',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
+            context.tr('mandi_title'),
+            style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
           ),
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
-              tooltip: 'Refresh Procurement List',
+              tooltip: context.isHindi ? 'रीफ्रेश करें' : 'Refresh List',
               onPressed: () {
                 controller.refreshList();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('✓ Mandi Procurement List Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                  SnackBar(
+                    content: Text(context.isHindi ? '✓ मंडी खरीद लिस्ट रीफ्रेश हो गई' : '✓ Mandi Procurement List Refreshed'),
+                    backgroundColor: AppColors.success,
+                    duration: const Duration(seconds: 1),
+                  ),
                 );
               },
             ),
@@ -184,21 +178,21 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 } else if (value == 'import') {
                   if (lowStockProducts.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('All items are in stock! No low-stock products found.')),
+                      SnackBar(content: Text(context.isHindi ? 'सब सामान इन-स्टॉक है! कोई कम स्टॉक आइटम नहीं मिला।' : 'All items in stock! No low-stock products found.')),
                     );
                     return;
                   }
                   controller.importLowStockProducts(lowStockProducts);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('${lowStockProducts.length} Real Low-Stock Items imported into Mandi List!'),
+                      content: Text(context.isHindi ? '${lowStockProducts.length} कम स्टॉक वाले उत्पाद मंडी लिस्ट में जुड़ गए!' : '${lowStockProducts.length} Low-Stock Items imported!'),
                       backgroundColor: AppColors.success,
                     ),
                   );
                 } else if (value == 'clear') {
                   controller.clearAllCompleted();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Cleared purchased/completed items')),
+                    SnackBar(content: Text(context.isHindi ? 'खरीदे जा चुके सामान हटा दिए गए' : 'Cleared bought items')),
                   );
                 }
               },
@@ -206,12 +200,12 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 PopupMenuItem<String>(
                   value: 'whatsapp',
                   child: Row(
-                    children: const [
-                      Icon(Icons.send_rounded, size: 18, color: Color(0xFF25D366)),
-                      SizedBox(width: 8),
+                    children: [
+                      const Icon(Icons.send_rounded, size: 18, color: Color(0xFF25D366)),
+                      const SizedBox(width: 8),
                       Text(
-                        'WhatsApp Mandi Order',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        context.tr('mandi_whatsapp_sheet'),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -219,12 +213,12 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 PopupMenuItem<String>(
                   value: 'pdf',
                   child: Row(
-                    children: const [
-                      Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
-                      SizedBox(width: 8),
+                    children: [
+                      const Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
+                      const SizedBox(width: 8),
                       Text(
-                        'Generate Mandi PDF Sheet',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        context.tr('mandi_pdf_sheet'),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -236,7 +230,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                       Icon(Icons.sync_rounded, size: 18, color: ctx.colorTextPrimary),
                       const SizedBox(width: 8),
                       Text(
-                        'Import Low Stock (${lowStockProducts.length})',
+                        '${context.tr('mandi_import_low')} (${lowStockProducts.length})',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                       ),
                     ],
@@ -246,12 +240,12 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                   PopupMenuItem<String>(
                     value: 'clear',
                     child: Row(
-                      children: const [
-                        Icon(Icons.cleaning_services_rounded, size: 18, color: AppColors.error),
-                        SizedBox(width: 8),
+                      children: [
+                        const Icon(Icons.cleaning_services_rounded, size: 18, color: AppColors.error),
+                        const SizedBox(width: 8),
                         Text(
-                          'Clear Bought Items',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.error),
+                          context.isHindi ? 'खरीदा गया सामान साफ करें' : 'Clear Bought Items',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.error),
                         ),
                       ],
                     ),
@@ -263,7 +257,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
         ),
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: ResponsiveContainer(
               maxWidth: 900,
               child: Column(
@@ -274,152 +269,285 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     children: [
                       Expanded(
                         child: AppStatCard(
-                          title: 'Sourcing Items',
+                          title: context.tr('mandi_items'),
                           value: '${controller.totalCount}',
-                          subtitle: '${controller.pendingCount} Pending • ${controller.completedCount} Bought',
+                          subtitle: context.isHindi ? '${controller.pendingCount} बाकी • ${controller.completedCount} खरीदा' : '${controller.pendingCount} Pending • ${controller.completedCount} Bought',
                           icon: Icons.assignment_outlined,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: AppStatCard(
-                          title: 'Est. Mandi Budget',
+                          title: context.tr('mandi_budget'),
                           value: '₹${controller.totalEstimatedBudget.toStringAsFixed(0)}',
-                          subtitle: 'Target Expense',
+                          subtitle: context.isHindi ? 'अनुमानित कुल लागत' : 'Estimated Target Expense',
                           icon: Icons.account_balance_wallet_outlined,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
-                  // 2. ADD ITEM TO MANDI LIST FORM
+                  // 2. PROMINENT QUICK ACTIONS HUB
                   AppCard(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          // Auto-Import Low Stock Button
+                          InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              if (lowStockProducts.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(context.isHindi ? 'सब सामान इन-स्टॉक है! कोई कम स्टॉक आइटम नहीं मिला।' : 'All items in stock! No low-stock items found.')),
+                                );
+                                return;
+                              }
+                              controller.importLowStockProducts(lowStockProducts);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(context.isHindi ? '${lowStockProducts.length} कम स्टॉक वाले उत्पाद मंडी लिस्ट में जुड़ गए!' : '${lowStockProducts.length} Low-Stock Items imported!'),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.flash_on_rounded, size: 16, color: AppColors.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${context.tr('mandi_import_low')} (${lowStockProducts.length})',
+                                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+
+                          // WhatsApp Order Sheet Button
+                          InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => _sendWhatsAppOrderSheet(context, items, shopName),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF25D366).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.35)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.send_rounded, size: 15, color: Color(0xFF128C7E)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    context.tr('mandi_whatsapp_sheet'),
+                                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Color(0xFF128C7E)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+
+                          // Mandi PDF Sheet Button
+                          InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => controller.generatePdfSheet(context, shopName),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: context.colorSurfaceSubtle,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: context.colorBorder),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.picture_as_pdf_rounded, size: 15, color: context.colorTextPrimary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    context.tr('mandi_pdf_sheet'),
+                                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 3. ADD ITEM TO MANDI LIST FORM (EASY & EXPANDABLE)
+                  AppCard(
+                    padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.add_task_rounded, size: 18, color: AppColors.primary),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Add New Item to Mandi Sourcing List',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                        InkWell(
+                          onTap: () => setState(() => _isFormExpanded = !_isFormExpanded),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.add_task_rounded, size: 18, color: AppColors.primary),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    context.tr('mandi_add_title'),
+                                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                                  ),
+                                ),
+                                Icon(
+                                  _isFormExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                  color: context.colorTextMuted,
+                                  size: 22,
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
+
+                        // Fast Input Fields
                         const SizedBox(height: 12),
                         Row(
                           children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: _nameCtrl,
+                                decoration: InputDecoration(
+                                  labelText: context.tr('mandi_item_name'),
+                                  hintText: context.isHindi ? 'उदा. शरबाती गेहूं 50kg / तैल 1L' : 'e.g. Sharbati Wheat 50kg',
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             Expanded(
                               flex: 2,
                               child: TextField(
-                                controller: _nameCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Item / Crop Name *',
-                                  hintText: 'e.g. Sharbati Gehun / Fortune Oil 1L',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 1,
-                              child: TextField(
                                 controller: _qtyCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Qty / Weight *',
-                                  hintText: '5 Bags / 250kg',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: InputDecoration(
+                                  labelText: context.tr('mandi_qty'),
+                                  hintText: context.isHindi ? '5 बोरी / 100kg' : '5 Bags / 100kg',
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                key: const ValueKey('procurement_category_dropdown'),
-                                isExpanded: true,
-                                initialValue: _selectedCategory,
-                                decoration: const InputDecoration(
-                                  labelText: 'Category',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                ),
-                                items: categoriesList
-                                    .map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
-                                    .toList(),
-                                onChanged: (val) {
-                                  if (val != null) setState(() => _selectedCategory = val);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _priceCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                decoration: const InputDecoration(
-                                  labelText: 'Est Rate (₹)',
-                                  prefixText: '₹ ',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+
+                        // Additional Form Details when Expanded or Always on Large Screens
+                        if (_isFormExpanded || Responsive.isDesktop(context)) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  key: const ValueKey('procurement_category_dropdown'),
+                                  isExpanded: true,
+                                  initialValue: _selectedCategory,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Category',
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  items: categoriesList
+                                      .map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
+                                      .toList(),
+                                  onChanged: (val) {
+                                    if (val != null) setState(() => _selectedCategory = val);
+                                  },
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _dealerCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Mandi Dealer / Wholesaler Name',
-                                  hintText: 'e.g. Shyam Trading Co.',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _priceCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Est Rate (₹)',
+                                    prefixText: '₹ ',
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _dealerPhoneCtrl,
-                                keyboardType: TextInputType.phone,
-                                decoration: const InputDecoration(
-                                  labelText: 'Dealer Phone / WhatsApp',
-                                  hintText: '9876543210',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _dealerCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Wholesaler / Mandi Dealer',
+                                    hintText: 'e.g. Shyam Trading Co.',
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _dealerPhoneCtrl,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Dealer Phone / WhatsApp',
+                                    hintText: '9876543210',
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _notesCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Quality Notes / Specs',
+                              hintText: 'e.g. Grade A Quality, Cash Discount',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
+
                         const SizedBox(height: 12),
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _notesCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Notes / Quality Specs',
-                                  hintText: 'e.g. Grade A Quality, Cash Discount',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                ),
-                              ),
+                            TextButton.icon(
+                              onPressed: () => setState(() => _isFormExpanded = !_isFormExpanded),
+                              icon: Icon(_isFormExpanded ? Icons.tune_rounded : Icons.add_circle_outline_rounded, size: 16),
+                              label: Text(_isFormExpanded ? (context.isHindi ? 'कम विवरण' : 'Fewer Details') : (context.isHindi ? 'डीलर व नोट्स जोड़ें' : '+ Dealer & Notes')),
                             ),
-                            const SizedBox(width: 8),
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
-                                minimumSize: const Size(120, 46),
+                                minimumSize: const Size(130, 42),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               icon: const Icon(Icons.add_rounded, color: Colors.white, size: 18),
-                              label: const Text('Add Item', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              label: Text(context.isHindi ? 'सामान जोड़ें' : 'Add to List', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                               onPressed: () {
                                 final name = _nameCtrl.text.trim();
                                 final qty = _qtyCtrl.text.trim();
@@ -448,10 +576,10 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                 _notesCtrl.clear();
 
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Item Mandi Procurement List mein add ho gaya!'),
+                                  SnackBar(
+                                    content: Text(context.isHindi ? 'सामान मंडी खरीद लिस्ट में जुड़ गया!' : 'Item added to Mandi Procurement List!'),
                                     backgroundColor: AppColors.success,
-                                    duration: Duration(seconds: 1),
+                                    duration: const Duration(seconds: 1),
                                   ),
                                 );
                               },
@@ -461,28 +589,70 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
-                  // 3. MANDI SOURCING ITEMS LIST
-                  AppSectionHeader(title: 'Mandi Sourcing List (${items.length})'),
+                  // 4. FILTER PILLS STRIP
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: [
+                        _buildFilterChip('ALL', context.isHindi ? 'सभी (${items.length})' : 'All (${items.length})'),
+                        const SizedBox(width: 6),
+                        _buildFilterChip('PENDING', context.isHindi ? '⏳ बाकी (${controller.pendingCount})' : '⏳ Pending (${controller.pendingCount})'),
+                        const SizedBox(width: 6),
+                        _buildFilterChip('COMPLETED', context.isHindi ? '✅ खरीदा (${controller.completedCount})' : '✅ Bought (${controller.completedCount})'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
 
-                  if (items.isEmpty)
+                  // 5. ITEMIZED SOURCING LIST
+                  AppSectionHeader(
+                    title: '${context.tr('mandi_items')} (${filteredItems.length})',
+                  ),
+
+                  if (filteredItems.isEmpty)
                     AppCard(
-                      padding: const EdgeInsets.all(32),
+                      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
                       child: Column(
                         children: [
-                          Icon(Icons.inventory_2_outlined, size: 48, color: context.colorTextMuted),
+                          Icon(Icons.inventory_2_outlined, size: 44, color: context.colorTextMuted),
                           const SizedBox(height: 12),
                           Text(
-                            'Procurement list is empty',
+                            context.isHindi ? 'मंडी खरीद लिस्ट खाली है' : 'Sourcing list is empty',
                             style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Add items above or tap 3-dots menu [⋮] -> "Import Low Stock" to auto-fetch reorder items!',
+                            context.isHindi ? 'ऊपर नया सामान जोड़ें या "कम स्टॉक ऑटो-इंपोर्ट" बटन दबाएं!' : 'Add items above or tap "Auto-Import Low Stock" button!',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 12, color: context.colorTextMuted),
                           ),
+                          if (lowStockProducts.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.flash_on_rounded, size: 16, color: Colors.white),
+                              label: Text(
+                                '${context.tr('mandi_import_low')} (${lowStockProducts.length})',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                              ),
+                              onPressed: () {
+                                controller.importLowStockProducts(lowStockProducts);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(context.isHindi ? '${lowStockProducts.length} कम स्टॉक वाले उत्पाद जुड़े!' : '${lowStockProducts.length} Low-Stock Items imported!'),
+                                    backgroundColor: AppColors.success,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     )
@@ -490,18 +660,21 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: items.length,
+                      itemCount: filteredItems.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
-                        final item = items[index];
+                        final item = filteredItems[index];
                         return AppCard(
                           padding: const EdgeInsets.all(12),
                           child: Row(
                             children: [
-                              Checkbox.adaptive(
-                                value: item.isCompleted,
-                                activeColor: AppColors.success,
-                                onChanged: (_) => controller.toggleItem(item.id),
+                              Transform.scale(
+                                scale: 1.05,
+                                child: Checkbox.adaptive(
+                                  value: item.isCompleted,
+                                  activeColor: AppColors.success,
+                                  onChanged: (_) => controller.toggleItem(item.id),
+                                ),
                               ),
                               Expanded(
                                 child: Column(
@@ -529,8 +702,9 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Wrap(
-                                      spacing: 8,
+                                      spacing: 6,
                                       runSpacing: 4,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -551,7 +725,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                         ),
                                         if (item.dealerName.isNotEmpty)
                                           Text(
-                                            'Dealer: ${item.dealerName}',
+                                            'Wholesaler: ${item.dealerName}',
                                             style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
                                           ),
                                       ],
@@ -566,7 +740,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               if (item.dealerPhone.isNotEmpty) ...[
                                 IconButton(
                                   icon: const Icon(Icons.phone_rounded, size: 18, color: AppColors.primary),
-                                  tooltip: 'Call Dealer',
+                                  tooltip: 'Call Wholesaler',
                                   onPressed: () => _callDealer(item.dealerPhone),
                                 ),
                               ],
@@ -580,11 +754,30 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         );
                       },
                     ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),);
+    );
+  }
+
+  Widget _buildFilterChip(String value, String label) {
+    final isSelected = _activeFilter == value;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Colors.white : context.colorTextPrimary,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: AppColors.primary,
+      backgroundColor: context.colorSurfaceSubtle,
+      onSelected: (_) => setState(() => _activeFilter = value),
+    );
   }
 }

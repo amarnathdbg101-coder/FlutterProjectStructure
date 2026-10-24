@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/counter_websocket_service.dart';
 import '../../../core/services/event_bus_service.dart';
+import '../../../core/services/offline_sync_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../dashboard/models/shop_model.dart';
@@ -13,12 +16,38 @@ class AuthController extends BaseController {
 
   UserModel? _currentUser;
   ShopModel? _currentShop;
+  List<ShopModel> _managedShops = [];
   bool _isStaff = false;
 
   UserModel? get currentUser => _currentUser;
   ShopModel? get currentShop => _currentShop;
+  ShopModel? get shop => _currentShop;
+  List<ShopModel> get managedShops => List.unmodifiable(_managedShops);
   bool get isStaff => _isStaff;
   bool get isAuthenticated => TokenStorage.hasToken();
+
+  @visibleForTesting
+  void setShopForTesting(ShopModel? shop) {
+    _currentShop = shop;
+    if (shop != null) {
+      final idx = _managedShops.indexWhere((s) => s.id == shop.id);
+      if (idx >= 0) {
+        _managedShops[idx] = shop;
+      } else {
+        _managedShops.add(shop);
+      }
+    }
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setManagedShopsForTesting(List<ShopModel> shops) {
+    _managedShops = List.from(shops);
+    if (shops.isNotEmpty) {
+      _currentShop = shops.first;
+    }
+    notifyListeners();
+  }
 
   AuthController() {
     _hydrateLocalSession();
@@ -36,6 +65,14 @@ class AuthController extends BaseController {
     final staffJson = TokenStorage.getStaff();
     if (staffJson != null) {
       _isStaff = true;
+    }
+
+    // Hydrate managed branches / outlets
+    final cachedShops = LocalCacheService.getManagedShops();
+    if (cachedShops.isNotEmpty) {
+      _managedShops = cachedShops;
+    } else if (_currentShop != null) {
+      _managedShops = [_currentShop!];
     }
   }
 
@@ -208,12 +245,102 @@ class AuthController extends BaseController {
     if (response.success && response.data != null && response.data!.id.toString().isNotEmpty) {
       _currentShop = response.data;
       await TokenStorage.saveShop(_currentShop!.toJson());
+
+      final idx = _managedShops.indexWhere((s) => s.id == _currentShop!.id);
+      if (idx >= 0) {
+        _managedShops[idx] = _currentShop!;
+      } else {
+        _managedShops.insert(0, _currentShop!);
+      }
+      await LocalCacheService.saveManagedShops(_managedShops);
       notifyListeners();
     } else {
       // Backend returned 404 or empty: This user has not registered a store yet
       _currentShop = null;
       await TokenStorage.removeShop();
       notifyListeners();
+    }
+  }
+
+  /// Switch active store / outlet in 0ms with instant cache invalidation
+  Future<bool> switchShop(String shopId) async {
+    final target = _managedShops.firstWhere(
+      (s) => s.id == shopId,
+      orElse: () => ShopModel(id: '', name: '', slug: '', phone: '', category: ''),
+    );
+    if (target.id.isEmpty) return false;
+
+    _currentShop = target;
+    await TokenStorage.saveShop(_currentShop!.toJson());
+    notifyListeners();
+
+    // Broadcast cache invalidation so all screens reload for the switched store
+    AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
+    return true;
+  }
+
+  /// Register a new branch / store outlet under the same merchant account
+  Future<bool> registerBranchStore({
+    required String name,
+    required String address,
+    String category = 'General Store',
+    String phone = '',
+  }) async {
+    setLoading(true);
+    clearError();
+
+    final payload = {
+      'name': name.trim(),
+      'address': address.trim(),
+      'category': category,
+      'phone': phone.isNotEmpty ? phone : (_currentUser?.phone ?? ''),
+    };
+
+    final response = await _repo.createShop(payload);
+    setLoading(false);
+
+    if (response.success && response.data != null && response.data!.id.toString().isNotEmpty) {
+      final newBranch = response.data!;
+      _managedShops.removeWhere((s) => s.id == newBranch.id);
+      _managedShops.add(newBranch);
+      _currentShop = newBranch;
+
+      await TokenStorage.saveShop(_currentShop!.toJson());
+      await LocalCacheService.saveManagedShops(_managedShops);
+      notifyListeners();
+
+      AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
+      return true;
+    } else {
+      // Offline fallback: optimistically create local branch and enqueue background sync
+      final branchId = 'branch_${DateTime.now().millisecondsSinceEpoch}';
+      final optimisticBranch = ShopModel(
+        id: branchId,
+        name: name.trim(),
+        slug: name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-'),
+        address: address.trim(),
+        category: category,
+        phone: phone.isNotEmpty ? phone : (_currentUser?.phone ?? ''),
+      );
+
+      _managedShops.removeWhere((s) => s.id == optimisticBranch.id);
+      _managedShops.add(optimisticBranch);
+      _currentShop = optimisticBranch;
+
+      await TokenStorage.saveShop(_currentShop!.toJson());
+      await LocalCacheService.saveManagedShops(_managedShops);
+      notifyListeners();
+
+      await OfflineSyncService.instance.enqueue(
+        action: SyncActionType.stockAdjust,
+        endpoint: ApiConstants.createShop,
+        method: 'POST',
+        payload: payload,
+        title: 'New Branch: ${name.trim()}',
+      );
+
+      AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
+      return true;
     }
   }
 
@@ -388,7 +515,13 @@ class AuthController extends BaseController {
     clearError();
     final response = await _repo.uploadShopBanners(files);
     setLoading(false);
-    if (response.success && response.data != null && response.data!.isNotEmpty) {
+    if (response.success && response.data != null) {
+      if (_currentShop != null) {
+        _currentShop = _currentShop!.copyWith(banners: response.data!);
+        await TokenStorage.saveShop(_currentShop!.toJson());
+      }
+      await fetchShopDetails();
+      notifyListeners();
       AppEventBus().emit(AppCacheEventType.shopProfileUpdated);
       return response.data!;
     }

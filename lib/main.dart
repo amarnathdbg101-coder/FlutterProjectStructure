@@ -31,22 +31,26 @@ void main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     final msg = details.exception.toString();
-    // Suppress non-critical render layout overflow reports (already logged to console)
-    if (!msg.contains('RenderFlex') && !msg.contains('overflowed')) {
+    // Suppress non-critical render layout overflow reports or framework assertions (already logged to console)
+    if (!msg.contains('RenderFlex') && !msg.contains('overflowed') && !msg.contains('ListTile')) {
       final isHindi = TokenStorage.getLanguage() == 'hi';
-      CustomSnackbar.showError(
-        null,
-        isHindi
-            ? 'एक अप्रत्याशित समस्या उत्पन्न हुई। कृपया पुनः प्रयास करें।'
-            : 'An unexpected issue occurred. Please try again.',
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        CustomSnackbar.showError(
+          null,
+          isHindi
+              ? 'एक अप्रत्याशित समस्या उत्पन्न हुई। कृपया पुनः प्रयास करें।'
+              : 'An unexpected issue occurred. Please try again.',
+        );
+      });
     }
   };
 
   // Global asynchronous platform and Dart exception handling
   PlatformDispatcher.instance.onError = (error, stack) {
     debugPrint('[ShopSilo Platform Error] $error');
-    CustomSnackbar.showError(null, ApiClient.handleError(error));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      CustomSnackbar.showError(null, ApiClient.handleError(error));
+    });
     return true;
   };
 

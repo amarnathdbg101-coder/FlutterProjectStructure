@@ -9,8 +9,11 @@ import '../../../core/network/base_controller.dart';
 import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
+import '../../../core/constants/app_colors.dart';
 import '../models/khata_model.dart';
 import '../repositories/khata_repository.dart';
+import '../widgets/smart_payment_reminder_sheet.dart';
+import '../../pos/models/pos_model.dart';
 
 class KhataController extends BaseController {
   final KhataRepository _repo = KhataRepository();
@@ -38,13 +41,26 @@ class KhataController extends BaseController {
 
   int get totalCount => _customers.length;
 
-  int get debtorsCount => _summary?.totalDebtors ?? _customers.where((c) => c.balance > 0).length;
+  int get debtorsCount {
+    if (_customers.isNotEmpty) {
+      return _customers.where((c) => c.balance > 0).length;
+    }
+    return _summary?.totalDebtors ?? 0;
+  }
 
-  int get overdueCount =>
-      _summary?.overdueAccounts ?? _customers.where((c) => c.isOverdue && c.balance > 0).length;
+  int get overdueCount {
+    if (_customers.isNotEmpty) {
+      return _customers.where((c) => c.isOverdue && c.balance > 0).length;
+    }
+    return _summary?.overdueAccounts ?? 0;
+  }
 
-  double get totalMarketDebt =>
-      _summary?.totalReceivables ?? _customers.where((c) => c.balance > 0).fold(0.0, (sum, c) => sum + c.balance);
+  double get totalMarketDebt {
+    if (_customers.isNotEmpty) {
+      return _customers.where((c) => c.balance > 0).fold(0.0, (sum, c) => sum + c.balance);
+    }
+    return _summary?.totalReceivables ?? 0.0;
+  }
 
   List<KhataCustomerModel> get filteredCustomers {
     return _customers.where((c) {
@@ -69,6 +85,7 @@ class KhataController extends BaseController {
   }
 
   StreamSubscription<AppCacheEvent>? _posSaleSub;
+  StreamSubscription<AppCacheEvent>? _khataSub;
   StreamSubscription<AppCacheEvent>? _logoutSub;
 
   KhataController() {
@@ -77,7 +94,27 @@ class KhataController extends BaseController {
   }
 
   void _subscribeToEvents() {
-    _posSaleSub = AppEventBus().on(AppCacheEventType.posSaleCompleted, (_) {
+    _khataSub = AppEventBus().on(AppCacheEventType.khataMutated, (_) {
+      loadCustomers(silent: true);
+    });
+    _posSaleSub = AppEventBus().on(AppCacheEventType.posSaleCompleted, (event) {
+      if (event.payload is SaleModel) {
+        final sale = event.payload as SaleModel;
+        if (sale.paymentMethod == 'khata' || sale.paymentMethod == 'credit') {
+          final cleanPhone = KhataRepository.normalizePhone(sale.customerPhone);
+          final idx = _customers.indexWhere((c) => c.mobile == cleanPhone || c.mobile == sale.customerPhone);
+          if (idx != -1) {
+            final cur = _customers[idx];
+            _customers[idx] = cur.copyWith(balance: cur.balance + sale.totalAmount);
+          }
+          if (_summary != null) {
+            _summary = _summary!.copyWith(totalReceivables: _summary!.totalReceivables + sale.totalAmount);
+            LocalCacheService.saveKhataSummary(_summary!);
+          }
+          LocalCacheService.saveKhataCustomers(_customers);
+          notifyListeners();
+        }
+      }
       loadCustomers(silent: true);
     });
     _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
@@ -89,6 +126,7 @@ class KhataController extends BaseController {
 
   @override
   void dispose() {
+    _khataSub?.cancel();
     _posSaleSub?.cancel();
     _logoutSub?.cancel();
     super.dispose();
@@ -184,6 +222,19 @@ class KhataController extends BaseController {
 
     if (response.success && response.data != null) {
       _currentCustomerStatement = response.data!;
+      // Sync customer balance with the latest transaction's balanceAfter if available
+      if (_currentCustomerStatement.isNotEmpty) {
+        final latestTx = _currentCustomerStatement.first;
+        final cleanPhone = KhataRepository.normalizePhone(mobile);
+        final idx = _customers.indexWhere((c) => c.mobile == cleanPhone || c.mobile == mobile);
+        if (idx != -1 && latestTx.balanceAfter >= 0) {
+          _customers[idx] = _customers[idx].copyWith(
+            balance: latestTx.balanceAfter,
+            lastTransactionAt: latestTx.createdAt,
+          );
+          LocalCacheService.saveKhataCustomers(_customers);
+        }
+      }
     } else {
       setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'पासबुक विवरण लोड नहीं हो सका' : 'Failed to load passbook statement'));
     }
@@ -198,10 +249,46 @@ class KhataController extends BaseController {
     String billNumber = '',
   }) async {
     clearError();
+    final cleanPhone = KhataRepository.normalizePhone(mobile);
+    final previousCustomers = List<KhataCustomerModel>.from(_customers);
+    final previousSummary = _summary;
 
+    // 1. Optimistic Update (0ms instant UI reflection)
+    final existingIdx = _customers.indexWhere((c) => c.mobile == cleanPhone || c.mobile == mobile);
+    if (existingIdx != -1) {
+      final cur = _customers[existingIdx];
+      _customers[existingIdx] = cur.copyWith(
+        balance: cur.balance + amount,
+        name: customerName.isNotEmpty ? customerName : cur.name,
+        lastTransactionAt: DateTime.now(),
+      );
+    } else {
+      _customers.insert(
+        0,
+        KhataCustomerModel(
+          id: cleanPhone,
+          name: customerName.trim().isNotEmpty ? customerName.trim() : 'Customer $cleanPhone',
+          mobile: cleanPhone,
+          balance: amount,
+          lastTransactionAt: DateTime.now(),
+        ),
+      );
+    }
+
+    if (_summary != null) {
+      _summary = _summary!.copyWith(
+        totalReceivables: _summary!.totalReceivables + amount,
+        totalDebtors: _customers.where((c) => c.balance > 0).length,
+      );
+      LocalCacheService.saveKhataSummary(_summary!);
+    }
+    await LocalCacheService.saveKhataCustomers(_customers);
+    notifyListeners();
+
+    // 2. Network Sync
     final response = await _repo.recordCredit(
       customerName: customerName,
-      mobile: mobile,
+      mobile: cleanPhone,
       amount: amount,
       notes: notes,
       billNumber: billNumber,
@@ -212,7 +299,13 @@ class KhataController extends BaseController {
       AppEventBus().emit(AppCacheEventType.khataMutated);
       return true;
     } else {
+      // Revert optimistic update on failure
+      _customers = previousCustomers;
+      _summary = previousSummary;
+      await LocalCacheService.saveKhataCustomers(_customers);
+      if (_summary != null) await LocalCacheService.saveKhataSummary(_summary!);
       setError(response.error ?? 'Failed to record credit entry');
+      notifyListeners();
       return false;
     }
   }
@@ -225,9 +318,36 @@ class KhataController extends BaseController {
     String notes = '',
   }) async {
     clearError();
+    final cleanPhone = KhataRepository.normalizePhone(mobile);
+    final previousCustomers = List<KhataCustomerModel>.from(_customers);
+    final previousSummary = _summary;
 
+    // 1. Optimistic Update (0ms instant UI reflection)
+    final existingIdx = _customers.indexWhere((c) => c.mobile == cleanPhone || c.mobile == mobile);
+    if (existingIdx != -1) {
+      final cur = _customers[existingIdx];
+      final newBal = cur.balance - amount;
+      _customers[existingIdx] = cur.copyWith(
+        balance: newBal < 0 ? 0.0 : newBal,
+        name: customerName.isNotEmpty ? customerName : cur.name,
+        lastTransactionAt: DateTime.now(),
+      );
+    }
+
+    if (_summary != null) {
+      final newTotal = (_summary!.totalReceivables - amount).clamp(0.0, double.infinity);
+      _summary = _summary!.copyWith(
+        totalReceivables: newTotal,
+        totalDebtors: _customers.where((c) => c.balance > 0).length,
+      );
+      LocalCacheService.saveKhataSummary(_summary!);
+    }
+    await LocalCacheService.saveKhataCustomers(_customers);
+    notifyListeners();
+
+    // 2. Network Sync
     final response = await _repo.recordPayment(
-      mobile: mobile,
+      mobile: cleanPhone,
       customerName: customerName,
       amount: amount,
       paymentMode: paymentMode,
@@ -239,7 +359,13 @@ class KhataController extends BaseController {
       AppEventBus().emit(AppCacheEventType.khataMutated);
       return true;
     } else {
+      // Revert optimistic update on failure
+      _customers = previousCustomers;
+      _summary = previousSummary;
+      await LocalCacheService.saveKhataCustomers(_customers);
+      if (_summary != null) await LocalCacheService.saveKhataSummary(_summary!);
       setError(response.error ?? 'Failed to record payment');
+      notifyListeners();
       return false;
     }
   }
@@ -355,91 +481,63 @@ class KhataController extends BaseController {
     }
   }
 
-  // --- 1-Tap WhatsApp Reminder ---
-  Future<void> sendWhatsAppReminder(BuildContext context, KhataCustomerModel customer) async {
+  // --- 1-Tap Smart Payment Reminder & WhatsApp Statement ---
+  Future<void> sendWhatsAppReminder(
+    BuildContext context,
+    KhataCustomerModel customer, {
+    List<KhataTransactionModel>? transactions,
+  }) async {
     final cleanPhone = customer.mobile.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('khata_no_phone'))),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('khata_no_phone'))),
+        );
+      }
       return;
     }
 
-    final formattedPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
-    final shop = LocalCacheService.getShop();
-    final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
-    final amountStr = customer.balance.toStringAsFixed(0);
+    // Use passed transactions or existing loaded customer statement
+    final txs = transactions ?? (_currentCustomerStatement.isNotEmpty ? _currentCustomerStatement : null);
 
-    // Fetch custom backend reminder text if available
-    String reminderText = '';
-    try {
-      final res = await _repo.getPaymentReminder(customer.mobile);
-      if (res.success && res.data != null) {
-        reminderText = res.data!['message']?.toString() ??
-            res.data!['reminder_text']?.toString() ??
-            '';
-      }
-    } catch (_) {}
-
-    if (reminderText.isEmpty) {
-      // Courteous bilingual formatted message
-      final isHindi = TokenStorage.getLanguage() == 'hi';
-      if (isHindi) {
-        reminderText =
-            'नमस्ते ${customer.name} जी,\n\n'
-            '$shopName से आपका कुल बकाया ₹$amountStr शेष है।\n'
-            'कृपया इसे यथाशीघ्र चुकाने की कृपा करें।\n\n'
-            'धन्यवाद!\n$shopName';
-      } else {
-        reminderText =
-            'Dear ${customer.name},\n\n'
-            'This is a polite reminder from $shopName. '
-            'Your pending credit balance is ₹$amountStr. '
-            'Kindly clear the dues at your earliest convenience.\n\n'
-            'Thank you!\n$shopName';
-      }
-    }
-
-    final urlString = 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(reminderText)}';
-    final uri = Uri.parse(urlString);
-
-    try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched) {
-        await Clipboard.setData(ClipboardData(text: reminderText));
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${context.tr('khata_whatsapp_not_installed')} - ${context.tr('khata_copied_summary')}'),
-            ),
-          );
-        }
-      }
-    } catch (_) {
-      await Clipboard.setData(ClipboardData(text: reminderText));
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${context.tr('khata_whatsapp_not_installed')} - ${context.tr('khata_copied_summary')}'),
-          ),
-        );
-      }
-    }
+    // Open interactive bottom sheet / modal for transparent preview, UPI link, and 1-tap WhatsApp sharing
+    await showSmartPaymentReminderSheet(context, customer, transactions: txs);
   }
 
   // --- Download / Open Statement PDF ---
   Future<void> openStatementPdf(BuildContext context, String mobile, {KhataCustomerModel? customer}) async {
     clearError();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(context.tr('khata_opening_pdf'))),
+            ],
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
     final res = await _repo.getStatementPdfUrl(mobile);
     if (res.success && res.data != null && res.data!.isNotEmpty) {
       final uri = Uri.parse(res.data!);
       try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
-      } catch (_) {}
+        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (launched) return;
+      } catch (e) {
+        debugPrint('Direct PDF launch warning: $e');
+      }
     }
 
-    // Clean HTML Print-Ready Passbook Statement Engine
+    // Clean HTML Print-Ready Passbook Statement Fallback
     final shop = LocalCacheService.getShop();
     final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
     final custName = customer?.name ?? 'Customer';
@@ -453,29 +551,32 @@ class KhataController extends BaseController {
       <meta charset="utf-8">
       <title>Khata Passbook Statement - $custName</title>
       <style>
-        body { font-family: Arial, sans-serif; padding: 20px; color: #0f172a; }
-        .header { text-align: center; border-bottom: 2px solid #dc2626; padding-bottom: 12px; margin-bottom: 20px; }
-        .header h1 { margin: 0; color: #dc2626; font-size: 22px; }
-        .header p { margin: 4px 0 0 0; color: #64748b; font-size: 13px; }
-        .summary-box { background: #fef2f2; border: 1px solid #fca5a5; padding: 14px; border-radius: 8px; margin-bottom: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #0f172a; max-width: 800px; margin: 0 auto; }
+        .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 20px; }
+        .header h1 { margin: 0; color: #0f172a; font-size: 22px; }
+        .header p { margin: 6px 0 0 0; color: #475569; font-size: 13px; }
+        .summary-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 16px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .balance-value { font-size: 20px; font-weight: bold; color: ${balance > 0 ? '#dc2626' : '#16a34a'}; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 13px; }
         th { background-color: #f1f5f9; font-weight: bold; }
         .credit { color: #dc2626; font-weight: bold; }
         .payment { color: #16a34a; font-weight: bold; }
-        @media print { .no-print { display: none; } }
+        @media print { .no-print { display: none; } body { padding: 0; } }
       </style>
     </head>
     <body>
-      <div class="no-print" style="margin-bottom: 16px;">
-        <button onclick="window.print()" style="background:#dc2626;color:white;border:none;padding:10px 18px;border-radius:6px;font-weight:bold;cursor:pointer;">🖨️ Print / Save Statement PDF</button>
+      <div class="no-print" style="margin-bottom: 16px; display: flex; gap: 10px;">
+        <button onclick="window.print()" style="background:#0f172a;color:white;border:none;padding:10px 18px;border-radius:6px;font-weight:bold;cursor:pointer;">🖨️ Print / Save Statement PDF</button>
       </div>
       <div class="header">
-        <h1>📖 $shopName - Customer Khata Passbook Statement</h1>
-        <p>Date: $dateStr • Customer: $custName ($mobile)</p>
+        <h1>📖 $shopName</h1>
+        <p>Official Customer Khata Passbook & Account Statement</p>
+        <p><strong>Customer:</strong> $custName ($mobile) • <strong>Date:</strong> $dateStr</p>
       </div>
       <div class="summary-box">
-        <strong>TOTAL PENDING CREDIT BALANCE: ₹${balance.abs().toStringAsFixed(0)}</strong>
+        <span><strong>CURRENT OUTSTANDING BALANCE</strong></span>
+        <span class="balance-value">₹${balance.abs().toStringAsFixed(0)} ${balance > 0 ? '(Pending Dues)' : '(Settled)'}</span>
       </div>
       <table>
         <thead>
@@ -483,7 +584,8 @@ class KhataController extends BaseController {
             <th>Date & Time</th>
             <th>Type</th>
             <th>Amount (₹)</th>
-            <th>Notes</th>
+            <th>Balance After (₹)</th>
+            <th>Notes / Bill</th>
           </tr>
         </thead>
         <tbody>
@@ -491,12 +593,18 @@ class KhataController extends BaseController {
 
     for (final tx in _currentCustomerStatement) {
       final txDate = '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}';
+      final billNote = [
+        if (tx.billNumber != null && tx.billNumber!.isNotEmpty) 'Bill: ${tx.billNumber}',
+        if (tx.notes.isNotEmpty) tx.notes,
+      ].join(' • ');
+
       htmlContent += '''
         <tr>
           <td>$txDate</td>
           <td class="${tx.isCredit ? 'credit' : 'payment'}">${tx.isCredit ? 'UDHAR DIYA (-)' : 'JAMA KIYA (+)'}</td>
           <td class="${tx.isCredit ? 'credit' : 'payment'}">₹${tx.amount.toStringAsFixed(0)}</td>
-          <td>${tx.notes.isNotEmpty ? tx.notes : '-'}</td>
+          <td><strong>₹${tx.balanceAfter.toStringAsFixed(0)}</strong></td>
+          <td>${billNote.isNotEmpty ? billNote : '-'}</td>
         </tr>
       ''';
     }
@@ -508,9 +616,21 @@ class KhataController extends BaseController {
     </html>
     ''';
 
-    final uri = Uri.dataFromString(htmlContent, mimeType: 'text/html', encoding: Encoding.getByName('utf-8'));
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    try {
+      final uri = Uri.dataFromString(htmlContent, mimeType: 'text/html', encoding: Encoding.getByName('utf-8'));
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+        return;
+      }
+    } catch (_) {}
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('khata_pdf_error')),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 
@@ -518,31 +638,70 @@ class KhataController extends BaseController {
   Future<void> broadcastWhatsAppOverdueReminders(BuildContext context) async {
     final overdue = _customers.where((c) => c.balance > 0).toList();
     if (overdue.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No customers with pending overdue balance found!')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.isHindi ? 'कोई अतिदेय बकाया ग्राहक नहीं मिला!' : 'No customers with pending overdue balance found!')),
+        );
+      }
       return;
     }
 
     final shop = LocalCacheService.getShop();
     final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
+    final isHindi = context.isHindi;
+    final now = DateTime.now();
+    final dateStr = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
 
-    String text = '📢 *SHOP PAYMENT REMINDER BROADCAST*\n';
-    text += 'Dukan: *$shopName*\n';
-    text += 'Tareekh: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}\n';
-    text += '------------------------------------\n\n';
-    text += 'Total Overdue Debtors: *${overdue.length}*\n\n';
-
-    for (int i = 0; i < overdue.length; i++) {
-      final c = overdue[i];
-      text += '${i + 1}. *${c.name}* (${c.mobile}) — Pending: *₹${c.balance.toStringAsFixed(0)}*\n';
+    String text;
+    if (isHindi) {
+      text = '📢 *दुकान बकाया उधारी सारांश (प्रसारण)*\n';
+      text += 'दुकान: *$shopName*\n';
+      text += 'दिनांक: $dateStr\n';
+      text += '------------------------------------\n\n';
+      text += 'कुल बकायादार ग्राहक: *${overdue.length}*\n\n';
+      for (int i = 0; i < overdue.length; i++) {
+        final c = overdue[i];
+        text += '${i + 1}. *${c.name}* (${c.mobile}) — कुल बकाया: *₹${c.balance.toStringAsFixed(0)}*\n';
+      }
+      text += '\nकृपया समयानुसार अपनी बकाया उधारी का भुगतान करें।\nधन्यवाद!\n*$shopName*';
+    } else {
+      text = '📢 *STORE OUTSTANDING CREDIT SUMMARY*\n';
+      text += 'Store: *$shopName*\n';
+      text += 'Date: $dateStr\n';
+      text += '------------------------------------\n\n';
+      text += 'Total Debtors: *${overdue.length}*\n\n';
+      for (int i = 0; i < overdue.length; i++) {
+        final c = overdue[i];
+        text += '${i + 1}. *${c.name}* (${c.mobile}) — Pending Dues: *₹${c.balance.toStringAsFixed(0)}*\n';
+      }
+      text += '\nKindly clear your pending balance at your earliest convenience.\nThank you!\n*$shopName*';
     }
 
-    text += '\nKripya samay par apna bakaya udhar bhuktan karein. Dhanyawad!';
-
     final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        await Clipboard.setData(ClipboardData(text: text));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.tr('khata_reminder_toast_copied')),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.tr('khata_reminder_toast_copied')),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
     }
   }
 }

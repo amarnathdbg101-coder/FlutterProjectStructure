@@ -23,6 +23,8 @@ class LocalCacheService {
   static const String _keyDashboardStatsTime = 'shopsilo_cache_dash_stats_time';
   static const String _keyReservations = 'shopsilo_cache_reservations';
   static const String _keyReservationsTime = 'shopsilo_cache_reservations_time';
+  static const String _keyManagedShops = 'shopsilo_cache_managed_shops';
+  static const String _keySyncQueue = 'shopsilo_cache_sync_queue';
 
   static SharedPreferences? _prefs;
 
@@ -34,6 +36,8 @@ class LocalCacheService {
   static List<OfferModel>? _memoryOffers;
   static List<SaleModel>? _memorySalesHistory;
   static List<ReservationModel>? _memoryReservations;
+  static List<ShopModel>? _memoryManagedShops;
+  static List<Map<String, dynamic>>? _memorySyncQueue;
 
   static Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -572,6 +576,83 @@ class LocalCacheService {
     _prefs?.remove(_keyAnalytics);
   }
 
+  // ==========================================
+  // 9. MANAGED SHOPS / MULTI-STORE PERSISTENCE
+  // ==========================================
+
+  /// Save list of user's managed branches and stores
+  static Future<void> saveManagedShops(List<ShopModel> shops) async {
+    try {
+      _memoryManagedShops = List<ShopModel>.from(shops);
+      await init();
+      final listJson = jsonEncode(shops.map((s) => s.toJson()).toList());
+      await _prefs!.setString(_keyManagedShops, listJson);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving managed shops: $e');
+    }
+  }
+
+  /// Get list of user's managed branches and stores
+  static List<ShopModel> getManagedShops() {
+    if (_memoryManagedShops != null && _memoryManagedShops!.isNotEmpty) {
+      return List<ShopModel>.from(_memoryManagedShops!);
+    }
+    try {
+      final raw = _prefs?.getString(_keyManagedShops);
+      if (raw == null || raw.trim().isEmpty) return [];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded
+            .whereType<Map>()
+            .map((item) => ShopModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        if (list.isNotEmpty) {
+          _memoryManagedShops = List<ShopModel>.from(list);
+        }
+        return list;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading managed shops: $e');
+    }
+    return [];
+  }
+
+  // ==========================================
+  // 10. OFFLINE CLOUD SYNC QUEUE PERSISTENCE
+  // ==========================================
+
+  /// Save pending offline mutations to device local storage
+  static Future<void> saveSyncQueue(List<Map<String, dynamic>> queue) async {
+    try {
+      _memorySyncQueue = List<Map<String, dynamic>>.from(queue);
+      await init();
+      final jsonStr = jsonEncode(queue);
+      await _prefs!.setString(_keySyncQueue, jsonStr);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving sync queue: $e');
+    }
+  }
+
+  /// Retrieve pending offline mutations from device storage
+  static List<Map<String, dynamic>> getSyncQueue() {
+    if (_memorySyncQueue != null) {
+      return List<Map<String, dynamic>>.from(_memorySyncQueue!);
+    }
+    try {
+      final raw = _prefs?.getString(_keySyncQueue);
+      if (raw == null || raw.trim().isEmpty) return [];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+        _memorySyncQueue = List<Map<String, dynamic>>.from(list);
+        return list;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading sync queue: $e');
+    }
+    return [];
+  }
+
   /// Wipe ALL caches (in-memory & persistent storage) on user logout
   static Future<void> clearCache() async {
     // 1. Wipe all in-memory static caches immediately
@@ -582,6 +663,8 @@ class LocalCacheService {
     _memoryOffers = null;
     _memorySalesHistory = null;
     _memoryReservations = null;
+    _memoryManagedShops = null;
+    _memorySyncQueue = null;
 
     // 2. Wipe all persistent storage keys from device
     await init();
@@ -600,6 +683,8 @@ class LocalCacheService {
       await _prefs!.remove(_keySalesHistory);
       await _prefs!.remove(_keyReservations);
       await _prefs!.remove(_keyReservationsTime);
+      await _prefs!.remove(_keyManagedShops);
+      await _prefs!.remove(_keySyncQueue);
     }
   }
 }

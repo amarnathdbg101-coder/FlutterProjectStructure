@@ -168,17 +168,22 @@ class ReservationController extends BaseController {
     }
   }
 
-  /// 1-Tap Counter Verification (Verify 4-digit pickup code / OTP token at counter)
-  Future<bool> verifyPickupCode(String code) async {
+  /// 1-Tap Counter Verification (Verify 6-digit pickup code or reservation number at counter)
+  Future<bool> verifyPickupCode(String code, {String? reservationNumber}) async {
     clearError();
     setLoading(true);
 
-    final response = await _repo.verifyReservation(pickupCode: code);
+    final response = await _repo.verifyReservation(
+      pickupCode: code,
+      reservationNumber: reservationNumber,
+    );
     setLoading(false);
 
     if (response.success) {
       await loadReservations(silent: true);
       AppEventBus().emit(AppCacheEventType.reservationMutated);
+      AppEventBus().emit(AppCacheEventType.inventoryMutated);
+      AppEventBus().emit(AppCacheEventType.posSaleCompleted);
       return true;
     } else {
       setError(response.error ?? 'Invalid or expired pickup code');
@@ -193,6 +198,7 @@ class ReservationController extends BaseController {
     if (response.success) {
       await loadReservations(silent: true);
       AppEventBus().emit(AppCacheEventType.reservationMutated);
+      AppEventBus().emit(AppCacheEventType.inventoryMutated);
       return true;
     } else {
       setError(response.error ?? 'Failed to cancel reservation');

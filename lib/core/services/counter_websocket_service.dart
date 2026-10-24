@@ -32,6 +32,12 @@ class CounterWebSocketService {
   /// Stream of incoming real-time customer pickup reservations
   Stream<Map<String, dynamic>> get reservationStream => _reservationStreamController.stream;
 
+  final StreamController<Map<String, dynamic>> _posParkedStreamController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Stream of incoming real-time POS Parked Bills / Multi-Basket updates across floor staff & counters
+  Stream<Map<String, dynamic>> get posParkedStream => _posParkedStreamController.stream;
+
   /// Global notification callback for in-app alert banner
   void Function(Map<String, dynamic> orderPayload)? onNewReservationNotification;
 
@@ -121,6 +127,16 @@ class CounterWebSocketService {
 
         // 3. Trigger global in-app alert banner
         onNewReservationNotification?.call(payload);
+      } else if (event == 'POS_PARKED_BILLS_CHANGED' || event == 'POS_PARKED_BILL_DELETED') {
+        // Instant Haptic Feedback on remote token update
+        try {
+          HapticFeedback.selectionClick();
+        } catch (_) {}
+
+        _posParkedStreamController.add({
+          'event': event,
+          'payload': payload,
+        });
       }
     } catch (e) {
       debugPrint('[WebSocket] Error parsing message payload: $e');
