@@ -111,13 +111,59 @@ class StudentMemoryProfile {
     final actionsList = (json['recommended_actions'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
         const <String>[];
 
+    final totalDoubts = (json['total_doubts_asked'] is num) ? (json['total_doubts_asked'] as num).toInt() : 0;
+    final totalQuizzes = (json['total_quizzes_taken'] is num) ? (json['total_quizzes_taken'] as num).toInt() : 0;
+
+    const legacyMockTopics = {
+      'core theory & mechanics',
+      'formula derivations',
+      'examiner traps & pyqs',
+    };
+
+    final filteredWeak = weakList.where((w) {
+      final lower = w.trim().toLowerCase();
+      if (legacyMockTopics.contains(lower)) return false;
+      if (totalDoubts == 0 && totalQuizzes == 0) {
+        if (lower == 'data structures' || lower == 'dynamic programming') return false;
+      }
+      return true;
+    }).toList();
+
+    final filteredStrong = strongList.where((s) {
+      final lower = s.trim().toLowerCase();
+      if (legacyMockTopics.contains(lower)) return false;
+      if (totalDoubts == 0 && totalQuizzes == 0) {
+        if (lower == 'object-oriented programming') return false;
+      }
+      return true;
+    }).toList();
+
+    final filteredTraps = trapsList.where((trap) {
+      final lower = trap.trim().toLowerCase();
+      if (totalDoubts == 0 && totalQuizzes == 0) {
+        if (lower.contains('off-by-one') || lower.contains('time complexity underestimation')) return false;
+      }
+      return true;
+    }).toList();
+
+    mastery.removeWhere((k, _) {
+      final lower = k.trim().toLowerCase();
+      if (legacyMockTopics.contains(lower)) return true;
+      if (totalDoubts == 0 && totalQuizzes == 0) {
+        if (lower == 'data structures' || lower == 'dynamic programming' || lower == 'object-oriented programming') {
+          return true;
+        }
+      }
+      return false;
+    });
+
     return StudentMemoryProfile(
       userId: (json['user_id'] ?? json['userId'] ?? 'local_scholar').toString(),
       targetExam: (json['target_exam'] ?? json['targetExam'] ?? 'General Academic Preparation').toString(),
       academicLevel: (json['academic_level'] ?? json['academicLevel'] ?? 'College & Competitive Exams').toString(),
-      strongTopics: strongList,
-      weakTopics: weakList,
-      examTrapsEncountered: trapsList,
+      strongTopics: filteredStrong,
+      weakTopics: filteredWeak,
+      examTrapsEncountered: filteredTraps,
       preferredPersona: (json['preferred_persona'] ?? json['preferredPersona'] ?? 'Professor').toString(),
       cumulativeMemorySummary: (json['memory_summary'] ?? json['cumulativeMemorySummary'] ?? '').toString(),
       totalInteractions: (json['total_interactions'] ?? json['totalInteractions'] ?? 0) as int,

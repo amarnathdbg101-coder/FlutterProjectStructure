@@ -84,15 +84,6 @@ class CognitiveMasteryHeatmapCard extends StatelessWidget {
       items.add(MasteryTopicItem(topicName: topic, scorePercentage: 90, level: MasteryLevel.mastered));
     }
 
-    // Fallback baseline topics if profile is fresh
-    if (items.isEmpty) {
-      items.addAll(const [
-        MasteryTopicItem(topicName: 'Core Theory & Mechanics', scorePercentage: 85, level: MasteryLevel.mastered),
-        MasteryTopicItem(topicName: 'Formula Derivations', scorePercentage: 55, level: MasteryLevel.developing),
-        MasteryTopicItem(topicName: 'Examiner Traps & PYQs', scorePercentage: 30, level: MasteryLevel.weak),
-      ]);
-    }
-
     return items;
   }
 
@@ -171,15 +162,6 @@ class CognitiveMasteryHeatmapCard extends StatelessWidget {
                   FlashcardDeckSheet.show(context, topic: item.topicName);
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.functions_rounded, color: Color(0xFF0284C7)),
-                title: const Text('Formula Studio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
-                subtitle: const Text('Derivations and equation sandbox'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.push(AppRoutes.formulaStudio, extra: {'topic': item.topicName});
-                },
-              ),
               const SizedBox(height: 10),
             ],
           ),
@@ -192,6 +174,76 @@ class CognitiveMasteryHeatmapCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final items = _buildHeatmapItems();
+
+    if (items.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.grid_view_rounded, color: Color(0xFF4F46E5), size: 18),
+                const SizedBox(width: 8),
+                const Text('Cognitive Mastery Heatmap', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text('0 Tracked', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF6366F1))),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)).withValues(alpha: 0.7),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.auto_awesome, size: 24, color: isDark ? Colors.blue[300] : const Color(0xFF3B82F6)),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'No Mastery Topics Tracked Yet',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'Topics appear here automatically as you ask AI doubts, solve adaptive quizzes, or add custom topics.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     final weakCount = items.where((i) => i.level == MasteryLevel.weak).length;
     final developingCount = items.where((i) => i.level == MasteryLevel.developing).length;

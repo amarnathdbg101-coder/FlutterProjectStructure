@@ -123,4 +123,17 @@ class CognitiveProfileController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> clearAllTopics() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      _profile = await _service.clearAllTopics();
+    } catch (e) {
+      _errorMessage = 'Failed to clear topics: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

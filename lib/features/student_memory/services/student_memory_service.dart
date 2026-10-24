@@ -382,4 +382,18 @@ class StudentMemoryService {
   Future<StudentMemoryProfile> moveToWeak(String topic) async {
     return addWeakTopic(topic);
   }
+
+  /// Clear all topics and topic mastery from profile and sync to server
+  Future<StudentMemoryProfile> clearAllTopics() async {
+    final current = await getProfile();
+    final updated = current.copyWith(
+      weakTopics: const [],
+      strongTopics: const [],
+      topicMastery: const {},
+      examTrapsEncountered: const [],
+      updatedAt: DateTime.now(),
+    );
+    await saveProfile(updated);
+    return updated;
+  }
 }

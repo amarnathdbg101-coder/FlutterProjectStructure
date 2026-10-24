@@ -481,10 +481,23 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
               'Topic Mastery Matrix',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add Topic'),
-              onPressed: () => _showAddTopicDialog(context, controller),
+            Row(
+              children: [
+                if (controller.weakTopics.isNotEmpty || controller.strongTopics.isNotEmpty)
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red[400],
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () => _confirmClearTopics(context, controller),
+                    child: const Text('Clear All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Topic'),
+                  onPressed: () => _showAddTopicDialog(context, controller),
+                ),
+              ],
             ),
           ],
         ),
@@ -550,16 +563,30 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
     }
 
     if (displayedTopics.isEmpty) {
+      String emptyMsg;
+      if (tabIdx == 0) {
+        emptyMsg = 'No focus topics identified yet.\nTopics you struggle with in quizzes or doubts appear here automatically.';
+      } else if (tabIdx == 1) {
+        emptyMsg = 'No mastered topics yet.\nTopics with consistent high scores appear here.';
+      } else {
+        emptyMsg = 'No topics tracked yet.\nTap "+ Add Topic" above or start asking doubts in AI Tutor.';
+      }
+
       return Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 32),
+          padding: const EdgeInsets.symmetric(vertical: 28),
           child: Column(
             children: [
-              Icon(Icons.checklist, size: 40, color: Colors.grey[400]),
+              Icon(Icons.checklist_rtl_rounded, size: 36, color: isDark ? Colors.grey[600] : Colors.grey[400]),
               const SizedBox(height: 8),
               Text(
-                tabIdx == 0 ? 'No weak topics identified! Great job.' : 'No topics added yet.',
-                style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                emptyMsg,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  fontSize: 12.5,
+                  height: 1.4,
+                ),
               ),
             ],
           ),
@@ -944,6 +971,36 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmClearTopics(BuildContext context, CognitiveProfileController controller) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear All Tracked Topics?'),
+        content: const Text(
+          'This will remove all topics from your focus and mastered lists so you can start completely clean. Your topics will build up genuinely as you ask doubts and take quizzes.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              controller.clearAllTopics();
+              CustomSnackbar.showSuccess(context, 'Topics matrix reset to clean state.');
+            },
+            child: const Text('Clear All'),
+          ),
+        ],
       ),
     );
   }
