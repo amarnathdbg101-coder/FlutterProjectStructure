@@ -509,24 +509,77 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Hello, $userName',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Ready to learn today?',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
-                              letterSpacing: -0.5,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Hello, $userName',
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Ready to learn today?',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                        letterSpacing: -0.5,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Builder(
+                                builder: (ctx) {
+                                  final profile = StudentMemoryService.getCachedProfileSync();
+                                  final targetExam = profile?.targetExam ?? 'Academic';
+                                  final streak = profile?.studyStreakDays ?? 1;
+                                  return InkWell(
+                                    onTap: () => context.push(AppRoutes.cognitiveProfile),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF2563EB).withValues(alpha: isDark ? 0.16 : 0.08),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: const Color(0xFF2563EB).withValues(alpha: isDark ? 0.35 : 0.2),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFFF59E0B)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '$streak d • $targetExam',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF2563EB),
+                                              letterSpacing: -0.1,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 12),
                           OmniSearchBar(
@@ -602,8 +655,8 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
                         childAspectRatio: Responsive.isMobile(context)
-                            ? (MediaQuery.of(context).textScaler.scale(1) > 1.05 ? 1.08 : 1.18)
-                            : 1.35,
+                            ? (MediaQuery.of(context).textScaler.scale(1) > 1.05 ? 1.04 : 1.12)
+                            : 1.30,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
@@ -612,7 +665,8 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                             title: item.title,
                             description: item.description,
                             icon: item.icon,
-                            badge: '',
+                            badge: item.badge,
+                            engineId: item.id,
                             isDark: isDark,
                             onTap: () => _handleEngineNavigation(item.route),
                           );

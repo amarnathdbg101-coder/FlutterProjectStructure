@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_colors.dart';
 import '../services/spaced_repetition_service.dart';
 import 'spaced_review_session_sheet.dart';
 
+/// Compact & Luxury Active Recall Daily Queue Capsule
+/// Features clean horizontal layout, subtle glassmorphic glow,
+/// and instant 1-tap review trigger without consuming excessive vertical space.
 class DailyReviewQueueCard extends StatefulWidget {
   const DailyReviewQueueCard({super.key});
 
@@ -52,27 +54,30 @@ class _DailyReviewQueueCardState extends State<DailyReviewQueueCard> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dueCount = _dueItems.length;
-    final reviewedToday = _service.reviewedTodayCount;
 
-    // Collect unique topics due
-    final topics = _dueItems.map((item) => item.card.topic).toSet().take(3).toList();
+    const activeColor = Color(0xFF6366F1);
+    const completeColor = Color(0xFF10B981);
+    final themeColor = dueCount > 0 ? activeColor : completeColor;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: dueCount > 0
-              ? [const Color(0xFF4F46E5), const Color(0xFF6366F1)]
-              : [const Color(0xFF059669), const Color(0xFF10B981)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: isDark ? const Color(0xFF131B2E) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: themeColor.withValues(alpha: isDark ? 0.35 : 0.22),
+          width: 1.1,
         ),
-        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: (dueCount > 0 ? const Color(0xFF4F46E5) : const Color(0xFF059669)).withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: themeColor.withValues(alpha: isDark ? 0.12 : 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -80,127 +85,135 @@ class _DailyReviewQueueCardState extends State<DailyReviewQueueCard> {
         color: Colors.transparent,
         child: InkWell(
           onTap: _launchReviewSession,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
               children: [
-                // Top Badge & Stats
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
+                // Glowing Icon Avatar
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        themeColor.withValues(alpha: isDark ? 0.25 : 0.14),
+                        themeColor.withValues(alpha: isDark ? 0.10 : 0.04),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: themeColor.withValues(alpha: isDark ? 0.4 : 0.25),
+                      width: 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: themeColor,
+                            ),
+                          )
+                        : Icon(
+                            dueCount > 0 ? Icons.bolt_rounded : Icons.check_circle_outline_rounded,
+                            color: themeColor,
+                            size: 22,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 13),
+
+                // Title & Subtitle Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
                         children: [
-                          Icon(Icons.bolt, color: Colors.amber, size: 14),
-                          SizedBox(width: 4),
                           Text(
-                            'SM-2 SPACED REPETITION',
+                            dueCount > 0 ? '$dueCount Cards Due' : 'All Caught Up',
                             style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: themeColor.withValues(alpha: isDark ? 0.18 : 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'SM-2',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: themeColor,
+                                letterSpacing: 0.3,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    if (reviewedToday > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 3),
+                      Text(
+                        dueCount > 0
+                            ? 'Review before forgetting curve decay'
+                            : 'Daily spaced recall completed today',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                         ),
-                        child: Text(
-                          '🎉 $reviewedToday reviewed today',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Sleek Pill Button
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: themeColor,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: themeColor.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        dueCount > 0 ? Icons.play_arrow_rounded : Icons.replay_rounded,
+                        size: 15,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        dueCount > 0 ? 'Review' : 'Practice',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.1,
                         ),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Main Due Text
-                if (_isLoading)
-                  const Row(
-                    children: [
-                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
-                      SizedBox(width: 10),
-                      Text('Calculating Memory Decay Curves...', style: TextStyle(color: Colors.white, fontSize: 13)),
                     ],
-                  )
-                else if (dueCount > 0) ...[
-                  Text(
-                    '⚡ $dueCount Cards Due Today',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    topics.isNotEmpty
-                        ? 'Topics: ${topics.join(" • ")}'
-                        : 'Review active recall cards before memory retention fades.',
-                    style: const TextStyle(
-                      color: Color(0xE6FFFFFF),
-                      fontSize: 12.5,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ] else ...[
-                  const Text(
-                    '🎉 All Caught Up For Today!',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Great job! All active recall cards are scheduled for future intervals.',
-                    style: TextStyle(
-                      color: Color(0xE6FFFFFF),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 16),
-
-                // Primary Action Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: dueCount > 0 ? const Color(0xFF4F46E5) : const Color(0xFF059669),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                    icon: Icon(dueCount > 0 ? Icons.play_arrow_rounded : Icons.history_edu_rounded, size: 20),
-                    label: Text(
-                      dueCount > 0 ? 'Start Review Queue ($dueCount)' : 'Practice Any Deck',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-                    ),
-                    onPressed: _launchReviewSession,
                   ),
                 ),
               ],
