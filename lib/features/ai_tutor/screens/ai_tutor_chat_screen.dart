@@ -566,7 +566,8 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
         _handleScrollPosition();
         if (controller.isStreaming && _scrollController.hasClients) {
           final pos = _scrollController.position;
-          if (pos.maxScrollExtent - pos.pixels < 120) {
+          // Smooth sticky scroll during streaming if student hasn't scrolled far up
+          if (pos.maxScrollExtent - pos.pixels < 260) {
             _scrollController.jumpTo(pos.maxScrollExtent);
           }
         }

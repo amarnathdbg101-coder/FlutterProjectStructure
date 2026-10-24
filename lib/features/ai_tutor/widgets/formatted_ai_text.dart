@@ -2780,35 +2780,35 @@ class _StreamingPulseCursorState extends State<_StreamingPulseCursor>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _opacity,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.35),
-            width: 1,
-          ),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 6,
-              height: 6,
+              width: 7,
+              height: 7,
               decoration: const BoxDecoration(
                 color: Color(0xFF6366F1),
                 shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(width: 5),
-            const Text(
-              'Streaming response...',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF6366F1),
-                letterSpacing: 0.2,
+            const SizedBox(width: 4),
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.65),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                shape: BoxShape.circle,
               ),
             ),
           ],
