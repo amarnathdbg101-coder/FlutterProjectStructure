@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -188,12 +189,19 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
       if (byteData == null) return;
 
       final pngBytes = byteData.buffer.asUint8List();
-      final docsDir = await getApplicationDocumentsDirectory();
-      final safeTitle = (controller.diagram?.title ?? 'mindmap')
-          .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-      final fileName = 'StudySilo_HD_Poster_${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File('${docsDir.path}/$fileName');
-      await file.writeAsBytes(pngBytes);
+      String filePath = 'Exported Poster';
+
+      if (!kIsWeb) {
+        try {
+          final docsDir = await getApplicationDocumentsDirectory();
+          final safeTitle = (controller.diagram?.title ?? 'mindmap')
+              .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+          final fileName = 'StudySilo_HD_Poster_${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.png';
+          final file = File('${docsDir.path}/$fileName');
+          await file.writeAsBytes(pngBytes);
+          filePath = file.path;
+        } catch (_) {}
+      }
 
       // Efficiently sync mind map state to PostgreSQL database
       if (controller.diagram != null) {
@@ -202,7 +210,7 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
 
       if (!mounted) return;
       HapticFeedback.selectionClick();
-      _showExportSuccessDialog(file.path, pngBytes, isSyncedToDb: controller.diagram?.id != null);
+      _showExportSuccessDialog(filePath, pngBytes, isSyncedToDb: controller.diagram?.id != null);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
