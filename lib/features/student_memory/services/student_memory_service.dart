@@ -40,41 +40,30 @@ class StudentMemoryService {
     // Also prime smart context in background
     fetchSmartContext(targetExam: cachedProfile?.targetExam).catchError((_) => null);
 
-    // If we have cached profile and don't need forced remote sync, try background refresh or return cached
-    if (cachedProfile != null && !forceRemote) {
-      // Fire-and-forget sync with backend in background
-      _syncFromBackend().then((remoteProfile) {
-        if (remoteProfile != null) {
-          if (cachedProfile!.updatedAt.isAfter(remoteProfile.updatedAt)) {
-            // Local is newer: push local changes up to remote
-            _syncToRemote(cachedProfile);
-          } else {
-            // Remote is newer: accept remote changes
-            _cachedProfile = remoteProfile;
-            _saveToLocal(remoteProfile);
-            fetchSmartContext(targetExam: remoteProfile.targetExam, forceRemote: true).catchError((_) => null);
-          }
-        }
-      }).catchError((_) {});
-      return cachedProfile;
-    }
-
-    // Attempt remote fetch
-    final remote = await _syncFromBackend();
-    if (remote != null) {
-      if (cachedProfile != null && cachedProfile.updatedAt.isAfter(remote.updatedAt)) {
-        await _syncToRemote(cachedProfile);
-        _cachedProfile = cachedProfile;
-        return cachedProfile;
+    if (forceRemote || cachedProfile == null) {
+      final remote = await _syncFromBackend();
+      if (remote != null) {
+        _cachedProfile = remote;
+        await _saveToLocal(remote);
+        fetchSmartContext(targetExam: remote.targetExam, forceRemote: true).catchError((_) => null);
+        return remote;
       }
-      _cachedProfile = remote;
-      await _saveToLocal(remote);
-      fetchSmartContext(targetExam: remote.targetExam, forceRemote: true).catchError((_) => null);
-      return remote;
+      _cachedProfile = cachedProfile ?? StudentMemoryProfile.defaultProfile();
+      return _cachedProfile!;
     }
 
-    _cachedProfile = cachedProfile ?? StudentMemoryProfile.defaultProfile();
-    return _cachedProfile!;
+    // Fire-and-forget sync with backend in background
+    _syncFromBackend().then((remoteProfile) {
+      if (remoteProfile != null) {
+        if (_cachedProfile == null || remoteProfile.updatedAt.isAfter(_cachedProfile!.updatedAt)) {
+          _cachedProfile = remoteProfile;
+          _saveToLocal(remoteProfile);
+          fetchSmartContext(targetExam: remoteProfile.targetExam, forceRemote: true).catchError((_) => null);
+        }
+      }
+    }).catchError((_) {});
+
+    return cachedProfile;
   }
 
   /// Fetch dynamic smart context (prompts, syllabus suggestions, hints) from PostgreSQL / Go Cognitive Engine
@@ -157,8 +146,7 @@ class StudentMemoryService {
   Future<void> _saveToLocal(StudentMemoryProfile profile) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final updated = profile.copyWith(updatedAt: DateTime.now());
-      await prefs.setString(_prefKey, jsonEncode(updated.toJson()));
+      await prefs.setString(_prefKey, jsonEncode(profile.toJson()));
     } catch (_) {}
   }
 
@@ -199,13 +187,15 @@ class StudentMemoryService {
     required String targetExam,
     required String academicLevel,
   }) async {
-    final current = await getProfile();
+    final current = _cachedProfile ?? await getProfile();
     final updated = current.copyWith(
       targetExam: targetExam.trim(),
       academicLevel: academicLevel.trim(),
       updatedAt: DateTime.now(),
     );
-    await saveProfile(updated);
+    _cachedProfile = updated;
+    await _saveToLocal(updated);
+    await _syncToRemote(updated);
     fetchSmartContext(targetExam: updated.targetExam, forceRemote: true).catchError((_) => null);
     return updated;
   }
