@@ -33,6 +33,7 @@ class AiTutorRepository {
     String? mode,
     String? targetExam,
     String? academicLevel,
+    String? customInstructions,
     List<String>? weakTopics,
   }) async {
     final effectiveSessionId = sessionId ?? (scopeType == 'chat' || scopeType == 'session' ? scopeId : null);
@@ -61,6 +62,7 @@ class AiTutorRepository {
       'mode': mode ?? 'academic',
       if (targetExam != null && targetExam.isNotEmpty) 'target_exam': targetExam,
       if (academicLevel != null && academicLevel.isNotEmpty) 'academic_level': academicLevel,
+      if (customInstructions != null && customInstructions.isNotEmpty) 'custom_instructions': customInstructions,
       if (weakTopics != null && weakTopics.isNotEmpty) 'weak_topics': weakTopics,
       if (customKey.isNotEmpty) 'api_key': customKey,
       if (selectedLang.isNotEmpty) 'ai_language': selectedLang,

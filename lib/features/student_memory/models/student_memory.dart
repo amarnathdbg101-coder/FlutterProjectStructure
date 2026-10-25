@@ -4,6 +4,7 @@ class StudentMemoryProfile {
   final String userId;
   final String targetExam;
   final String academicLevel;
+  final String customInstructions;
   final List<String> strongTopics;
   final List<String> weakTopics;
   final List<String> examTrapsEncountered;
@@ -31,6 +32,7 @@ class StudentMemoryProfile {
     required this.userId,
     this.targetExam = 'Academic Studies & General Exams',
     this.academicLevel = 'School / College (Adaptive)',
+    this.customInstructions = '',
     this.strongTopics = const [],
     this.weakTopics = const [],
     this.examTrapsEncountered = const [],
@@ -59,6 +61,7 @@ class StudentMemoryProfile {
       userId: userId,
       targetExam: 'General Academic Preparation',
       academicLevel: 'School / College (Adaptive)',
+      customInstructions: '',
       strongTopics: const [],
       weakTopics: const [],
       examTrapsEncountered: const [],
@@ -180,6 +183,7 @@ class StudentMemoryProfile {
       userId: (json['user_id'] ?? json['userId'] ?? 'local_scholar').toString(),
       targetExam: targetExamStr,
       academicLevel: academicLevelStr,
+      customInstructions: (json['custom_instructions'] ?? json['customInstructions'] ?? '').toString(),
       strongTopics: filteredStrong,
       weakTopics: filteredWeak,
       examTrapsEncountered: filteredTraps,
@@ -216,6 +220,7 @@ class StudentMemoryProfile {
       'user_id': userId,
       'target_exam': targetExam,
       'academic_level': academicLevel,
+      'custom_instructions': customInstructions,
       'strong_topics': strongTopics,
       'weak_topics': weakTopics,
       'exam_traps': examTrapsEncountered,
@@ -263,6 +268,9 @@ class StudentMemoryProfile {
     sb.writeln('[STUDENT COGNITIVE PROFILE & ACADEMIC MEMORY]');
     sb.writeln('• Target Exam / Goal: $targetExam');
     sb.writeln('• Academic Grade / Level: $academicLevel');
+    if (customInstructions.isNotEmpty) {
+      sb.writeln('• Personal Teaching Style Directive: $customInstructions');
+    }
     if (strongTopics.isNotEmpty) {
       sb.writeln('• Strengths & Mastered Concepts: ${strongTopics.join(", ")}');
     }
@@ -284,6 +292,7 @@ class StudentMemoryProfile {
     String? userId,
     String? targetExam,
     String? academicLevel,
+    String? customInstructions,
     List<String>? strongTopics,
     List<String>? weakTopics,
     List<String>? examTrapsEncountered,
@@ -308,6 +317,7 @@ class StudentMemoryProfile {
       userId: userId ?? this.userId,
       targetExam: targetExam ?? this.targetExam,
       academicLevel: academicLevel ?? this.academicLevel,
+      customInstructions: customInstructions ?? this.customInstructions,
       strongTopics: strongTopics ?? this.strongTopics,
       weakTopics: weakTopics ?? this.weakTopics,
       examTrapsEncountered: examTrapsEncountered ?? this.examTrapsEncountered,

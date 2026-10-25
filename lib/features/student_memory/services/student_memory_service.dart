@@ -158,6 +158,7 @@ class StudentMemoryService {
         data: {
           'target_exam': profile.targetExam,
           'academic_level': profile.academicLevel,
+          'custom_instructions': profile.customInstructions,
           'weak_topics': profile.weakTopics,
           'strong_topics': profile.strongTopics,
           'exam_traps_to_watch': profile.examTrapsEncountered,
@@ -182,21 +183,36 @@ class StudentMemoryService {
     await _syncToRemote(updated);
   }
 
-  /// Update target exam and academic level
+  /// Update target exam and academic level, and optional custom instructions
   Future<StudentMemoryProfile> updateExamTarget({
     required String targetExam,
     required String academicLevel,
+    String? customInstructions,
   }) async {
     final current = _cachedProfile ?? await getProfile();
     final updated = current.copyWith(
       targetExam: targetExam.trim(),
       academicLevel: academicLevel.trim(),
+      customInstructions: customInstructions != null ? customInstructions.trim() : current.customInstructions,
       updatedAt: DateTime.now(),
     );
     _cachedProfile = updated;
     await _saveToLocal(updated);
     await _syncToRemote(updated);
     fetchSmartContext(targetExam: updated.targetExam, forceRemote: true).catchError((_) => null);
+    return updated;
+  }
+
+  /// Update custom instructions / teaching style specifically
+  Future<StudentMemoryProfile> updateCustomInstructions(String instructions) async {
+    final current = _cachedProfile ?? await getProfile();
+    final updated = current.copyWith(
+      customInstructions: instructions.trim(),
+      updatedAt: DateTime.now(),
+    );
+    _cachedProfile = updated;
+    await _saveToLocal(updated);
+    await _syncToRemote(updated);
     return updated;
   }
 

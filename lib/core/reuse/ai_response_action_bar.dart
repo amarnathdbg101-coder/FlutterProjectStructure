@@ -61,40 +61,83 @@ class AiResponseActionBar extends StatelessWidget {
                     ? const Color(0xFF6366F1)
                     : (isDark ? const Color(0xFF34D399) : const Color(0xFF059669));
 
-                return InkWell(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    if (isSpeakingThis) {
-                      tts.pause();
-                    } else if (isPausedThis) {
-                      tts.resume();
-                    } else {
-                      tts.speak(solutionContent, precomputedSpokenTranscript: spokenTranscript);
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          icon,
-                          size: 14,
-                          color: activeColor,
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        if (isSpeakingThis) {
+                          tts.pause();
+                        } else if (isPausedThis) {
+                          tts.resume();
+                        } else {
+                          tts.speak(solutionContent, precomputedSpokenTranscript: spokenTranscript);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 14,
+                              color: activeColor,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: activeColor,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: activeColor,
+                      ),
+                    ),
+                    if (isSpeakingThis || isPausedThis) ...[
+                      const SizedBox(width: 2),
+                      InkWell(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          tts.cycleSpeechRate();
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${tts.speechRate}x',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF6366F1),
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          tts.stop();
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Icon(
+                          Icons.stop_circle_outlined,
+                          size: 16,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ],
                 );
               },
             ),

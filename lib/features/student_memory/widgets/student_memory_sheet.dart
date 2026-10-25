@@ -290,6 +290,7 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
     if (profile == null) return;
 
     final textController = TextEditingController(text: profile.targetExam);
+    final instructionsController = TextEditingController(text: profile.customInstructions);
     String selectedLevel = profile.academicLevel;
     bool isSaving = false;
 
@@ -516,6 +517,58 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
                             );
                           },
                         ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'AI TEACHING STYLE & DIRECTIVES',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                            if (instructionsController.text.isNotEmpty)
+                              InkWell(
+                                onTap: () => setDlgState(() => instructionsController.clear()),
+                                child: const Text(
+                                  'Clear',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: instructionsController,
+                          maxLines: 3,
+                          decoration: InputDecoration(
+                            hintText: 'e.g. Explain in detailed paragraphs with real-world analogies, no bullet points...',
+                            hintStyle: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8)),
+                            filled: true,
+                            fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _presetStyleChip('Paragraphs & Real Analogies', 'Explain strictly in detailed paragraphs with real-world analogies, no bullet points', instructionsController, setDlgState, isDark),
+                            _presetStyleChip('Point-by-Point with Code', 'Explain point-by-point with clean code examples and KaTeX derivations', instructionsController, setDlgState, isDark),
+                            _presetStyleChip('Semester Exam Format', 'Format according to University Semester Exams with diagrams, definitions, and high-yield points', instructionsController, setDlgState, isDark),
+                            _presetStyleChip('Socratic Mode', 'Guide me Socratically with probing questions rather than directly giving the answer', instructionsController, setDlgState, isDark),
+                          ],
+                        ),
                         const SizedBox(height: 20),
                         SizedBox(
                           width: double.infinity,
@@ -535,13 +588,14 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
                                       final updated = await _memoryService.updateExamTarget(
                                         targetExam: newExam,
                                         academicLevel: selectedLevel,
+                                        customInstructions: instructionsController.text.trim(),
                                       );
                                       if (ctx.mounted) Navigator.pop(ctx);
                                       if (mounted) {
                                         setState(() => _profile = updated);
                                         CustomSnackbar.showSuccess(
                                           context,
-                                          'Exam Target updated to "$newExam"',
+                                          'Target Exam & Teaching Style updated!',
                                         );
                                       }
                                     }
@@ -569,6 +623,235 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showEditCustomInstructionsDialog() {
+    final profile = _profile;
+    if (profile == null) return;
+
+    final instructionsCtrl = TextEditingController(text: profile.customInstructions);
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+          return Container(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+            padding: EdgeInsets.only(bottom: bottomInset),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 8),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.tune_rounded, color: Color(0xFF8B5CF6), size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'AI Teaching Style & Directives',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView(
+                      padding: const EdgeInsets.all(20),
+                      shrinkWrap: true,
+                      children: [
+                        Text(
+                          'Configure how AI Tutor formats and explains concepts for you. This overrides default point-by-point or paragraph styles.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'QUICK TEACHING PRESETS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                            if (instructionsCtrl.text.isNotEmpty)
+                              InkWell(
+                                onTap: () => setDlgState(() => instructionsCtrl.clear()),
+                                child: const Text(
+                                  'Clear',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _presetStyleChip('Paragraphs & Real Analogies', 'Explain strictly in detailed paragraphs with real-world analogies, no bullet points', instructionsCtrl, setDlgState, isDark),
+                            _presetStyleChip('Point-by-Point with Code', 'Explain point-by-point with clean code examples and KaTeX derivations', instructionsCtrl, setDlgState, isDark),
+                            _presetStyleChip('Semester Exam Format', 'Format according to University Semester Exams with diagrams, definitions, and high-yield points', instructionsCtrl, setDlgState, isDark),
+                            _presetStyleChip('Socratic Mode', 'Guide me Socratically with probing questions rather than directly giving the answer', instructionsCtrl, setDlgState, isDark),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'YOUR CUSTOM INSTRUCTION',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: instructionsCtrl,
+                          maxLines: 4,
+                          decoration: InputDecoration(
+                            hintText: 'e.g. Always provide real-life analogies, use standard KaTeX math notation, explain in clean Hinglish...',
+                            hintStyle: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8)),
+                            filled: true,
+                            fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF8B5CF6),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    setDlgState(() => isSaving = true);
+                                    final updated = await _memoryService.updateCustomInstructions(
+                                      instructionsCtrl.text.trim(),
+                                    );
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    if (mounted) {
+                                      setState(() => _profile = updated);
+                                      CustomSnackbar.showSuccess(
+                                        context,
+                                        instructionsCtrl.text.trim().isEmpty
+                                            ? 'Teaching Style reset to default'
+                                            : 'Custom Teaching Style applied!',
+                                      );
+                                    }
+                                  },
+                            child: isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Save & Apply Style',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _presetStyleChip(String label, String value, TextEditingController ctrl, StateSetter setDlgState, bool isDark) {
+    final isSelected = ctrl.text.trim().toLowerCase() == value.trim().toLowerCase();
+    return InkWell(
+      onTap: () {
+        setDlgState(() {
+          ctrl.text = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF8B5CF6)
+              : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF8B5CF6)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? Colors.white70 : const Color(0xFF334155)),
+          ),
+        ),
       ),
     );
   }
@@ -898,6 +1181,10 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
           ),
           const SizedBox(height: 16),
 
+          // 2. Custom AI Instructions & Teaching Style Card
+          _buildTeachingStyleCard(isDark),
+          const SizedBox(height: 16),
+
           // AI Calibration Info Box
           Container(
             padding: const EdgeInsets.all(16),
@@ -938,6 +1225,135 @@ class _StudentMemorySheetState extends State<StudentMemorySheet> with SingleTick
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeachingStyleCard(bool isDark) {
+    final profile = _profile!;
+    final customInst = profile.customInstructions.trim();
+    final hasCustom = customInst.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasCustom
+              ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
+              : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          width: hasCustom ? 1.5 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.tune_rounded, color: Color(0xFF8B5CF6), size: 18),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'AI TEACHING STYLE & DIRECTIVES',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: Color(0xFF8B5CF6),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              InkWell(
+                onTap: _showEditCustomInstructionsDialog,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(hasCustom ? Icons.edit_outlined : Icons.add_rounded, size: 13, color: const Color(0xFF8B5CF6)),
+                      const SizedBox(width: 4),
+                      Text(
+                        hasCustom ? 'Edit' : 'Customize',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (hasCustom) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: const Border(
+                  left: BorderSide(color: Color(0xFF8B5CF6), width: 3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.format_quote_rounded, size: 16, color: Color(0xFF8B5CF6)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      customInst,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white70 : const Color(0xFF334155),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Text(
+              'Default Adaptive Mode',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'AI automatically determines whether to provide diagrams, paragraphs, code, or point-by-point logic based on question nature.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ],
         ],
       ),
     );

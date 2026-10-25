@@ -743,6 +743,7 @@ class AiTutorController extends ChangeNotifier {
     final memProfile = StudentMemoryService.getCachedProfileSync();
     final targetExam = memProfile?.targetExam;
     final academicLevel = memProfile?.academicLevel;
+    final customInstructions = memProfile?.customInstructions;
     final weakTopics = memProfile?.weakTopics;
 
     try {
@@ -764,6 +765,7 @@ class AiTutorController extends ChangeNotifier {
         mode: _tutorMode.id,
         targetExam: targetExam,
         academicLevel: academicLevel,
+        customInstructions: customInstructions,
         weakTopics: weakTopics,
         onChunk: (chunk) {
           _handleStreamChunk(chunk, effectiveSessionId);

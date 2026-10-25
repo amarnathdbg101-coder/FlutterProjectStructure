@@ -117,6 +117,10 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
                     _buildExamTargetCard(controller, isDark),
                     const SizedBox(height: 16),
 
+                    // 3.1. AI Teaching Style & Directives Card
+                    _buildTeachingStyleCard(controller, isDark),
+                    const SizedBox(height: 16),
+
                     // 3.5. Cognitive Mastery Heatmap
                     CognitiveMasteryHeatmapCard(profile: controller.profile),
                     const SizedBox(height: 16),
@@ -853,6 +857,228 @@ class _CognitiveHubScreenState extends State<CognitiveHubScreen> with SingleTick
           ),
         ),
       ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3.1. AI Teaching Style & Directives Card
+  // ---------------------------------------------------------------------------
+  Widget _buildTeachingStyleCard(CognitiveProfileController controller, bool isDark) {
+    final customInst = controller.profile.customInstructions.trim();
+    final hasCustom = customInst.isNotEmpty;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: hasCustom
+              ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
+              : (isDark ? Colors.grey[800]! : Colors.grey[300]!),
+          width: hasCustom ? 1.5 : 1.0,
+        ),
+      ),
+      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.tune_rounded, color: Color(0xFF8B5CF6), size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasCustom ? 'Personalized Teaching Style' : 'AI Teaching Style (Default Adaptive)',
+                        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasCustom ? 'Custom student directives active' : 'Adapts automatically to question nature',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(hasCustom ? Icons.edit_outlined : Icons.add_rounded, size: 20, color: const Color(0xFF8B5CF6)),
+                  tooltip: 'Configure Teaching Style',
+                  onPressed: () => _showEditTeachingStyleDialog(context, controller),
+                ),
+              ],
+            ),
+            if (hasCustom) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: const Border(
+                    left: BorderSide(color: Color(0xFF8B5CF6), width: 3),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.format_quote_rounded, size: 16, color: Color(0xFF8B5CF6)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        customInst,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.white70 : const Color(0xFF334155),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditTeachingStyleDialog(BuildContext context, CognitiveProfileController controller) {
+    final instructionsCtrl = TextEditingController(text: controller.profile.customInstructions);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.tune_rounded, color: Color(0xFF8B5CF6), size: 22),
+                SizedBox(width: 8),
+                Text('AI Teaching Style & Directives', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Configure exactly how AI Tutor should explain and format answers for you:',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('PRESETS', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF8B5CF6))),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _hubPresetChip('Paragraphs & Real Analogies', 'Explain strictly in detailed paragraphs with real-world analogies, no bullet points', instructionsCtrl, setDialogState, isDark),
+                      _hubPresetChip('Point-by-Point with Code', 'Explain point-by-point with clean code examples and KaTeX derivations', instructionsCtrl, setDialogState, isDark),
+                      _hubPresetChip('Semester Exam Format', 'Format according to University Semester Exams with diagrams, definitions, and high-yield points', instructionsCtrl, setDialogState, isDark),
+                      _hubPresetChip('Socratic Mode', 'Guide me Socratically with probing questions rather than directly giving the answer', instructionsCtrl, setDialogState, isDark),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: instructionsCtrl,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Custom Instructions',
+                      hintText: 'e.g. Always use paragraphs, provide real-world analogies...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              if (instructionsCtrl.text.isNotEmpty)
+                TextButton(
+                  onPressed: () {
+                    instructionsCtrl.clear();
+                    controller.updateCustomInstructions('');
+                    Navigator.pop(ctx);
+                    CustomSnackbar.showInfo(context, 'Teaching style reset to default');
+                  },
+                  child: const Text('Reset Default', style: TextStyle(color: Colors.redAccent)),
+                ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6)),
+                onPressed: () {
+                  controller.updateCustomInstructions(instructionsCtrl.text.trim());
+                  Navigator.pop(ctx);
+                  CustomSnackbar.showSuccess(
+                    context,
+                    instructionsCtrl.text.trim().isEmpty
+                        ? 'Teaching style reset to default'
+                        : 'Teaching style updated!',
+                  );
+                },
+                child: const Text('Save Style'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _hubPresetChip(String label, String value, TextEditingController ctrl, StateSetter setDialogState, bool isDark) {
+    final isSelected = ctrl.text.trim().toLowerCase() == value.trim().toLowerCase();
+    return InkWell(
+      onTap: () {
+        setDialogState(() {
+          ctrl.text = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF8B5CF6)
+              : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF8B5CF6)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? Colors.white70 : const Color(0xFF334155)),
+          ),
+        ),
+      ),
     );
   }
 

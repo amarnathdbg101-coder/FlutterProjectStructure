@@ -27,6 +27,7 @@ class CognitiveProfileController extends ChangeNotifier {
   Map<String, int> get topicMastery => _profile.topicMastery;
   List<String> get recommendedActions => _profile.recommendedActions;
   String get aiSummary => _profile.aiSummary;
+  String get customInstructions => _profile.customInstructions;
 
   Future<void> loadProfile({bool forceRemote = false}) async {
     _isLoading = true;
@@ -63,6 +64,7 @@ class CognitiveProfileController extends ChangeNotifier {
   Future<void> updateGoals({
     required String targetExam,
     required String academicLevel,
+    String? customInstructions,
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -71,9 +73,24 @@ class CognitiveProfileController extends ChangeNotifier {
       _profile = await _service.updateExamTarget(
         targetExam: targetExam,
         academicLevel: academicLevel,
+        customInstructions: customInstructions,
       );
     } catch (e) {
       _errorMessage = 'Failed to update exam goals: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateCustomInstructions(String instructions) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _profile = await _service.updateCustomInstructions(instructions);
+    } catch (e) {
+      _errorMessage = 'Failed to update teaching style: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
