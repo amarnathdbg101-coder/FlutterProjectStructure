@@ -16,6 +16,7 @@ import '../../auth/controllers/auth_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../models/shop_model.dart';
 import '../../reservations/controllers/reservation_controller.dart';
+import '../widgets/dashboard_price_checker_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -117,6 +118,10 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                   ),
                   const SizedBox(height: 18),
                 ],
+
+                // 2.5 Quick Counter Tool: Instant Barcode & Search Price Checker
+                const DashboardPriceCheckerCard(),
+                const SizedBox(height: 18),
 
                 // 3. Business Summary Metrics (KPI Cards)
                 AppSectionHeader(title: context.tr('dash_section_summary')),
