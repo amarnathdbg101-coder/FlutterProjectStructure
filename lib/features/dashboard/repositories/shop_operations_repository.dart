@@ -84,8 +84,14 @@ class ShopOperationsRepository {
           'expires_in_days': expiresInDays,
         },
       );
-      final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
-      return ApiResponse(success: true, data: data as Map<String, dynamic>);
+      Map<String, dynamic> data = {};
+      if (res.data is Map) {
+        final raw = res.data['data'] ?? res.data;
+        if (raw is Map) {
+          data = Map<String, dynamic>.from(raw);
+        }
+      }
+      return ApiResponse(success: true, data: data);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
@@ -94,8 +100,14 @@ class ShopOperationsRepository {
   Future<ApiResponse<Map<String, dynamic>>> updateOffer(String id, Map<String, dynamic> data) async {
     try {
       final res = await _dio.put(ApiConstants.shopOfferById(id), data: data);
-      final resData = res.data is Map ? (res.data['data'] ?? res.data) : {};
-      return ApiResponse(success: true, data: resData as Map<String, dynamic>);
+      Map<String, dynamic> resData = {};
+      if (res.data is Map) {
+        final raw = res.data['data'] ?? res.data;
+        if (raw is Map) {
+          resData = Map<String, dynamic>.from(raw);
+        }
+      }
+      return ApiResponse(success: true, data: resData);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
@@ -104,8 +116,14 @@ class ShopOperationsRepository {
   Future<ApiResponse<Map<String, dynamic>>> toggleOffer(String id) async {
     try {
       final res = await _dio.patch(ApiConstants.shopOfferToggle(id));
-      final resData = res.data is Map ? (res.data['data'] ?? res.data) : {};
-      return ApiResponse(success: true, data: resData as Map<String, dynamic>);
+      Map<String, dynamic> resData = {};
+      if (res.data is Map) {
+        final raw = res.data['data'] ?? res.data;
+        if (raw is Map) {
+          resData = Map<String, dynamic>.from(raw);
+        }
+      }
+      return ApiResponse(success: true, data: resData);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }

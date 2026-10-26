@@ -63,12 +63,21 @@ class OfferController extends BaseController {
       final res = ApiResponse.fromJson(response.data, (d) => d);
       setLoading(false);
 
-      if (res.success && res.data != null) {
-        final listData = res.data is List
-            ? res.data as List
-            : (res.data['offers'] ?? res.data['data'] ?? []);
-        _offers = (listData as List)
-            .map((e) => OfferModel.fromJson(e as Map<String, dynamic>))
+      if (res.success) {
+        List rawList = [];
+        if (res.data is List) {
+          rawList = res.data as List;
+        } else if (res.data is Map) {
+          final m = res.data as Map;
+          if (m['offers'] is List) {
+            rawList = m['offers'];
+          } else if (m['data'] is List) {
+            rawList = m['data'];
+          }
+        }
+        _offers = rawList
+            .whereType<Map>()
+            .map((e) => OfferModel.fromJson(Map<String, dynamic>.from(e)))
             .toList();
         await LocalCacheService.saveOffers(_offers);
         notifyListeners();
@@ -136,13 +145,15 @@ class OfferController extends BaseController {
       expiresInDays: expiresInDays,
     );
 
-    if (response.success && response.data != null) {
+    if (response.success && response.data != null && response.data!.isNotEmpty) {
       final idx = _offers.indexWhere((o) => o.id == tempId);
       final created = OfferModel.fromJson(response.data!);
-      if (idx >= 0) {
-        _offers[idx] = created;
-      } else {
-        _offers.insert(0, created);
+      if (created.id.isNotEmpty) {
+        if (idx >= 0) {
+          _offers[idx] = created;
+        } else {
+          _offers.insert(0, created);
+        }
       }
       await LocalCacheService.saveOffers(_offers);
       notifyListeners();

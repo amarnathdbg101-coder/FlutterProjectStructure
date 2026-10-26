@@ -941,6 +941,17 @@ class _OffersScreenState extends State<OffersScreen> {
                                     backgroundColor: AppColors.success,
                                   ),
                                 );
+                              } else {
+                                final err = controller.errorMessage;
+                                final errMsg = (err != null && err.isNotEmpty)
+                                    ? err
+                                    : 'Failed to save offer. Please check your network and try again.';
+                                ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                                  SnackBar(
+                                    content: Text(errMsg),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
                               }
                             }
                           },
