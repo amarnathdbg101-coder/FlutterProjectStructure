@@ -967,6 +967,23 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           final hasProfit = livePrice > liveCost && liveCost > 0;
           final hasDiscount = liveMrp > livePrice;
 
+          final cleanName = nameCtrl.text.trim();
+          final cleanBrand = brandCtrl.text.trim();
+          final cleanWeight = weightCtrl.text.trim();
+
+          String suggestedTitle = '';
+          if (cleanBrand.isNotEmpty && !cleanName.toLowerCase().startsWith(cleanBrand.toLowerCase())) {
+            suggestedTitle = '$cleanBrand $cleanName';
+          } else {
+            suggestedTitle = cleanName;
+          }
+          if (cleanWeight.isNotEmpty && !suggestedTitle.toLowerCase().contains(cleanWeight.toLowerCase())) {
+            suggestedTitle = '$suggestedTitle $cleanWeight$unit';
+          }
+          final showTitleHelper = cleanName.isNotEmpty &&
+              suggestedTitle.isNotEmpty &&
+              suggestedTitle.toLowerCase() != cleanName.toLowerCase();
+
           String? lastAutofilledBarcode;
 
           Future<void> applyMasterCatalogAutofill(String rawBarcode, {bool forceOverwrite = false}) async {
@@ -1482,86 +1499,143 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     const SizedBox(height: 16),
 
                     // SECTION 2: BASIC PRODUCT INFORMATION
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: TextField(
+                            controller: brandCtrl,
+                            decoration: InputDecoration(
+                              labelText: sheetCtx.isHindi ? 'ब्रांड (Brand)' : 'Brand / Company',
+                              hintText: 'e.g. Fortune, Amul, Tata',
+                            ),
+                            onChanged: (_) => setModalState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 7,
+                          child: DropdownButtonFormField<String>(
+                            key: ValueKey('inv_add_category_dropdown_${categoryCtrl.text}'),
+                            isExpanded: true,
+                            initialValue: categoriesList.contains(categoryCtrl.text)
+                                ? categoryCtrl.text
+                                : (categoriesList.contains('General Store') ? 'General Store' : categoriesList.first),
+                            decoration: InputDecoration(
+                              labelText: '${sheetCtx.tr('inv_field_category')} *',
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 20),
+                                tooltip: 'Nayi Custom Category Banayein',
+                                onPressed: () async {
+                                  final newCat = await AddCategoryDialog.show(sheetCtx);
+                                  if (newCat != null) {
+                                    setModalState(() {
+                                      if (!categoriesList.contains(newCat.name)) {
+                                        categoriesList.insert(0, newCat.name);
+                                      }
+                                      categoryCtrl.text = newCat.name;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            items: [
+                              ...categoriesList.map((c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c, overflow: TextOverflow.ellipsis),
+                                  )),
+                              DropdownMenuItem(
+                                value: '__ADD_NEW_CATEGORY__',
+                                child: Row(
+                                  children: const [
+                                    Icon(Icons.add_circle_outline, color: AppColors.primary, size: 16),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      '+ New Category...',
+                                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onChanged: (val) async {
+                              if (val == '__ADD_NEW_CATEGORY__') {
+                                final newCat = await AddCategoryDialog.show(sheetCtx);
+                                if (newCat != null) {
+                                  setModalState(() {
+                                    if (!categoriesList.contains(newCat.name)) {
+                                      categoriesList.insert(0, newCat.name);
+                                    }
+                                    categoryCtrl.text = newCat.name;
+                                  });
+                                }
+                              } else if (val != null) {
+                                setModalState(() {
+                                  categoryCtrl.text = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
                     TextField(
                       controller: nameCtrl,
                       decoration: InputDecoration(
                         labelText: '${sheetCtx.tr('inv_field_name')} *',
-                        hintText: sheetCtx.tr('inv_field_name_hint'),
+                        hintText: sheetCtx.isHindi
+                            ? 'उदा. Fortune Refined Sunflower Oil 1L'
+                            : 'e.g. Fortune Refined Sunflower Oil 1L',
                       ),
                       onChanged: (_) => setModalState(() {}),
                     ),
-                    const SizedBox(height: 12),
-
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('inv_add_category_dropdown_${categoryCtrl.text}'),
-                      isExpanded: true,
-                      initialValue: categoriesList.contains(categoryCtrl.text)
-                          ? categoryCtrl.text
-                          : (categoriesList.contains('General Store') ? 'General Store' : categoriesList.first),
-                      decoration: InputDecoration(
-                        labelText: '${sheetCtx.tr('inv_field_category')} *',
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 22),
-                          tooltip: 'Nayi Custom Category Banayein',
-                          onPressed: () async {
-                            final newCat = await AddCategoryDialog.show(sheetCtx);
-                            if (newCat != null) {
-                              setModalState(() {
-                                if (!categoriesList.contains(newCat.name)) {
-                                  categoriesList.insert(0, newCat.name);
-                                }
-                                categoryCtrl.text = newCat.name;
-                              });
-                            }
+                    if (showTitleHelper) ...[
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: InkWell(
+                          onTap: () {
+                            nameCtrl.text = suggestedTitle;
+                            setModalState(() {});
                           },
-                        ),
-                      ),
-                      items: [
-                        ...categoriesList.map((c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(c, overflow: TextOverflow.ellipsis),
-                            )),
-                        DropdownMenuItem(
-                          value: '__ADD_NEW_CATEGORY__',
-                          child: Row(
-                            children: const [
-                              Icon(Icons.add_circle_outline, color: AppColors.primary, size: 18),
-                              SizedBox(width: 8),
-                              Text(
-                                '+ Nayi Category Banayein...',
-                                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                              ),
-                            ],
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.auto_awesome_rounded, size: 13, color: AppColors.primary),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sheetCtx.isHindi ? 'सुझाया गया नाम: ' : 'Suggested Title: ',
+                                  style: TextStyle(fontSize: 11, color: sheetCtx.colorTextMuted),
+                                ),
+                                Flexible(
+                                  child: Text(
+                                    suggestedTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sheetCtx.isHindi ? 'लागू करें' : 'Apply',
+                                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.primary, decoration: TextDecoration.underline),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ],
-                      onChanged: (val) async {
-                        if (val == '__ADD_NEW_CATEGORY__') {
-                          final newCat = await AddCategoryDialog.show(sheetCtx);
-                          if (newCat != null) {
-                            setModalState(() {
-                              if (!categoriesList.contains(newCat.name)) {
-                                categoriesList.insert(0, newCat.name);
-                              }
-                              categoryCtrl.text = newCat.name;
-                            });
-                          }
-                        } else if (val != null) {
-                          setModalState(() {
-                            categoryCtrl.text = val;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    TextField(
-                      controller: brandCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Brand / Company',
-                        hintText: 'e.g. Fortune, Amul, Tata',
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 16),
 
                     // SECTION 3: PRICING & MARGINS WITH REAL-TIME INTEGRITY FEEDBACK
@@ -2162,6 +2236,124 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         value: isFeatured,
                         activeThumbColor: AppColors.primary,
                         onChanged: (val) => setModalState(() => isFeatured = val),
+                      ),
+                    ),
+                    // 🌟 LIVE CUSTOMER APP PREVIEW CARD
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: sheetCtx.colorSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: sheetCtx.colorBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.visibility_outlined, size: 15, color: AppColors.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    sheetCtx.isHindi ? 'ग्राहक को कैसा दिखेगा (Live Preview)' : 'Customer App Preview',
+                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: sheetCtx.colorTextMuted),
+                                  ),
+                                ],
+                              ),
+                              if (hasDiscount)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.successLight,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '${(((liveMrp - livePrice) / liveMrp) * 100).toStringAsFixed(0)}% OFF',
+                                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.success),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: sheetCtx.colorSurface,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: sheetCtx.colorBorder),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: AppProductImage(
+                                  imageUrl: productImages.isNotEmpty ? productImages.first : '',
+                                  width: 48,
+                                  height: 48,
+                                  fit: BoxFit.cover,
+                                  fallbackIcon: Icons.inventory_2_outlined,
+                                  fallbackIconSize: 22,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (brandCtrl.text.trim().isNotEmpty)
+                                      Text(
+                                        brandCtrl.text.trim().toUpperCase(),
+                                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 0.5),
+                                      ),
+                                    Text(
+                                      nameCtrl.text.trim().isNotEmpty
+                                          ? nameCtrl.text.trim()
+                                          : (sheetCtx.isHindi ? 'उत्पाद का नाम यहाँ दिखेगा' : 'Product name will appear here'),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: nameCtrl.text.trim().isNotEmpty ? sheetCtx.colorTextPrimary : sheetCtx.colorTextMuted,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          livePrice > 0 ? '₹${livePrice.toStringAsFixed(0)}' : '₹--',
+                                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: sheetCtx.colorTextPrimary),
+                                        ),
+                                        if (liveMrp > livePrice) ...[
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '₹${liveMrp.toStringAsFixed(0)}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: sheetCtx.colorTextMuted,
+                                              decoration: TextDecoration.lineThrough,
+                                            ),
+                                          ),
+                                        ],
+                                        if (unit.isNotEmpty) ...[
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '/ $unit',
+                                            style: TextStyle(fontSize: 11, color: sheetCtx.colorTextSecondary),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 20),
