@@ -76,6 +76,7 @@ class OfferController extends BaseController {
       setLoading(false);
     }
 
+    // Only show fallback default suggestions if completely offline and cache is empty
     if (_offers.isEmpty) {
       _offers = [
         OfferModel(
@@ -83,17 +84,27 @@ class OfferController extends BaseController {
           title: 'Weekend Flat Discount on Grocery',
           discountText: 'Flat 20% OFF',
           description: 'Special weekend discount on all grocery items in-store. Walk in & claim.',
+          discountType: 'percentage',
+          discountValue: 20,
+          applicableDays: 'sunday,saturday',
+          bannerTag: '⚡ Weekend Dhamaka',
           expiresInDays: 7,
           expiresAt: DateTime.now().add(const Duration(days: 7)),
           isActive: true,
         ),
         OfferModel(
           id: 'off_2',
-          title: 'Buy 1 Get 1 Free Snack Deal',
-          discountText: 'Buy 1 Get 1',
-          description: 'Buy any selected packet snack and get another free today at counter.',
-          expiresInDays: 3,
-          expiresAt: DateTime.now().add(const Duration(days: 3)),
+          title: 'Storefront Welcome Offer',
+          discountText: 'Flat ₹50 OFF',
+          description: 'Get Flat ₹50 off on orders above ₹499.',
+          discountType: 'flat',
+          discountValue: 50,
+          minOrderAmount: 499,
+          applicableDays: 'all',
+          bannerTag: '🔥 Special Offer',
+          promoCode: 'WELCOME50',
+          expiresInDays: 30,
+          expiresAt: DateTime.now().add(const Duration(days: 30)),
           isActive: true,
         ),
       ];
@@ -104,7 +115,15 @@ class OfferController extends BaseController {
   Future<bool> createOffer({
     required String title,
     required String discountText,
-    required String description,
+    String description = '',
+    String discountType = 'percentage',
+    double discountValue = 0.0,
+    double minOrderAmount = 0.0,
+    double maxDiscount = 0.0,
+    String applicableDays = 'all',
+    String bannerTag = '🔥 Special Offer',
+    String promoCode = '',
+    int minPointsRequired = 0,
     int expiresInDays = 7,
   }) async {
     clearError();
@@ -115,6 +134,14 @@ class OfferController extends BaseController {
       title: title.trim(),
       discountText: discountText.trim(),
       description: description.trim(),
+      discountType: discountType.trim(),
+      discountValue: discountValue,
+      minOrderAmount: minOrderAmount,
+      maxDiscount: maxDiscount,
+      applicableDays: applicableDays.trim(),
+      bannerTag: bannerTag.trim(),
+      promoCode: promoCode.trim().toUpperCase(),
+      minPointsRequired: minPointsRequired,
       expiresInDays: expiresInDays,
       expiresAt: DateTime.now().add(Duration(days: expiresInDays)),
       isActive: true,
@@ -131,26 +158,105 @@ class OfferController extends BaseController {
       title: title,
       discountText: discountText,
       description: description,
+      discountType: discountType,
+      discountValue: discountValue,
+      minOrderAmount: minOrderAmount,
+      maxDiscount: maxDiscount,
+      applicableDays: applicableDays,
+      bannerTag: bannerTag,
+      promoCode: promoCode,
+      minPointsRequired: minPointsRequired,
       expiresInDays: expiresInDays,
     );
 
     if (response.success && response.data != null) {
       final idx = _offers.indexWhere((o) => o.id == tempId);
+      final created = OfferModel.fromJson(response.data!);
       if (idx >= 0) {
-        _offers[idx] = OfferModel.fromJson(response.data!);
+        _offers[idx] = created;
       } else {
-        _offers.insert(0, OfferModel.fromJson(response.data!));
+        _offers.insert(0, created);
       }
       await LocalCacheService.saveOffers(_offers);
       notifyListeners();
       AppEventBus().emit(AppCacheEventType.offerMutated);
       return true;
     } else {
-      // Keep optimistic item locally
       notifyListeners();
       AppEventBus().emit(AppCacheEventType.offerMutated);
       return true;
     }
+  }
+
+  Future<bool> updateOffer({
+    required String id,
+    required String title,
+    required String discountText,
+    String description = '',
+    String discountType = 'percentage',
+    double discountValue = 0.0,
+    double minOrderAmount = 0.0,
+    double maxDiscount = 0.0,
+    String applicableDays = 'all',
+    String bannerTag = '🔥 Special Offer',
+    String promoCode = '',
+    int minPointsRequired = 0,
+    int expiresInDays = 7,
+    bool isActive = true,
+  }) async {
+    clearError();
+
+    final idx = _offers.indexWhere((o) => o.id == id);
+    if (idx < 0) return false;
+
+    final existing = _offers[idx];
+    final updated = existing.copyWith(
+      title: title.trim(),
+      discountText: discountText.trim(),
+      description: description.trim(),
+      discountType: discountType.trim(),
+      discountValue: discountValue,
+      minOrderAmount: minOrderAmount,
+      maxDiscount: maxDiscount,
+      applicableDays: applicableDays.trim(),
+      bannerTag: bannerTag.trim(),
+      promoCode: promoCode.trim().toUpperCase(),
+      minPointsRequired: minPointsRequired,
+      expiresInDays: expiresInDays,
+      isActive: isActive,
+      updatedAt: DateTime.now(),
+    );
+
+    // 0ms Optimistic local update
+    _offers[idx] = updated;
+    await LocalCacheService.saveOffers(_offers);
+    notifyListeners();
+
+    final response = await _repo.updateOffer(id, {
+      'title': updated.title,
+      'discount_text': updated.discountText,
+      'description': updated.description,
+      'discount_type': updated.discountType,
+      'discount_value': updated.discountValue,
+      'min_order_amount': updated.minOrderAmount,
+      'max_discount': updated.maxDiscount,
+      'applicable_days': updated.applicableDays,
+      'banner_tag': updated.bannerTag,
+      'promo_code': updated.promoCode,
+      'min_points_required': updated.minPointsRequired,
+      'expires_in_days': updated.expiresInDays,
+      'is_active': updated.isActive,
+    });
+
+    if (response.success && response.data != null) {
+      _offers[idx] = OfferModel.fromJson(response.data!);
+      await LocalCacheService.saveOffers(_offers);
+      notifyListeners();
+      AppEventBus().emit(AppCacheEventType.offerMutated);
+      return true;
+    }
+
+    return true;
   }
 
   Future<bool> deleteOffer(dynamic id) async {
@@ -183,22 +289,19 @@ class OfferController extends BaseController {
     final index = _offers.indexWhere((o) => o.id == offer.id);
     if (index < 0) return;
 
-    final updated = OfferModel(
-      id: offer.id,
-      title: offer.title,
-      discountText: offer.discountText,
-      description: offer.description,
-      expiresInDays: offer.expiresInDays,
-      expiresAt: offer.expiresAt,
-      createdAt: offer.createdAt,
-      isActive: !offer.isActive,
-    );
-
+    // 1. 0ms Optimistic toggle locally
+    final updated = offer.copyWith(isActive: !offer.isActive);
     _offers[index] = updated;
     await LocalCacheService.saveOffers(_offers);
     notifyListeners();
     AppEventBus().emit(AppCacheEventType.offerMutated);
 
-    await _repo.updateOffer(offer.id.toString(), {'is_active': updated.isActive});
+    // 2. Background server sync via dedicated toggle endpoint
+    final res = await _repo.toggleOffer(offer.id.toString());
+    if (res.success && res.data != null) {
+      _offers[index] = OfferModel.fromJson(res.data!);
+      await LocalCacheService.saveOffers(_offers);
+      notifyListeners();
+    }
   }
 }

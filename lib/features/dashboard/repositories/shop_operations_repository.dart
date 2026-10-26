@@ -56,6 +56,13 @@ class ShopOperationsRepository {
     required String title,
     required String discountText,
     String description = '',
+    String discountType = 'percentage',
+    double discountValue = 0.0,
+    double minOrderAmount = 0.0,
+    double maxDiscount = 0.0,
+    String applicableDays = 'all',
+    String bannerTag = '🔥 Special Offer',
+    String promoCode = '',
     int minPointsRequired = 0,
     int expiresInDays = 30,
   }) async {
@@ -66,6 +73,13 @@ class ShopOperationsRepository {
           'title': title.trim(),
           'discount_text': discountText.trim(),
           'description': description.trim(),
+          'discount_type': discountType.trim(),
+          'discount_value': discountValue,
+          'min_order_amount': minOrderAmount,
+          'max_discount': maxDiscount,
+          'applicable_days': applicableDays.trim(),
+          'banner_tag': bannerTag.trim(),
+          'promo_code': promoCode.trim().toUpperCase(),
           'min_points_required': minPointsRequired,
           'expires_in_days': expiresInDays,
         },
@@ -80,6 +94,16 @@ class ShopOperationsRepository {
   Future<ApiResponse<Map<String, dynamic>>> updateOffer(String id, Map<String, dynamic> data) async {
     try {
       final res = await _dio.put(ApiConstants.shopOfferById(id), data: data);
+      final resData = res.data is Map ? (res.data['data'] ?? res.data) : {};
+      return ApiResponse(success: true, data: resData as Map<String, dynamic>);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> toggleOffer(String id) async {
+    try {
+      final res = await _dio.patch(ApiConstants.shopOfferToggle(id));
       final resData = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: resData as Map<String, dynamic>);
     } catch (e) {

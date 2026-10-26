@@ -155,7 +155,9 @@ class ApiConstants {
   static const String shopReturns = '/shops/me/returns';
   static const String shopOffers = '/shops/me/offers';
   static String shopOfferById(String id) => '/shops/me/offers/$id';
+  static String shopOfferToggle(String id) => '/shops/me/offers/$id/toggle';
   static const String shopOffersHistory = '/shops/me/offers/history';
+  static String storefrontOffers(String slug) => '/shops/$slug/offers';
 
   // --- 14. Counter Pickup Reservations (Shop) ---
   static const String shopReservations = '/shops/me/reservations';
