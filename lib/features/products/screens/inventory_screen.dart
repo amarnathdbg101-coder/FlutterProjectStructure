@@ -13,6 +13,8 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/search_fuzzy_utils.dart';
+import '../../../core/widgets/app_highlighted_text.dart';
 import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/custom_snackbar.dart';
@@ -803,6 +805,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     ProductModel? initialProduct,
     bool isDuplicate = false,
     String? initialBarcode,
+    String? initialName,
   }) {
     final authController = Provider.of<AuthController>(context, listen: false);
     final currentShop = authController.currentShop;
@@ -823,10 +826,10 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     }
 
     final isEdit = initialProduct != null && !isDuplicate;
-    final initialName = isDuplicate
+    final resolvedInitialName = isDuplicate
         ? '${initialProduct?.name ?? ''} (Copy)'
-        : (initialProduct?.name ?? '');
-    final nameCtrl = TextEditingController(text: initialName);
+        : (initialProduct?.name ?? initialName ?? '');
+    final nameCtrl = TextEditingController(text: resolvedInitialName);
     final priceCtrl = TextEditingController(
       text: initialProduct != null && initialProduct.price > 0
           ? initialProduct.price.toStringAsFixed(0)
@@ -880,7 +883,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     String unit = initialProduct?.unit ?? 'piece';
 
     // Instant Master Catalog Pre-fill if initialBarcode was provided (e.g. from Price Checker or external scan)
-    if (initialBarcodeVal.isNotEmpty && (initialName.isEmpty || isDuplicate)) {
+    if (initialBarcodeVal.isNotEmpty && (resolvedInitialName.isEmpty || isDuplicate)) {
       final initialMatch = SmartBarcodeCatalogService.lookupSync(initialBarcodeVal);
       if (initialMatch != null) {
         if (nameCtrl.text.trim().isEmpty || isDuplicate) {
@@ -3480,38 +3483,102 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             ? Center(
                                 child: Padding(
                                   padding: const EdgeInsets.all(28),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.search_off_rounded, size: 54, color: context.colorTextMuted),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        context.isHindi ? 'कोई उत्पाद नहीं मिला' : 'No matching products found',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: context.colorTextPrimary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        _searchQuery.isNotEmpty
-                                            ? (context.isHindi
-                                                ? '"$_searchQuery" के लिए कोई परिणाम नहीं मिला'
-                                                : 'No results found matching "$_searchQuery"')
-                                            : (context.isHindi
-                                                ? 'चयनित फिल्टर के लिए कोई उत्पाद उपलब्ध नहीं है'
-                                                : 'No products match the selected filters'),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(fontSize: 12, color: context.colorTextSecondary),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      OutlinedButton.icon(
-                                        icon: const Icon(Icons.clear_all_rounded, size: 16),
-                                        label: Text(context.isHindi ? 'सभी फिल्टर हटाएं' : 'Reset Filters'),
-                                        onPressed: _clearAllFilters,
-                                      ),
-                                    ],
+                                  child: Builder(
+                                    builder: (ctx) {
+                                      final fuzzySuggestion = _searchQuery.isNotEmpty
+                                          ? SearchFuzzyUtils.findClosestFuzzySuggestion(_searchQuery, allProducts)
+                                          : null;
+
+                                      return Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.search_off_rounded, size: 54, color: context.colorTextMuted),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            context.isHindi ? 'कोई उत्पाद नहीं मिला' : 'No matching products found',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: context.colorTextPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            _searchQuery.isNotEmpty
+                                                ? (context.isHindi
+                                                    ? '"$_searchQuery" के लिए कोई परिणाम नहीं मिला'
+                                                    : 'No results found matching "$_searchQuery"')
+                                                : (context.isHindi
+                                                    ? 'चयनित फिल्टर के लिए कोई उत्पाद उपलब्ध नहीं है'
+                                                    : 'No products match the selected filters'),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 12, color: context.colorTextSecondary),
+                                          ),
+                                          if (fuzzySuggestion != null) ...[
+                                            const SizedBox(height: 14),
+                                            InkWell(
+                                              onTap: () {
+                                                _searchController.text = fuzzySuggestion.name;
+                                              },
+                                              borderRadius: BorderRadius.circular(10),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: context.colorPrimaryLight,
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.auto_awesome_rounded, size: 16, color: AppColors.primary),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      context.isHindi ? 'क्या आपका मतलब: ' : 'Did you mean: ',
+                                                      style: TextStyle(fontSize: 12, color: context.colorTextMuted),
+                                                    ),
+                                                    Text(
+                                                      fuzzySuggestion.name,
+                                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.primary),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    const Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.primary),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                          const SizedBox(height: 16),
+                                          Wrap(
+                                            spacing: 10,
+                                            runSpacing: 10,
+                                            alignment: WrapAlignment.center,
+                                            children: [
+                                              if (_searchQuery.isNotEmpty)
+                                                ElevatedButton.icon(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: AppColors.primary,
+                                                    foregroundColor: Colors.white,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                  ),
+                                                  icon: const Icon(Icons.add_rounded, size: 16),
+                                                  label: Text(
+                                                    context.isHindi ? '+ "$_searchQuery" इन्वेंट्री में जोड़ें' : '+ Add "$_searchQuery" to Inventory',
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                                  ),
+                                                  onPressed: () => _showAddProductDialog(context, initialName: _searchQuery),
+                                                ),
+                                              OutlinedButton.icon(
+                                                icon: const Icon(Icons.clear_all_rounded, size: 16),
+                                                label: Text(context.isHindi ? 'सभी फिल्टर हटाएं' : 'Reset Filters'),
+                                                onPressed: _clearAllFilters,
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      );
+                                    },
                                   ),
                                 ),
                               )
@@ -3598,6 +3665,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                         return _ProductGridCard(
                                           key: ValueKey(p.id),
                                           product: p,
+                                          highlightQuery: _searchQuery,
                                           onTap: () => _navigateToProductDetails(context, p),
                                         );
                                       },
@@ -3621,11 +3689,13 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
 class _ProductGridCard extends StatelessWidget {
   final ProductModel product;
   final VoidCallback onTap;
+  final String? highlightQuery;
 
   const _ProductGridCard({
     super.key,
     required this.product,
     required this.onTap,
+    this.highlightQuery,
   });
 
   @override
@@ -3718,9 +3788,10 @@ class _ProductGridCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
 
-          // 3. PRODUCT NAME (Clean 2-line clamping)
-          Text(
-            p.name,
+          // 3. PRODUCT NAME (Clean 2-line clamping with keyword highlighting)
+          AppHighlightedText(
+            text: p.name,
+            query: highlightQuery ?? '',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 13,

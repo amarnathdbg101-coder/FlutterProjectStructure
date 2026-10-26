@@ -627,6 +627,8 @@ class AppProductSearchBar extends StatefulWidget {
   final VoidCallback? onBarcodeScan;
   final bool showBarcodeScanner;
   final bool autoFocus;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onSubmitted;
 
   const AppProductSearchBar({
     super.key,
@@ -637,6 +639,8 @@ class AppProductSearchBar extends StatefulWidget {
     this.onBarcodeScan,
     this.showBarcodeScanner = false,
     this.autoFocus = false,
+    this.focusNode,
+    this.onSubmitted,
   });
 
   @override
@@ -686,7 +690,9 @@ class _AppProductSearchBarState extends State<AppProductSearchBar> {
           Expanded(
             child: TextField(
               controller: widget.controller,
+              focusNode: widget.focusNode,
               autofocus: widget.autoFocus,
+              onSubmitted: widget.onSubmitted,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

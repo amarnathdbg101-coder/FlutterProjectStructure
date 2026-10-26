@@ -9,6 +9,8 @@ import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/services/floor_token_cards_service.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/search_fuzzy_utils.dart';
+import '../../../core/widgets/app_highlighted_text.dart';
 import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/dynamic_upi_qr_dialog.dart';
@@ -44,6 +46,10 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   String _selectedPosCategory = 'All';
   Timer? _posSearchDebounceTimer;
 
+  final FocusNode _searchFocusNode = FocusNode();
+  int _highlightedMatchIndex = -1;
+  ProductModel? _didYouMeanSuggestion;
+
   KhataCustomerModel? _matchedKhataCustomer;
 
   @override
@@ -57,6 +63,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   @override
   void dispose() {
     _posSearchDebounceTimer?.cancel();
+    _searchFocusNode.dispose();
     _scanController.dispose();
     _phoneController.dispose();
     _cashController.dispose();
@@ -70,6 +77,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       setState(() {
         _matchingSearchResults = [];
         _isSearchingLocal = false;
+        _highlightedMatchIndex = -1;
+        _didYouMeanSuggestion = null;
       });
       return;
     }
@@ -83,9 +92,17 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       return name.contains(clean) || barcode.contains(clean) || sku.contains(clean) || category.contains(clean);
     }).take(6).toList();
 
+    // Check for "Did you mean" typo suggestion if immediate matches are empty
+    ProductModel? fuzzy;
+    if (matches.isEmpty && clean.length >= 3) {
+      fuzzy = SearchFuzzyUtils.findClosestFuzzySuggestion(clean, pos.products);
+    }
+
     setState(() {
       _matchingSearchResults = matches;
       _isSearchingLocal = true;
+      _highlightedMatchIndex = matches.isNotEmpty ? 0 : -1;
+      _didYouMeanSuggestion = fuzzy;
     });
 
     // 2. Debounced server database query (300ms) to search full database beyond initial batch
@@ -96,11 +113,63 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
         await pos.searchProducts(clean);
         if (mounted && _scanController.text.trim().toLowerCase() == clean) {
           // Products returned from server are already matched & ranked by PostgreSQL's trigram fuzzy search
+          final serverResults = pos.products.take(8).toList();
+          ProductModel? serverFuzzy;
+          if (serverResults.isEmpty && clean.length >= 3) {
+            serverFuzzy = SearchFuzzyUtils.findClosestFuzzySuggestion(clean, pos.products);
+          }
           setState(() {
-            _matchingSearchResults = pos.products.take(8).toList();
+            _matchingSearchResults = serverResults;
+            _didYouMeanSuggestion = serverFuzzy;
+            if (_highlightedMatchIndex >= serverResults.length) {
+              _highlightedMatchIndex = serverResults.isNotEmpty ? 0 : -1;
+            }
           });
         }
       });
+    }
+  }
+
+  void _handleSearchSubmit(PosController pos) {
+    if (_matchingSearchResults.isNotEmpty) {
+      final targetIdx = (_highlightedMatchIndex >= 0 && _highlightedMatchIndex < _matchingSearchResults.length)
+          ? _highlightedMatchIndex
+          : 0;
+      final selected = _matchingSearchResults[targetIdx];
+      pos.addToCart(selected);
+      _scanController.clear();
+      setState(() {
+        _matchingSearchResults = [];
+        _isSearchingLocal = false;
+        _highlightedMatchIndex = -1;
+        _didYouMeanSuggestion = null;
+      });
+      _searchFocusNode.requestFocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.isHindi ? '${selected.name} बिल में जोड़ दिया गया!' : '${selected.name} added to bill!'),
+          duration: const Duration(milliseconds: 700),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else if (_didYouMeanSuggestion != null) {
+      final selected = _didYouMeanSuggestion!;
+      pos.addToCart(selected);
+      _scanController.clear();
+      setState(() {
+        _matchingSearchResults = [];
+        _isSearchingLocal = false;
+        _highlightedMatchIndex = -1;
+        _didYouMeanSuggestion = null;
+      });
+      _searchFocusNode.requestFocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.isHindi ? '${selected.name} बिल में जोड़ दिया गया!' : '${selected.name} added to bill!'),
+          duration: const Duration(milliseconds: 700),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 
@@ -153,8 +222,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   }
 
   /// Opens Quick Add Custom Item Modal for loose charges or unlisted items
-  void _showAddCustomItemDialog(BuildContext context) {
-    final customNameCtrl = TextEditingController();
+  void _showAddCustomItemDialog(BuildContext context, {String? initialName}) {
+    final customNameCtrl = TextEditingController(text: initialName ?? '');
     final customPriceCtrl = TextEditingController();
     final customQtyCtrl = TextEditingController(text: '1');
 
@@ -1723,21 +1792,61 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
         Row(
           children: [
             Expanded(
-              child: AppProductSearchBar(
-                controller: _scanController,
-                autoFocus: true,
-                hintText: context.isHindi
-                    ? 'बारकोड, SKU स्कैन करें या नाम लिखें...'
-                    : 'Scan Barcode, SKU or type item name...',
-                showBarcodeScanner: true,
-                onBarcodeScan: () => _openCameraScanner(context, pos),
-                onChanged: (val) => _onSearchQueryChanged(val, pos),
-                onClear: () {
-                  setState(() {
-                    _matchingSearchResults = [];
-                    _isSearchingLocal = false;
-                  });
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent) {
+                    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      if (_matchingSearchResults.isNotEmpty) {
+                        setState(() {
+                          _highlightedMatchIndex = (_highlightedMatchIndex + 1) % _matchingSearchResults.length;
+                        });
+                        return KeyEventResult.handled;
+                      }
+                    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      if (_matchingSearchResults.isNotEmpty) {
+                        setState(() {
+                          _highlightedMatchIndex = (_highlightedMatchIndex - 1 + _matchingSearchResults.length) % _matchingSearchResults.length;
+                        });
+                        return KeyEventResult.handled;
+                      }
+                    } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+                      if (_matchingSearchResults.isNotEmpty || _didYouMeanSuggestion != null) {
+                        _handleSearchSubmit(pos);
+                        return KeyEventResult.handled;
+                      }
+                    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+                      _scanController.clear();
+                      setState(() {
+                        _matchingSearchResults = [];
+                        _isSearchingLocal = false;
+                        _highlightedMatchIndex = -1;
+                        _didYouMeanSuggestion = null;
+                      });
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
                 },
+                child: AppProductSearchBar(
+                  controller: _scanController,
+                  focusNode: _searchFocusNode,
+                  autoFocus: true,
+                  hintText: context.isHindi
+                      ? 'बारकोड, SKU स्कैन करें या नाम लिखें...'
+                      : 'Scan Barcode, SKU or type item name...',
+                  showBarcodeScanner: true,
+                  onBarcodeScan: () => _openCameraScanner(context, pos),
+                  onChanged: (val) => _onSearchQueryChanged(val, pos),
+                  onSubmitted: (_) => _handleSearchSubmit(pos),
+                  onClear: () {
+                    setState(() {
+                      _matchingSearchResults = [];
+                      _isSearchingLocal = false;
+                      _highlightedMatchIndex = -1;
+                      _didYouMeanSuggestion = null;
+                    });
+                  },
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -1823,7 +1932,74 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           ),
         ],
 
-        // LIVE AUTO-COMPLETE MATCHES OVERLAY
+        // 1-TAP "DID YOU MEAN?" TYPO / SPELL CORRECTION BANNER
+        if (_didYouMeanSuggestion != null) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: context.colorPrimaryLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, size: 16, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: TextStyle(fontSize: 12, color: context.colorTextPrimary),
+                      children: [
+                        TextSpan(
+                          text: context.isHindi ? 'क्या आपका मतलब: ' : 'Did you mean: ',
+                          style: TextStyle(color: context.colorTextMuted),
+                        ),
+                        TextSpan(
+                          text: _didYouMeanSuggestion!.name,
+                          style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary),
+                        ),
+                        TextSpan(
+                          text: ' (₹${_didYouMeanSuggestion!.price.toStringAsFixed(0)})',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: const Size(54, 28),
+                  ),
+                  onPressed: () {
+                    final item = _didYouMeanSuggestion!;
+                    pos.addToCart(item);
+                    _scanController.clear();
+                    setState(() {
+                      _matchingSearchResults = [];
+                      _isSearchingLocal = false;
+                      _highlightedMatchIndex = -1;
+                      _didYouMeanSuggestion = null;
+                    });
+                    _searchFocusNode.requestFocus();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.isHindi ? '${item.name} बिल में जोड़ दिया गया!' : '${item.name} added to bill!'),
+                        duration: const Duration(milliseconds: 700),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  },
+                  child: Text(context.isHindi ? '+ जोड़ें' : '+ Add', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // LIVE AUTO-COMPLETE MATCHES OVERLAY WITH KEYBOARD HIGHLIGHTING
         if (_isSearchingLocal && _matchingSearchResults.isNotEmpty) ...[
           const SizedBox(height: 8),
           Container(
@@ -1841,55 +2017,161 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               separatorBuilder: (_, _) => Divider(height: 1, color: context.colorBorder),
               itemBuilder: (ctx, idx) {
                 final p = _matchingSearchResults[idx];
-                return ListTile(
-                  dense: true,
-                  leading: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: context.colorSurface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: context.colorBorder),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: AppProductImage(
-                      imageUrl: p.imageUrl,
+                final isHighlighted = idx == _highlightedMatchIndex;
+
+                return Ink(
+                  decoration: BoxDecoration(
+                    color: isHighlighted ? context.colorPrimaryLight.withValues(alpha: 0.6) : Colors.transparent,
+                    border: isHighlighted
+                        ? const Border(left: BorderSide(color: AppColors.primary, width: 3.5))
+                        : null,
+                  ),
+                  child: ListTile(
+                    dense: true,
+                    leading: Container(
                       width: 36,
                       height: 36,
-                      expand: true,
-                      fit: BoxFit.cover,
-                      borderRadius: BorderRadius.circular(8),
-                      fallbackIcon: Icons.inventory_2_outlined,
-                      fallbackIconSize: 18,
+                      decoration: BoxDecoration(
+                        color: context.colorSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: context.colorBorder),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: AppProductImage(
+                        imageUrl: p.imageUrl,
+                        width: 36,
+                        height: 36,
+                        expand: true,
+                        fit: BoxFit.cover,
+                        borderRadius: BorderRadius.circular(8),
+                        fallbackIcon: Icons.inventory_2_outlined,
+                        fallbackIconSize: 18,
+                      ),
                     ),
-                  ),
-                  title: Text(p.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: context.colorTextPrimary)),
-                  subtitle: Text('${p.category} • ₹${p.price.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
-                  trailing: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      minimumSize: const Size(60, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    title: AppHighlightedText(
+                      text: p.name,
+                      query: _scanController.text,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12.5,
+                        color: context.colorTextPrimary,
+                      ),
                     ),
-                    onPressed: () {
-                      pos.addToCart(p);
-                      _scanController.clear();
-                      setState(() {
-                        _matchingSearchResults = [];
-                        _isSearchingLocal = false;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(context.isHindi ? '${p.name} बिल में जोड़ दिया गया!' : '${p.name} added to bill!'),
-                          duration: const Duration(milliseconds: 700),
-                          backgroundColor: AppColors.success,
+                    subtitle: Text('${p.category} • ₹${p.price.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isHighlighted)
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('↵ Enter', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                          ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            minimumSize: const Size(60, 32),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                          onPressed: () {
+                            pos.addToCart(p);
+                            _scanController.clear();
+                            setState(() {
+                              _matchingSearchResults = [];
+                              _isSearchingLocal = false;
+                              _highlightedMatchIndex = -1;
+                              _didYouMeanSuggestion = null;
+                            });
+                            _searchFocusNode.requestFocus();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(context.isHindi ? '${p.name} बिल में जोड़ दिया गया!' : '${p.name} added to bill!'),
+                                duration: const Duration(milliseconds: 700),
+                                backgroundColor: AppColors.success,
+                              ),
+                            );
+                          },
+                          child: Text(context.isHindi ? '+ जोड़ें' : '+ Add', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         ),
-                      );
-                    },
-                    child: Text(context.isHindi ? '+ जोड़ें' : '+ Add', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                   ),
                 );
               },
+            ),
+          ),
+        ],
+
+        // ZERO-DEAD-END RECOVERY SCREEN IN POS (NO PRODUCTS FOUND)
+        if (_isSearchingLocal && _matchingSearchResults.isEmpty && _scanController.text.trim().isNotEmpty && _didYouMeanSuggestion == null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.colorSurfaceSubtle,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: context.colorBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.search_off_rounded, size: 18, color: context.colorTextMuted),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        context.isHindi
+                            ? '"${_scanController.text.trim()}" कैटलॉग में नहीं मिला'
+                            : 'No items found for "${_scanController.text.trim()}"',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: const Size(120, 34),
+                      ),
+                      icon: const Icon(Icons.add_shopping_cart_rounded, size: 15, color: Colors.white),
+                      label: Text(
+                        context.isHindi ? '+ खुला सामान जोड़ें' : '+ Add Loose Item',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      onPressed: () {
+                        final query = _scanController.text.trim();
+                        _showAddCustomItemDialog(context, initialName: query);
+                      },
+                    ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: const Size(120, 34),
+                      ),
+                      icon: const Icon(Icons.add_circle_outline_rounded, size: 15, color: AppColors.primary),
+                      label: Text(
+                        context.isHindi ? '+ इन्वेंट्री में बनाएं' : '+ Create in Inventory',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        final query = _scanController.text.trim();
+                        context.push('/merchant/inventory?filter=add&name=${Uri.encodeComponent(query)}');
+                      },
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
