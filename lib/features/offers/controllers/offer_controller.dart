@@ -43,8 +43,10 @@ class OfferController extends BaseController {
 
   void _hydrateFromLocalCache() {
     final cached = LocalCacheService.getOffers();
-    if (cached.isNotEmpty) {
-      _offers = cached;
+    // Strip out any legacy mock offers
+    final clean = cached.where((o) => o.id != 'off_1' && o.id != 'off_2').toList();
+    if (clean.isNotEmpty) {
+      _offers = clean;
       notifyListeners();
     }
   }
@@ -74,41 +76,6 @@ class OfferController extends BaseController {
       }
     } catch (_) {
       setLoading(false);
-    }
-
-    // Only show fallback default suggestions if completely offline and cache is empty
-    if (_offers.isEmpty) {
-      _offers = [
-        OfferModel(
-          id: 'off_1',
-          title: 'Weekend Flat Discount on Grocery',
-          discountText: 'Flat 20% OFF',
-          description: 'Special weekend discount on all grocery items in-store. Walk in & claim.',
-          discountType: 'percentage',
-          discountValue: 20,
-          applicableDays: 'sunday,saturday',
-          bannerTag: '⚡ Weekend Dhamaka',
-          expiresInDays: 7,
-          expiresAt: DateTime.now().add(const Duration(days: 7)),
-          isActive: true,
-        ),
-        OfferModel(
-          id: 'off_2',
-          title: 'Storefront Welcome Offer',
-          discountText: 'Flat ₹50 OFF',
-          description: 'Get Flat ₹50 off on orders above ₹499.',
-          discountType: 'flat',
-          discountValue: 50,
-          minOrderAmount: 499,
-          applicableDays: 'all',
-          bannerTag: '🔥 Special Offer',
-          promoCode: 'WELCOME50',
-          expiresInDays: 30,
-          expiresAt: DateTime.now().add(const Duration(days: 30)),
-          isActive: true,
-        ),
-      ];
-      notifyListeners();
     }
   }
 
@@ -182,9 +149,12 @@ class OfferController extends BaseController {
       AppEventBus().emit(AppCacheEventType.offerMutated);
       return true;
     } else {
+      setError(response.message);
+      // Remove optimistic insert if server failed
+      _offers.removeWhere((o) => o.id == tempId);
+      await LocalCacheService.saveOffers(_offers);
       notifyListeners();
-      AppEventBus().emit(AppCacheEventType.offerMutated);
-      return true;
+      return false;
     }
   }
 
