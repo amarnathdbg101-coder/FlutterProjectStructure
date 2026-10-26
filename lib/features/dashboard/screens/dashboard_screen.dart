@@ -129,7 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                   builder: (context, constraints) {
                     final width = constraints.maxWidth;
                     final crossAxisCount = width > 900 ? 4 : (width > 500 ? 2 : 2);
-                    final aspectRatio = width < 380 ? 1.22 : (width < 600 ? 1.34 : (width > 900 ? 1.55 : 1.40));
+                    final aspectRatio = width < 380 ? 1.25 : (width < 600 ? 1.38 : (width > 900 ? 1.60 : 1.45));
 
                     return GridView.count(
                       crossAxisCount: crossAxisCount,
@@ -144,6 +144,8 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           value: '₹${stats.todaySales.toStringAsFixed(0)}',
                           subtitle: '${stats.salesCount} ${context.tr('dash_kpi_bills')}',
                           icon: Icons.currency_rupee_rounded,
+                          iconColor: AppColors.success,
+                          iconBgColor: context.colorSuccessLight,
                           onTap: () => context.go('/merchant/today-sales'),
                         ),
                         AppStatCard(
@@ -151,6 +153,8 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           value: '₹${stats.totalUdhar.toStringAsFixed(0)}',
                           subtitle: '${stats.udharCustomersCount} ${context.tr('dash_kpi_debtors')}',
                           icon: Icons.menu_book_rounded,
+                          iconColor: AppColors.primary,
+                          iconBgColor: context.colorPrimaryLight,
                           onTap: () => context.go('/merchant/khata'),
                         ),
                         AppStatCard(
@@ -158,6 +162,8 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           value: '${stats.catalogCount}',
                           subtitle: context.isHindi ? 'सक्रिय उत्पाद' : 'Active Products',
                           icon: Icons.inventory_2_rounded,
+                          iconColor: const Color(0xFF8B5CF6),
+                          iconBgColor: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
                           onTap: () => context.go('/merchant/inventory'),
                         ),
                         AppStatCard(
@@ -165,6 +171,8 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           value: '${stats.lowStockCount}',
                           subtitle: context.isHindi ? 'पुनर्प्राप्ति आवश्यक' : 'Reorder Needed',
                           icon: Icons.warning_amber_rounded,
+                          iconColor: AppColors.warning,
+                          iconBgColor: context.colorWarningLight,
                           isAlert: stats.lowStockCount > 0,
                           onTap: () => context.go('/merchant/low-stock'),
                         ),
@@ -385,28 +393,6 @@ class _StoreIdentityCard extends StatelessWidget {
                     ],
                   ),
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Quick Store QR Shortcut
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => showStoreQrDialog(context, shop),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: context.colorPrimaryLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.qr_code_2_rounded,
-                  size: 20,
-                  color: AppColors.primary,
-                ),
-              ),
             ),
           ),
         ],

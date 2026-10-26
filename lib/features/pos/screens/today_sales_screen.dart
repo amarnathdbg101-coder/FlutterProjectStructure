@@ -172,6 +172,8 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                           value: '₹${totalRevenue.toStringAsFixed(0)}',
                           subtitle: context.isHindi ? 'आज के 24 घंटों की बिक्री' : 'Last 24 hours sales',
                           icon: Icons.currency_rupee_rounded,
+                          iconColor: AppColors.success,
+                          iconBgColor: context.colorSuccessLight,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -181,6 +183,8 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                           value: '$totalBills',
                           subtitle: '$totalUnitsSold ${context.isHindi ? 'सामान बिके' : 'Units Sold'}',
                           icon: Icons.receipt_long_rounded,
+                          iconColor: AppColors.primary,
+                          iconBgColor: context.colorPrimaryLight,
                         ),
                       ),
                     ],
@@ -261,107 +265,88 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: AppCard(
                           padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                          child: Row(
                             children: [
-                              Row(
-                                children: [
-                                  // Rank badge
-                                  Container(
-                                    width: 30,
-                                    height: 30,
-                                    decoration: BoxDecoration(
-                                      color: index == 0
-                                          ? context.colorPrimaryLight
-                                          : context.colorSurfaceSubtle,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: index == 0
-                                            ? AppColors.primary.withValues(alpha: 0.3)
-                                            : context.colorBorder,
-                                      ),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      '#${index + 1}',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: index == 0 ? AppColors.primary : context.colorTextSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-
-                                  // Product name & details
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            color: context.colorTextPrimary,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          context.isHindi
-                                              ? 'दर: ₹${unitPrice.toStringAsFixed(0)} • मात्रा: $qty इकाई'
-                                              : 'Rate: ₹${unitPrice.toStringAsFixed(0)} • Qty: $qty units',
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            color: context.colorTextSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // Total revenue for this product
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        '₹${total.toStringAsFixed(0)}',
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w900,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 1),
-                                      Text(
-                                        context.isHindi
-                                            ? 'कुल का ${(pct * 100).toStringAsFixed(1)}%'
-                                            : '${(pct * 100).toStringAsFixed(1)}% of sales',
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: context.colorTextMuted,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-
-                              // Visual progress bar of contribution
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: LinearProgressIndicator(
-                                  value: pct.clamp(0.0, 1.0),
-                                  minHeight: 4,
-                                  backgroundColor: context.colorBorder.withValues(alpha: 0.35),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    index == 0 ? AppColors.primary : AppColors.primary.withValues(alpha: 0.65),
+                              // Rank badge
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: index == 0
+                                      ? context.colorSuccessLight
+                                      : context.colorSurfaceSubtle,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: index == 0
+                                        ? AppColors.success.withValues(alpha: 0.3)
+                                        : context.colorBorder,
                                   ),
                                 ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '#${index + 1}',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: index == 0 ? AppColors.success : context.colorTextSecondary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+
+                              // Product name & details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: context.colorTextPrimary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      context.isHindi
+                                          ? 'दर: ₹${unitPrice.toStringAsFixed(0)} • मात्रा: $qty इकाई'
+                                          : 'Rate: ₹${unitPrice.toStringAsFixed(0)} • Qty: $qty units',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: context.colorTextSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Total revenue for this product
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '₹${total.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: index == 0 ? AppColors.success : context.colorTextPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    context.isHindi
+                                        ? 'कुल का ${(pct * 100).toStringAsFixed(1)}%'
+                                        : '${(pct * 100).toStringAsFixed(1)}% of sales',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.colorTextMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

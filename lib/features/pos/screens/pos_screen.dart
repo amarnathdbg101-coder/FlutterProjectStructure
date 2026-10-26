@@ -2481,12 +2481,14 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 _PaymentModeChip(
                   label: context.isHindi ? '💵 नकद' : '💵 Cash',
                   selected: pos.paymentMethod == 'cash',
+                  activeColor: AppColors.success,
                   onTap: () => pos.setPaymentMethod('cash'),
                 ),
                 const SizedBox(width: 8),
                 _PaymentModeChip(
                   label: context.isHindi ? '📱 यूपीआई' : '📱 UPI QR',
                   selected: pos.paymentMethod == 'upi',
+                  activeColor: AppColors.primary,
                   onTap: () {
                     pos.setPaymentMethod('upi');
                     if (pos.grandTotal > 0) {
@@ -2508,6 +2510,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 _PaymentModeChip(
                   label: context.isHindi ? '⚡ स्प्लिट (नकद+UPI)' : '⚡ Split (Cash+UPI)',
                   selected: pos.paymentMethod == 'split',
+                  activeColor: AppColors.primary,
                   onTap: () {
                     pos.setPaymentMethod('split');
                     if (pos.splitCashAmount <= 0 && pos.grandTotal > 0) {
@@ -2520,6 +2523,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 _PaymentModeChip(
                   label: context.isHindi ? '📖 खाता उधार' : '📖 Khata Udhar',
                   selected: pos.paymentMethod == 'khata',
+                  activeColor: AppColors.warning,
                   onTap: () => pos.setPaymentMethod('khata'),
                 ),
               ],
@@ -3068,7 +3072,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                       fit: BoxFit.scaleDown,
                       child: Text(
                         '₹${pos.grandTotal.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.primary),
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.success, letterSpacing: -0.5),
                       ),
                     ),
                   ],
@@ -3186,7 +3190,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   alignment: Alignment.centerLeft,
                   child: Text(
                     '₹${pos.grandTotal.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.primary),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.success, letterSpacing: -0.4),
                   ),
                 ),
               ],
@@ -3439,24 +3443,31 @@ class _PaymentModeChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final Color? activeColor;
 
   const _PaymentModeChip({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.activeColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = activeColor ?? AppColors.primary;
+    final effectiveBg = selected
+        ? effectiveColor.withValues(alpha: 0.12)
+        : context.colorSurface;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? context.colorPrimaryLight : context.colorSurface,
+          color: effectiveBg,
           border: Border.all(
-            color: selected ? AppColors.primary : context.colorBorder,
+            color: selected ? effectiveColor : context.colorBorder,
             width: selected ? 1.5 : 1,
           ),
           borderRadius: BorderRadius.circular(10),
@@ -3466,8 +3477,8 @@ class _PaymentModeChip extends StatelessWidget {
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 12,
-            fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-            color: selected ? AppColors.primary : context.colorTextPrimary,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected ? effectiveColor : context.colorTextPrimary,
           ),
         ),
       ),

@@ -65,6 +65,8 @@ class AppStatCard extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final bool isAlert;
+  final Color? iconColor;
+  final Color? iconBgColor;
   final Widget? trailingBadge;
 
   const AppStatCard({
@@ -75,13 +77,22 @@ class AppStatCard extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.isAlert = false,
+    this.iconColor,
+    this.iconBgColor,
     this.trailingBadge,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveIconBg = isAlert
+        ? context.colorErrorLight
+        : (iconBgColor ?? context.colorSurfaceSubtle);
+    final effectiveIconColor = isAlert
+        ? AppColors.error
+        : (iconColor ?? context.colorTextSecondary);
+
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(13),
       onTap: onTap,
       border: isAlert ? Border.all(color: AppColors.error.withValues(alpha: 0.5), width: 1.2) : null,
       child: Column(
@@ -97,7 +108,7 @@ class AppStatCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: context.colorTextSecondary,
                   ),
@@ -107,18 +118,18 @@ class AppStatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isAlert ? context.colorErrorLight : context.colorSurfaceSubtle,
+                  color: effectiveIconBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   icon,
-                  size: 16,
-                  color: isAlert ? AppColors.error : context.colorTextSecondary,
+                  size: 15,
+                  color: effectiveIconColor,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -128,10 +139,10 @@ class AppStatCard extends StatelessWidget {
                 child: Text(
                   value,
                   style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
                     color: context.colorTextPrimary,
-                    letterSpacing: -0.3,
+                    letterSpacing: -0.4,
                   ),
                 ),
               ),
@@ -145,12 +156,12 @@ class AppStatCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         color: isAlert ? AppColors.error : context.colorTextMuted,
                       ),
                     ),
                   ),
-                  ?trailingBadge,
+                  if (trailingBadge != null) trailingBadge!,
                 ],
               ),
             ],
@@ -171,7 +182,7 @@ class AppSectionHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.trailing,
-    this.padding = const EdgeInsets.only(bottom: 12),
+    this.padding = const EdgeInsets.only(bottom: 10),
   });
 
   @override
@@ -184,13 +195,13 @@ class AppSectionHeader extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
               color: context.colorTextPrimary,
               letterSpacing: -0.2,
             ),
           ),
-          ?trailing,
+          if (trailing != null) trailing!,
         ],
       ),
     );

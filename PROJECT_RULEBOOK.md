@@ -212,6 +212,44 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
 - **[2026-10-09]**: Overhauled Mandi Procurement & Wholesale Sourcing Hub (`ProcurementListScreen`). Removed all hardcoded sample items, persisted procurement state to local cache (`LocalCacheService.getProcurementItems()`), added dynamic 1-tap "Import Real Low Stock Items" sync, Mandi Dealer Directory, 1-tap WhatsApp Mandi Order Sheet sharing, and 1-tap Dealer Direct Calling.
 - **[2026-10-09]**: Integrated Munafa & Analytics Module (`AnalyticsScreen` / `AnalyticsController`) with GoBackend `/shops/me/analytics/profit` and `/shops/me/analytics/products` endpoints. Added 0ms local caching (`LocalCacheService.saveAnalytics`), Hisaab-Kitaab formula breakdown (`Kul Bikri - Kharid Cost - Expenses = Asal Munafa`), Sabse Zyada Munafa Products list, and Dead Stock alert.
 - **[2026-10-09]**: Overhauled Shop Daily Expenses Module (`ExpenseScreen` / `ExpenseController`). Added 0ms local caching (`LocalCacheService.saveExpenses`), 1-tap "Roz Ke Kharche" preset chips (`☕ Chai/Tea`, `⚡ Electricity`, `🏬 Rent`, `👨‍🍳 Salary`, `⛽ Petrol`, `📦 Polythene`), keyboard-aware bottom sheet form, and 1-tap record deletion.
+- **[2026-10-27]**: Active Inventory Catalog Psychological Color Filtering (`inventory_screen.dart`):
+  - **Psychological Quick Filter Pills (`_buildFilterChip`)**:
+    - **Low Stock Filter**: Warm Amber (`AppColors.warning`) - stock reorder alertness.
+    - **Near Expiry Alert Filter**: Rose Red (`AppColors.error`) - expiration urgency.
+    - **Hidden Price Filter**: Deep Indigo (`Color(0xFF8B5CF6)`) - private bargain items.
+    - **On Sale / Offers Filter**: Emerald Green (`AppColors.success`) - promotional deals.
+  - **Verification**: `flutter analyze` passed, `flutter test test/inventory_screen_test.dart` & `test/features_test.dart` 57/57 tests green (100% pass in 9s), `go build -o api.exe ./cmd/api` compiled cleanly (exit code 0).
+- **[2026-10-27]**: POS Billing Counter Terminal Overhaul (`PosScreen.dart`):
+  - **Business-Psychological Payment Selector Chips (`_PaymentModeChip`)**:
+    - **Cash Mode**: Emerald Green (`AppColors.success`) - symbolizes cash register inflow.
+    - **UPI QR Mode**: Royal Sapphire Blue (`AppColors.primary`) - symbolizes digital settlement.
+    - **Khata Credit Mode**: Warm Amber (`AppColors.warning`) - symbolizes credit ledger entry.
+    - **Split Mode**: Sapphire Blue / Slate.
+  - **High-Contrast Grand Total Formatting**:
+    - Mobile bottom checkout bar & desktop summary panel updated to **`20px-24px` Emerald Green (`AppColors.success`)** with `FontWeight.w900` and `letterSpacing: -0.5px` for 2-3 feet counter stand legibility.
+  - **Verification**: `flutter analyze` passed, `flutter test test/pos_screen_test.dart` & `test/features_test.dart` 57/57 tests green (100% pass in 7s), `go build -o api.exe ./cmd/api` compiled cleanly (exit code 0).
+- **[2026-10-27]**: Today's Sales Screen Executive UI Overhaul (`today_sales_screen.dart`):
+  - **Business-Psychological Color Palette**:
+    - **Total 24h Revenue KPI**: Emerald Green (`AppColors.success`) - symbolizes cash inflow & daily sales revenue.
+    - **Total Bills & Units Sold KPI**: Royal Sapphire Blue (`AppColors.primary`) - symbolizes counter transaction volume.
+    - **Rank #1 Best Seller Product**: Soft Emerald highlight (`context.colorSuccessLight`, `AppColors.success`) to celebrate top revenue drivers.
+    - **Payment Breakdown Strip**: Cash (Green `#10b981`), UPI (Blue `#2563eb`), Khata (Amber `#d97706`).
+  - **Clutter & Garbage Removal**:
+    - Removed thin linear contribution progress bar under sold product tiles to streamline row hierarchy and eliminate visual clutter.
+  - **Verification**: `flutter analyze` passed, `flutter test test/features_test.dart` 57/57 tests green (100% pass), `go build -o api.exe ./cmd/api` compiled cleanly (exit code 0).
+- **[2026-10-27]**: Dashboard Executive UI Overhaul & Psychological Color Palette (`Frontend`):
+  - **Business-Psychological Color Palette (`AppStatCard` & `AppActionTile`)**:
+    - **Sales Revenue**: Emerald Green (`AppColors.success`) - symbolizes cash inflow & profit growth.
+    - **Khata Dues**: Royal Sapphire Blue (`AppColors.primary`) - symbolizes ledger trust & reliability.
+    - **Active Catalog**: Indigo (`Color(0xFF8B5CF6)`) - symbolizes inventory breadth.
+    - **Low Stock Alerts**: Warm Amber (`AppColors.warning`) - draws immediate attention without causing panic.
+  - **Typography & Sizing**:
+    - KPI values updated to `22px FontWeight.w900` (`letterSpacing: -0.4px`) for high-contrast legibility from 2-3 feet away when mounted on counter stands.
+    - Section headers updated to `14px FontWeight.w800` (`letterSpacing: -0.2px`).
+  - **Clutter Removal**:
+    - Removed duplicate right QR button from `_StoreIdentityCard`, giving shop full address and status badges full horizontal width.
+    - Enhanced Online/Offline status badge with glowing status dot (`● Online` in Emerald vs `● Offline` in Rose).
+  - **Verification**: `flutter analyze` passed, `flutter test test/features_test.dart` 57/57 tests green (100% pass), `go build -o api.exe ./cmd/api` compiled cleanly (exit code 0).
 - **[2026-10-20]**: Customer Web App Storefront Navigation & Missing Hook Resolution (`CustomerFrontend`):
   - **Root Cause Analysis & Fix**:
     - Discovered `StorefrontScreen.jsx` was executing `const debouncedSearch = useDebounce(searchTerm, 250)` and `<img src={getImageUrl(...)} />` without importing or defining `useDebounce` and `getImageUrl`.
