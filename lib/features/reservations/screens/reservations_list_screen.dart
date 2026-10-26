@@ -169,6 +169,51 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
     );
   }
 
+  void _confirmCancelReservation(BuildContext context, ReservationModel r) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(context.isHindi ? 'ऑर्डर रद्द करें?' : 'Cancel Order?'),
+        content: Text(
+          context.isHindi
+              ? 'क्या आप सचमुच #${r.reservationNumber.isNotEmpty ? r.reservationNumber : r.pickupCode} ऑर्डर रद्द करना चाहते हैं? आरक्षित स्टॉक वापस मुख्य इन्वेंट्री में जोड़ दिया जाएगा।'
+              : 'Are you sure you want to cancel order #${r.reservationNumber.isNotEmpty ? r.reservationNumber : r.pickupCode}? Reserved stock will be returned to inventory.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(context.tr('btn_cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              final ok = await context.read<ReservationController>().cancelReservation(r.id.toString());
+              if (context.mounted) {
+                if (ok) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(context.isHindi ? '✓ ऑर्डर सफलतापूर्वक रद्द किया गया' : '✓ Order cancelled successfully'),
+                      backgroundColor: AppColors.textPrimary,
+                    ),
+                  );
+                } else {
+                  final err = context.read<ReservationController>().errorMessage ?? (context.isHindi ? 'ऑर्डर रद्द नहीं हो सका' : 'Failed to cancel order');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(err), backgroundColor: AppColors.error),
+                  );
+                }
+              }
+            },
+            child: Text(context.isHindi ? 'हाँ, रद्द करें' : 'Yes, Cancel', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final resCtrl = context.watch<ReservationController>();
@@ -1026,7 +1071,7 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      onPressed: () => resCtrl.cancelReservation(r.id.toString()),
+                      onPressed: () => _confirmCancelReservation(context, r),
                       child: Text(context.isHindi ? 'रद्द करें' : 'Cancel', style: const TextStyle(fontSize: 11, color: AppColors.error)),
                     ),
                     const SizedBox(width: 8),
