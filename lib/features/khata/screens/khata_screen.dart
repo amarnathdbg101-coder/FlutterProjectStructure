@@ -1737,12 +1737,69 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
           ),
           actions: [
-            if (khata.overdueCount > 0)
-              IconButton(
-                icon: const Icon(Icons.campaign_rounded, color: Color(0xFF25D366)),
-                tooltip: 'Broadcast WhatsApp Reminders to Overdue Debtors',
-                onPressed: () => khata.broadcastWhatsAppOverdueReminders(context),
-              ),
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded, color: isDark ? Colors.white : AppColors.textPrimary, size: 22),
+              tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 4,
+              onSelected: (val) async {
+                switch (val) {
+                  case 'broadcast':
+                    khata.broadcastWhatsAppOverdueReminders(context);
+                    break;
+                  case 'refresh':
+                    await khata.loadCustomers();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.isHindi ? '✓ खाता डेटा रीफ्रेश हुआ' : '✓ Khata ledger refreshed'),
+                          duration: const Duration(seconds: 1),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    }
+                    break;
+                  case 'add':
+                    _showAddTransactionModal(context, isCredit: true);
+                    break;
+                }
+              },
+              itemBuilder: (ctx) => [
+                if (khata.overdueCount > 0)
+                  PopupMenuItem(
+                    value: 'broadcast',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.campaign_rounded, color: Color(0xFF25D366), size: 18),
+                        const SizedBox(width: 10),
+                        Text(ctx.isHindi ? 'ओवरड्यू व्हाट्सएप तगादा भेजें' : 'Send WhatsApp Reminders'),
+                      ],
+                    ),
+                  ),
+                PopupMenuItem(
+                  value: 'refresh',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh_rounded, color: isDark ? Colors.white : AppColors.textPrimary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'खाता रीफ्रेश करें' : 'Refresh Khata Ledger'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'add',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_add_outlined, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'नया खाता ग्राहक जोड़ें' : 'Add New Customer'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
@@ -1930,6 +1987,8 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                 if (isMultiColumn) {
                                   final crossAxisCount = width > 1050 ? 3 : 2;
                                   return GridView.builder(
+                                    cacheExtent: 600,
+                                    physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                       crossAxisCount: crossAxisCount,
@@ -1946,6 +2005,8 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                 }
 
                                 return ListView.separated(
+                                  cacheExtent: 500,
+                                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                   itemCount: khata.filteredCustomers.length,
                                   separatorBuilder: (_, _) => const SizedBox(height: 10),

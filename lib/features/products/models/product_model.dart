@@ -641,6 +641,45 @@ class ProductModel {
   bool get hasDiscount => comparePrice > price;
   double get discountPct => (comparePrice > price && comparePrice > 0) ? ((comparePrice - price) / comparePrice) * 100 : 0.0;
 
+  /// Batch Number from specs/attributes if present
+  String get batchNo => (attributes['batch_no'] ?? attributes['batch'] ?? attributes['Batch'] ?? '').toString().trim();
+
+  /// Expiry Date parsed as DateTime
+  DateTime? get expiryDate {
+    final raw = attributes['expiry_date'] ?? attributes['expiry'] ?? attributes['exp_date'] ?? attributes['Expiry'];
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    final str = raw.toString().trim();
+    if (str.isEmpty) return null;
+    try {
+      return DateTime.tryParse(str);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Days remaining until expiration (negative if already expired)
+  int? get daysUntilExpiry {
+    final exp = expiryDate;
+    if (exp == null) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final expDay = DateTime(exp.year, exp.month, exp.day);
+    return expDay.difference(today).inDays;
+  }
+
+  /// Whether product has passed its expiry date
+  bool get isExpired {
+    final days = daysUntilExpiry;
+    return days != null && days < 0;
+  }
+
+  /// Whether product is expiring soon (within 30 days)
+  bool get isNearExpiry {
+    final days = daysUntilExpiry;
+    return days != null && days >= 0 && days <= 30;
+  }
+
   /// Public specifications filtered for safe customer storefront viewing
   List<MapEntry<String, String>> get customerSpecifications =>
       CustomerPrivacyShield.extractPublicSpecifications(this);

@@ -632,7 +632,15 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(context.isHindi ? 'ग्राहक का नाम' : 'Customer Name', style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted)),
-                        Text(r.customerName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            r.customerName,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -640,7 +648,15 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(context.isHindi ? 'ग्राहक का मोबाइल' : 'Customer Mobile', style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted)),
-                        Text(r.customerMobile.isNotEmpty ? r.customerMobile : (context.isHindi ? 'उपलब्ध नहीं' : 'Not Provided'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            r.customerMobile.isNotEmpty ? r.customerMobile : (context.isHindi ? 'उपलब्ध नहीं' : 'Not Provided'),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
                       ],
                     ),
                     const Divider(height: 18),

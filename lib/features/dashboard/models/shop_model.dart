@@ -50,6 +50,7 @@ class ShopModel {
   });
 
   String? get bannerUrl => banners.isNotEmpty ? banners.first : logoUrl;
+  String get gstin => '';
 
   bool get hasGpsCoordinates => latitude != null && longitude != null && latitude != 0 && longitude != 0;
 

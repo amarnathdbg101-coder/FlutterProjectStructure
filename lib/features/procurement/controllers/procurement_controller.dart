@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:printing/printing.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
@@ -160,22 +161,17 @@ class ProcurementController extends BaseController {
       if (res.success && res.data != null) {
         final b64 = res.data!['pdf_base64']?.toString();
         if (b64 != null && b64.isNotEmpty) {
-          final uri = Uri.parse('data:application/pdf;base64,$b64');
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-            return;
-          }
-        }
-        final pdfUrl = res.data!['pdf_url']?.toString() ?? res.data!['url']?.toString();
-        if (pdfUrl != null && pdfUrl.isNotEmpty) {
-          final uri = Uri.parse(pdfUrl);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-            return;
-          }
+          final bytes = base64Decode(b64);
+          await Printing.layoutPdf(
+            onLayout: (format) async => bytes,
+            name: '${shopName}_Mandi_Procurement_Sheet.pdf',
+          );
+          return;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Procurement] Backend PDF generation failed: $e');
+    }
 
     // Clean HTML Print-Ready Fallback
     final dateStr = '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}';
@@ -244,9 +240,20 @@ class ProcurementController extends BaseController {
     </html>
     ''';
 
-    final uri = Uri.dataFromString(htmlContent, mimeType: 'text/html', encoding: Encoding.getByName('utf-8'));
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    try {
+      final pdfBytes = await Printing.convertHtml(
+        html: htmlContent,
+      );
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdfBytes,
+        name: '${shopName}_Mandi_Procurement_Sheet.pdf',
+      );
+    } catch (err) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to preview Mandi sheet: $err')),
+        );
+      }
     }
   }
 }

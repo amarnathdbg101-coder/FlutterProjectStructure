@@ -79,6 +79,7 @@ class PosRepository {
     required double discountAmount,
     required String paymentMethod,
     PosSplitPayment? splitPayments,
+    String? idempotencyKey,
   }) async {
     try {
       final payload = {
@@ -90,7 +91,16 @@ class PosRepository {
         if (splitPayments != null) 'split_payments': splitPayments.toJson(),
       };
 
-      final res = await _dio.post(ApiConstants.posSale, data: payload);
+      final key = idempotencyKey ?? 'pos_${DateTime.now().microsecondsSinceEpoch}';
+      final res = await _dio.post(
+        ApiConstants.posSale,
+        data: payload,
+        options: Options(
+          headers: {
+            'X-Idempotency-Key': key,
+          },
+        ),
+      );
       final raw = res.data;
       Map<String, dynamic> billData = {};
       if (raw is Map<String, dynamic>) {
@@ -336,7 +346,7 @@ class PosRepository {
   Future<ApiResponse<Map<String, dynamic>>> processPosReturn({
     required String billNumber,
     required List<Map<String, dynamic>> items,
-    required double refundAmount,
+    String refundMode = 'cash',
     String reason = '',
   }) async {
     try {
@@ -345,7 +355,7 @@ class PosRepository {
         data: {
           'bill_number': billNumber.trim(),
           'items': items,
-          'refund_amount': refundAmount,
+          'refund_mode': refundMode,
           'reason': reason.trim(),
         },
       );

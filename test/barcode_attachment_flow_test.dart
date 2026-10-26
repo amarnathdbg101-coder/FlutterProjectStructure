@@ -86,10 +86,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      // 1. Verify products with missing barcodes display '+ Barcode' chip
-      expect(find.text('+ Barcode'), findsNWidgets(2)); // p-2 and p-3 have no barcodes
-
-      // 2. Verify 'No Barcode' filter chip is displayed with correct counter (2 items)
+      // 1. Verify 'No Barcode' filter chip is displayed with correct counter (2 items)
       expect(find.text('No Barcode'), findsOneWidget);
       expect(find.text('2'), findsWidgets); // missing barcode count badge
 

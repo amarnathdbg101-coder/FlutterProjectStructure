@@ -18,8 +18,11 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../controllers/category_controller.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
+import '../widgets/add_category_dialog.dart';
+import '../widgets/manage_categories_sheet.dart';
 import '../../../core/widgets/price_checker_dialog.dart';
 import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../widgets/batch_barcode_pairing_dialog.dart';
@@ -152,6 +155,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
   bool _showOnlyPriceHidden = false;
   bool _showOnlyDiscounted = false;
   bool _showOnlyMissingBarcode = false;
+  bool _showOnlyNearExpiry = false;
 
   // 120 FPS Buttery-Smooth Scrolling & Filtering Cache
   List<ProductModel>? _cachedSourceProducts;
@@ -162,6 +166,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
   bool _lastShowOnlyPriceHidden = false;
   bool _lastShowOnlyDiscounted = false;
   bool _lastShowOnlyMissingBarcode = false;
+  bool _lastShowOnlyNearExpiry = false;
 
   List<ProductModel> _cachedDisplayProducts = [];
   List<String> _cachedSortedCategories = [];
@@ -169,6 +174,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
   int _cachedHiddenPriceCount = 0;
   int _cachedDiscountedCount = 0;
   int _cachedMissingBarcodeCount = 0;
+  int _cachedNearExpiryCount = 0;
 
   @override
   void initState() {
@@ -215,6 +221,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
       _showOnlyPriceHidden = false;
       _showOnlyDiscounted = false;
       _showOnlyMissingBarcode = false;
+      _showOnlyNearExpiry = false;
       _selectedCategory = 'All';
       _sortOption = InventorySortOption.newest;
     });
@@ -229,7 +236,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         _lastShowOnlyLowStock == _showOnlyLowStock &&
         _lastShowOnlyPriceHidden == _showOnlyPriceHidden &&
         _lastShowOnlyDiscounted == _showOnlyDiscounted &&
-        _lastShowOnlyMissingBarcode == _showOnlyMissingBarcode) {
+        _lastShowOnlyMissingBarcode == _showOnlyMissingBarcode &&
+        _lastShowOnlyNearExpiry == _showOnlyNearExpiry) {
       return; // 0ms cache hit - zero CPU cycles during scrolling
     }
 
@@ -241,6 +249,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     _lastShowOnlyPriceHidden = _showOnlyPriceHidden;
     _lastShowOnlyDiscounted = _showOnlyDiscounted;
     _lastShowOnlyMissingBarcode = _showOnlyMissingBarcode;
+    _lastShowOnlyNearExpiry = _showOnlyNearExpiry;
 
     // 1. Dynamic categories & counts
     final availableCategories = <String>{};
@@ -248,6 +257,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     int hiddenPrice = 0;
     int discounted = 0;
     int missingBarcode = 0;
+    int nearExpiry = 0;
 
     for (final p in allProducts) {
       final cat = formatCategoryName(p.category);
@@ -266,6 +276,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
       if (p.barcode.trim().isEmpty) {
         missingBarcode++;
       }
+      if (p.isNearExpiry || p.isExpired) {
+        nearExpiry++;
+      }
     }
 
     _cachedSortedCategories = availableCategories.toList()..sort();
@@ -273,6 +286,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     _cachedHiddenPriceCount = hiddenPrice;
     _cachedDiscountedCount = discounted;
     _cachedMissingBarcodeCount = missingBarcode;
+    _cachedNearExpiryCount = nearExpiry;
 
     // 2. Tokenized search matching
     final trimmedQuery = _searchQuery.trim().toLowerCase();
@@ -291,6 +305,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         return false;
       }
       if (_showOnlyMissingBarcode && p.barcode.trim().isNotEmpty) {
+        return false;
+      }
+      if (_showOnlyNearExpiry && !(p.isNearExpiry || p.isExpired)) {
         return false;
       }
       if (_selectedCategory != 'All') {
@@ -915,8 +932,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
       });
     }
 
-    // Expanded Canonical Retail Business Categories List
-    final categoriesList = List<String>.from(CategoryRegistry.canonicalCategories);
+    // Fetch live categories from CategoryController (Custom + System Defaults)
+    final catCtrl = context.read<CategoryController>();
+    final dynamicCategories = catCtrl.categoryNames;
+    final categoriesList = List<String>.from(
+        dynamicCategories.isNotEmpty ? dynamicCategories : CategoryRegistry.canonicalCategories);
 
     if (categoryCtrl.text.isNotEmpty && !categoriesList.contains(categoryCtrl.text)) {
       categoriesList.insert(0, categoryCtrl.text);
@@ -1469,15 +1489,55 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       initialValue: categoriesList.contains(categoryCtrl.text)
                           ? categoryCtrl.text
                           : (categoriesList.contains('General Store') ? 'General Store' : categoriesList.first),
-                      decoration: InputDecoration(labelText: '${sheetCtx.tr('inv_field_category')} *'),
-                      items: categoriesList
-                          .map((c) => DropdownMenuItem(
-                                value: c,
-                                child: Text(c, overflow: TextOverflow.ellipsis),
-                              ))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) {
+                      decoration: InputDecoration(
+                        labelText: '${sheetCtx.tr('inv_field_category')} *',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 22),
+                          tooltip: 'Nayi Custom Category Banayein',
+                          onPressed: () async {
+                            final newCat = await AddCategoryDialog.show(sheetCtx);
+                            if (newCat != null) {
+                              setModalState(() {
+                                if (!categoriesList.contains(newCat.name)) {
+                                  categoriesList.insert(0, newCat.name);
+                                }
+                                categoryCtrl.text = newCat.name;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      items: [
+                        ...categoriesList.map((c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(c, overflow: TextOverflow.ellipsis),
+                            )),
+                        DropdownMenuItem(
+                          value: '__ADD_NEW_CATEGORY__',
+                          child: Row(
+                            children: const [
+                              Icon(Icons.add_circle_outline, color: AppColors.primary, size: 18),
+                              SizedBox(width: 8),
+                              Text(
+                                '+ Nayi Category Banayein...',
+                                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) async {
+                        if (val == '__ADD_NEW_CATEGORY__') {
+                          final newCat = await AddCategoryDialog.show(sheetCtx);
+                          if (newCat != null) {
+                            setModalState(() {
+                              if (!categoriesList.contains(newCat.name)) {
+                                categoriesList.insert(0, newCat.name);
+                              }
+                              categoryCtrl.text = newCat.name;
+                            });
+                          }
+                        } else if (val != null) {
                           setModalState(() {
                             categoryCtrl.text = val;
                           });
@@ -2972,6 +3032,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     final hiddenPriceCount = _cachedHiddenPriceCount;
     final discountedCount = _cachedDiscountedCount;
     final missingBarcodeCount = _cachedMissingBarcodeCount;
+    final nearExpiryCount = _cachedNearExpiryCount;
     final displayProducts = _cachedDisplayProducts;
 
     return MerchantShell(
@@ -3004,32 +3065,80 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               tooltip: context.tr('price_checker_title'),
               onPressed: () => PriceCheckerDialog.show(context),
             ),
-            IconButton(
-              icon: const Icon(Icons.file_upload_outlined),
-              tooltip: context.tr('bulk_import_open_dialog_btn'),
-              onPressed: () => _showBulkImportDialog(context),
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-              tooltip: 'Refresh Product Catalog',
-              onPressed: () async {
-                final prod = context.read<ProductController>();
-                await prod.loadProducts(forceRefresh: true);
-                if (context.mounted) {
-                  if (prod.hasError) {
-                    CustomSnackbar.showError(
-                      context,
-                      prod.errorMessage ?? (context.isHindi ? 'कैटलॉग रिफ्रेश करने में विफल' : 'Failed to refresh product catalog'),
-                    );
-                  } else {
-                    CustomSnackbar.showSuccess(
-                      context,
-                      context.isHindi ? '✓ उत्पाद कैटलॉग रिफ्रेश हो गया' : '✓ Product Catalog Refreshed',
-                      duration: const Duration(seconds: 1),
-                    );
-                  }
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
+              tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 4,
+              onSelected: (val) async {
+                switch (val) {
+                  case 'import':
+                    _showBulkImportDialog(context);
+                    break;
+                  case 'batch_scan':
+                    final unmapped = displayProducts.where((p) => p.barcode.trim().isEmpty).toList();
+                    if (unmapped.isNotEmpty) {
+                      _launchBatchBarcodePairing(context, unmapped);
+                    } else {
+                      CustomSnackbar.showSuccess(
+                        context,
+                        context.isHindi ? 'सभी उत्पादों में बारकोड मौजूद है' : 'All products have barcodes assigned',
+                      );
+                    }
+                    break;
+                  case 'refresh':
+                    final prod = context.read<ProductController>();
+                    await prod.loadProducts(forceRefresh: true);
+                    if (context.mounted) {
+                      if (prod.hasError) {
+                        CustomSnackbar.showError(
+                          context,
+                          prod.errorMessage ?? (context.isHindi ? 'कैटलॉग रिफ्रेश करने में विफल' : 'Failed to refresh product catalog'),
+                        );
+                      } else {
+                        CustomSnackbar.showSuccess(
+                          context,
+                          context.isHindi ? '✓ उत्पाद कैटलॉग रिफ्रेश हो गया' : '✓ Product Catalog Refreshed',
+                          duration: const Duration(seconds: 1),
+                        );
+                      }
+                    }
+                    break;
                 }
               },
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  value: 'import',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.file_upload_outlined, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.tr('bulk_import_open_dialog_btn')),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'batch_scan',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.flash_on_rounded, color: AppColors.warning, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'असेंबली बारकोड पेयरिंग' : 'Batch Barcode Pairing'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'refresh',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh_rounded, color: ctx.colorTextPrimary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'कैटलॉग रिफ्रेश करें' : 'Refresh Catalog'),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(width: 4),
           ],
@@ -3150,6 +3259,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           !_showOnlyPriceHidden &&
                           !_showOnlyDiscounted &&
                           !_showOnlyMissingBarcode &&
+                          !_showOnlyNearExpiry &&
                           _selectedCategory == 'All',
                       onTap: () {
                         setState(() {
@@ -3157,6 +3267,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           _showOnlyPriceHidden = false;
                           _showOnlyDiscounted = false;
                           _showOnlyMissingBarcode = false;
+                          _showOnlyNearExpiry = false;
                           _selectedCategory = 'All';
                         });
                       },
@@ -3173,6 +3284,19 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         });
                       },
                     ),
+                    if (nearExpiryCount > 0)
+                      _buildFilterChip(
+                        context: context,
+                        label: context.isHindi ? 'एक्सपायरी अलर्ट' : 'Near Expiry',
+                        icon: Icons.hourglass_top_rounded,
+                        count: nearExpiryCount,
+                        isSelected: _showOnlyNearExpiry,
+                        onTap: () {
+                          setState(() {
+                            _showOnlyNearExpiry = !_showOnlyNearExpiry;
+                          });
+                        },
+                      ),
                     _buildFilterChip(
                       context: context,
                       label: context.isHindi ? 'हिडन प्राइस' : 'Hidden Price',
@@ -3222,6 +3346,16 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           });
                         },
                       ),
+                    ActionChip(
+                      avatar: const Icon(Icons.tune_rounded, size: 16, color: AppColors.primary),
+                      label: Text(
+                        context.isHindi ? 'कैटेगरी सेटिंग्स' : 'Categories',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                      backgroundColor: AppColors.primary.withOpacity(0.08),
+                      side: BorderSide(color: AppColors.primary.withOpacity(0.2)),
+                      onPressed: () => ManageCategoriesSheet.show(context),
+                    ),
                   ],
                 ),
               ),
@@ -3250,6 +3384,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         _showOnlyPriceHidden ||
                         _showOnlyDiscounted ||
                         _showOnlyMissingBarcode ||
+                        _showOnlyNearExpiry ||
                         _selectedCategory != 'All' ||
                         _sortOption != InventorySortOption.newest)
                       InkWell(
@@ -3425,6 +3560,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     return GridView.builder(
                                       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                                       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                                      cacheExtent: 600,
                                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                         crossAxisCount: crossAxisCount,
@@ -3488,13 +3624,58 @@ class _ProductGridCard extends StatelessWidget {
                 border: Border.all(color: context.colorBorder),
               ),
               clipBehavior: Clip.antiAlias,
-              child: AppProductImage(
-                imageUrl: p.imageUrl,
-                expand: true,
-                fit: BoxFit.cover,
-                borderRadius: BorderRadius.circular(10),
-                fallbackIcon: Icons.inventory_2_outlined,
-                fallbackIconSize: 32,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AppProductImage(
+                    imageUrl: p.imageUrl,
+                    expand: true,
+                    fit: BoxFit.cover,
+                    borderRadius: BorderRadius.circular(10),
+                    fallbackIcon: Icons.inventory_2_outlined,
+                    fallbackIconSize: 32,
+                  ),
+                  if (p.isExpired)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          context.isHindi ? 'एक्सपायर्ड' : 'Expired',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (p.isNearExpiry)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade800,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${p.daysUntilExpiry}d left',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

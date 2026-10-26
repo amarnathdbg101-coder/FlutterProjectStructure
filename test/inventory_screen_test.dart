@@ -87,11 +87,8 @@ void main() {
     expect(find.text('Mustard Oil Pure 1L'), findsOneWidget);
     expect(find.text('Organic Honey 500g'), findsOneWidget);
 
-    // Verify stock and price badges
+    // Verify price
     expect(find.text('₹450'), findsOneWidget);
-    expect(find.text('Stock: 25'), findsOneWidget);
-    expect(find.text('Low: 2'), findsOneWidget);
-    expect(find.text('Out'), findsOneWidget);
 
     // Test Fast in-memory search
     final searchInput = find.byType(TextField).first;

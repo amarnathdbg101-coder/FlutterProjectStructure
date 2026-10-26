@@ -20,6 +20,7 @@ import '../../khata/models/khata_model.dart';
 import '../../products/models/product_model.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
+import '../widgets/day_close_reconciliation_sheet.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -894,17 +895,25 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
             const SizedBox(height: 8),
 
-            // 3. Print Thermal Receipt PDF Button
+            // 3. Print Thermal Receipt Button (58mm / 80mm ESC-POS)
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 42),
               ),
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 17, color: AppColors.primary),
-              label: Text(ctx.isHindi ? 'थर्मल रसीद प्रिंट / सेव करें' : 'Print / Save Thermal Receipt PDF', style: const TextStyle(fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.print_rounded, size: 17, color: AppColors.primary),
+              label: Text(ctx.isHindi ? 'थर्मल रसीद प्रिंट करें (58mm/80mm)' : 'Print Thermal Slip (58mm/80mm)', style: const TextStyle(fontWeight: FontWeight.bold)),
               onPressed: () {
                 final shop = context.read<AuthController>().currentShop;
                 final shopName = shop?.name ?? 'ShopSilo Retail Store';
-                context.read<PosController>().generateThermalReceiptPdf(context, sale, shopName);
+                context.read<PosController>().generateThermalReceiptPdf(
+                  context,
+                  sale,
+                  shopName,
+                  shopAddress: shop?.address ?? '',
+                  shopPhone: shop?.phone ?? '',
+                  shopGstin: shop?.gstin ?? '',
+                  upiId: shop?.upiId ?? '',
+                );
               },
             ),
           ],
@@ -1002,11 +1011,6 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             ),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
-              tooltip: context.isHindi ? 'स्मार्ट पर्ची बिलिंग' : 'Smart Parchi Auto-Cart',
-              onPressed: () => _showParchiParserDialog(context, pos),
-            ),
             if (pos.heldBills.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
@@ -1034,58 +1038,121 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   ),
                 ),
               ),
-            if (pos.cart.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.pause_circle_outline_rounded, color: AppColors.warning, size: 20),
-                tooltip: context.isHindi ? 'बिल पार्क करें' : 'Hold / Park Active Bill',
-                onPressed: () {
-                  final ok = pos.holdCurrentBill();
-                  if (ok && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(context.isHindi ? '✓ बिल पार्क कर दिया गया' : '✓ Active bill parked on hold'),
-                        backgroundColor: AppColors.warning,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                },
-              ),
+            // Primary 1-Tap Action: Camera Barcode Scanner
             IconButton(
-              icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: AppColors.primary),
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 22, color: AppColors.primary),
               tooltip: context.isHindi ? 'कैमरा बारकोड स्कैनर' : 'Camera Barcode Scanner',
               onPressed: () => _openCameraScanner(context, pos),
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
-              tooltip: context.isHindi ? 'कैटलॉग रीफ्रेश करें' : 'Refresh Billing Catalog',
-              onPressed: () async {
-                await context.read<PosController>().loadCatalog();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(context.isHindi ? '✓ पीओएस कैटलॉग रीफ्रेश हुआ' : '✓ POS Billing Catalog Refreshed'),
-                      backgroundColor: AppColors.success,
-                      duration: const Duration(seconds: 1),
-                    ),
-                  );
+            // Clean 3-Dot Overflow Menu for Secondary & Management Actions
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
+              tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 4,
+              onSelected: (val) async {
+                switch (val) {
+                  case 'hold':
+                    final ok = pos.holdCurrentBill();
+                    if (ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.isHindi ? '✓ बिल पार्क कर दिया गया' : '✓ Active bill parked on hold'),
+                          backgroundColor: AppColors.warning,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                    break;
+                  case 'parchi':
+                    _showParchiParserDialog(context, pos);
+                    break;
+                  case 'day_close':
+                    DayCloseReconciliationSheet.show(context);
+                    break;
+                  case 'refresh':
+                    await context.read<PosController>().loadCatalog();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.isHindi ? '✓ पीओएस कैटलॉग रीफ्रेश हुआ' : '✓ POS Billing Catalog Refreshed'),
+                          backgroundColor: AppColors.success,
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                    break;
+                  case 'clear':
+                    pos.clearCart();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.isHindi ? 'बिल साफ़ कर दिया गया' : 'POS Cart Cleared!'),
+                        duration: const Duration(milliseconds: 800),
+                      ),
+                    );
+                    break;
                 }
               },
-            ),
-            if (pos.cart.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.error, size: 20),
-                tooltip: context.isHindi ? 'बिल साफ़ करें' : 'Clear Bill',
-                onPressed: () {
-                  pos.clearCart();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(context.isHindi ? 'बिल साफ़ कर दिया गया' : 'POS Cart Cleared!'),
-                      duration: const Duration(milliseconds: 800),
+              itemBuilder: (ctx) => [
+                if (pos.cart.isNotEmpty)
+                  PopupMenuItem(
+                    value: 'hold',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.pause_circle_outline_rounded, color: AppColors.warning, size: 18),
+                        const SizedBox(width: 10),
+                        Text(ctx.isHindi ? 'चालू बिल पार्क करें (Hold)' : 'Hold / Park Active Bill'),
+                      ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                PopupMenuItem(
+                  value: 'parchi',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'स्मार्ट पर्ची / लिस्ट से बिल' : 'Smart Parchi Auto-Cart'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'day_close',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.point_of_sale_rounded, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'दुकान बंद / गल्ला मिलान' : 'Day Close & Reconciliation'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'refresh',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh_rounded, color: ctx.colorTextPrimary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'कैटलॉग रीफ्रेश करें' : 'Refresh Catalog'),
+                    ],
+                  ),
+                ),
+                if (pos.cart.isNotEmpty) ...[
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'clear',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete_sweep_rounded, color: AppColors.error, size: 18),
+                        const SizedBox(width: 10),
+                        Text(
+                          ctx.isHindi ? 'बिल साफ़ करें' : 'Clear Active Bill',
+                          style: const TextStyle(color: AppColors.error),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(width: 4),
           ],
         ),
@@ -1708,6 +1775,37 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 ),
               ),
             ),
+            if (MediaQuery.of(context).size.width > 650) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => _showAddCustomItemDialog(context),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: context.colorSurfaceSubtle,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: context.colorBorder),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.add_circle_outline_rounded, size: 18, color: AppColors.primary),
+                      const SizedBox(width: 5),
+                      Text(
+                        context.isHindi ? 'खुला सामान' : '+ Custom',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
 
@@ -1988,6 +2086,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           Expanded(
             child: ListView.separated(
               physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+              cacheExtent: 500,
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: pos.cart.length,
               separatorBuilder: (_, _) => Divider(height: 1, color: context.colorBorder),
@@ -2176,6 +2275,143 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                 ),
               ),
             ),
+          ],
+          // 4. Khata Credit Limit & Customer Overdue Guard
+          if (pos.paymentMethod == 'khata' && pos.cart.isNotEmpty) ...[
+            Builder(builder: (ctx) {
+              final khataCustomers = LocalCacheService.getKhataCustomers();
+              final cleanPhone = pos.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+              KhataCustomerModel? matchedCustomer;
+              if (cleanPhone.length >= 10) {
+                final last10 = cleanPhone.substring(cleanPhone.length - 10);
+                for (final c in khataCustomers) {
+                  final cPhone = c.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+                  if (cPhone.endsWith(last10)) {
+                    matchedCustomer = c;
+                    break;
+                  }
+                }
+              }
+
+              if (matchedCustomer == null) {
+                return Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.warning),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          ctx.isHindi
+                              ? 'उधार बिलिंग के लिए नीचे ग्राहक का 10-अंकों का मोबाइल नंबर दर्ज करें'
+                              : 'Enter 10-digit customer mobile number below for credit billing',
+                          style: const TextStyle(fontSize: 11.5, color: AppColors.warning),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final currentBal = matchedCustomer.currentBalance;
+              final creditLimit = matchedCustomer.creditLimit;
+              final newBal = currentBal + pos.grandTotal;
+              final isOverLimit = creditLimit > 0 && newBal > creditLimit;
+              final hasOverdue = matchedCustomer.overdueCount > 0;
+
+              return Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isOverLimit
+                      ? AppColors.error.withValues(alpha: 0.08)
+                      : (hasOverdue ? AppColors.warning.withValues(alpha: 0.08) : AppColors.primary.withValues(alpha: 0.06)),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isOverLimit
+                        ? AppColors.error
+                        : (hasOverdue ? AppColors.warning : AppColors.primary.withValues(alpha: 0.3)),
+                    width: isOverLimit ? 1.5 : 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              isOverLimit
+                                  ? Icons.warning_amber_rounded
+                                  : (hasOverdue ? Icons.schedule_rounded : Icons.account_balance_wallet_outlined),
+                              size: 16,
+                              color: isOverLimit ? AppColors.error : (hasOverdue ? AppColors.warning : AppColors.primary),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              matchedCustomer.customerName.isNotEmpty ? matchedCustomer.customerName : (ctx.isHindi ? 'खाता ग्राहक' : 'Khata Customer'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '${ctx.isHindi ? 'बकाया' : 'Dues'}: ₹${currentBal.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: currentBal > 0 ? AppColors.error : AppColors.success,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          creditLimit > 0 ? '${ctx.isHindi ? 'उधार सीमा' : 'Credit Limit'}: ₹${creditLimit.toStringAsFixed(0)}' : (ctx.isHindi ? 'उधार सीमा: असीमित' : 'Credit Limit: Open'),
+                          style: TextStyle(fontSize: 11, color: ctx.colorTextMuted),
+                        ),
+                        Text(
+                          '${ctx.isHindi ? 'नया बकाया' : 'New Dues'}: ₹${newBal.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: isOverLimit ? AppColors.error : ctx.colorTextPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (isOverLimit) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        ctx.isHindi
+                            ? '⚠️ चेतावनी: यह बिल ग्राहक की तय उधार सीमा (₹${creditLimit.toStringAsFixed(0)}) को पार कर देगा!'
+                            : '⚠️ Warning: This bill exceeds customer\'s credit limit of ₹${creditLimit.toStringAsFixed(0)}!',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.error),
+                      ),
+                    ],
+                    if (hasOverdue && !isOverLimit) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        ctx.isHindi
+                            ? '⏱️ इस ग्राहक के पुराने बिल बकाया हैं।'
+                            : '⏱️ Customer has overdue unpaid bills.',
+                        style: const TextStyle(fontSize: 11, color: AppColors.warning),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
           ],
           if (pos.paymentMethod == 'split' && pos.cart.isNotEmpty) ...[
             const SizedBox(height: 10),

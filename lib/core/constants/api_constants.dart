@@ -52,6 +52,8 @@ class ApiConstants {
 
   // --- 3. Categories & AI Assistants (Both & Shop) ---
   static const String categories = '/categories';
+  static const String shopCategories = '/shops/me/categories';
+  static const String merchantCategories = '/api/v1/merchant/categories';
   static const String aiScanProduct = '/ai/scan-product';
   static const String aiParseParchi = '/ai/parse-parchi';
   static const String aiVoiceBill = '/ai/voice-bill';

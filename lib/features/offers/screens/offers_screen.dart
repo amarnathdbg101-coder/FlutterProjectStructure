@@ -321,9 +321,13 @@ class _OffersScreenState extends State<OffersScreen> {
             children: [
               Icon(Icons.schedule_rounded, size: 14, color: context.colorTextMuted),
               const SizedBox(width: 6),
-              Text(
-                'Valid for ${item.expiresInDays} days • ${item.isActive ? "Live in Storefront" : "Paused"}',
-                style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+              Expanded(
+                child: Text(
+                  'Valid for ${item.expiresInDays} days • ${item.isActive ? "Live in Storefront" : "Paused"}',
+                  style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

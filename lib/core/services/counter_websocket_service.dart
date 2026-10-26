@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../constants/api_constants.dart';
+import '../storage/local_cache_service.dart';
 import '../storage/token_storage.dart';
+import 'event_bus_service.dart';
+import '../../features/products/models/product_model.dart';
 
 /// Real-Time Enterprise Counter WebSocket Service.
 /// Establishes and manages persistent bi-directional connection between Shop Counter
@@ -127,6 +130,40 @@ class CounterWebSocketService {
 
         // 3. Trigger global in-app alert banner
         onNewReservationNotification?.call(payload);
+      } else if (event == 'RESERVATION_STATUS_MUTATED' || event == 'RESERVATION_CANCELLED') {
+        AppEventBus().emit(AppCacheEventType.reservationMutated, payload: payload);
+        _reservationStreamController.add(payload);
+      } else if (event == 'PRODUCT_CREATED' || event == 'PRODUCT_MUTATED') {
+        try {
+          if (payload.isNotEmpty) {
+            final product = ProductModel.fromJson(payload);
+            LocalCacheService.saveSingleProduct(product);
+          }
+        } catch (e) {
+          debugPrint('[WebSocket] Error parsing product payload: $e');
+        }
+        AppEventBus().emit(AppCacheEventType.productsMutated, payload: payload);
+      } else if (event == 'PRODUCT_DELETED') {
+        final prodId = payload['product_id'] ?? payload['id'];
+        if (prodId != null) {
+          LocalCacheService.removeProduct(prodId);
+        }
+        AppEventBus().emit(AppCacheEventType.productsMutated, payload: payload);
+      } else if (event == 'STOCK_CHANGED') {
+        final prodId = payload['product_id'] ?? payload['id'];
+        final stock = payload['stock'];
+        if (prodId != null && stock != null) {
+          final stockInt = int.tryParse(stock.toString()) ?? 0;
+          LocalCacheService.updateProductStock(prodId, stockInt);
+        }
+        AppEventBus().emit(AppCacheEventType.inventoryMutated, payload: payload);
+      } else if (event == 'POS_SALE_COMPLETED' || event == 'POS_RETURN_COMPLETED') {
+        AppEventBus().emit(AppCacheEventType.posSaleCompleted, payload: payload);
+        AppEventBus().emit(AppCacheEventType.inventoryMutated, payload: payload);
+      } else if (event == 'KHATA_MUTATED') {
+        AppEventBus().emit(AppCacheEventType.khataMutated, payload: payload);
+      } else if (event == 'SHOP_STATUS_CHANGED') {
+        AppEventBus().emit(AppCacheEventType.shopProfileUpdated, payload: payload);
       } else if (event == 'POS_PARKED_BILLS_CHANGED' || event == 'POS_PARKED_BILL_DELETED') {
         // Instant Haptic Feedback on remote token update
         try {

@@ -13,6 +13,7 @@ class PosCartItem {
     double? customPrice,
   }) : customPrice = customPrice ?? product.price;
 
+  double get effectivePrice => customPrice;
   double get total => customPrice * quantity;
 
   Map<String, dynamic> toJson() {

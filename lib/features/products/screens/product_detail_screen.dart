@@ -399,6 +399,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               _buildPricingHeroCard(context, p),
                               const SizedBox(height: 14),
                               _buildStockManagementCard(context, p),
+                              const SizedBox(height: 14),
+                              _buildBatchExpiryCard(context, p),
                               if (isProfitVisible) ...[
                                 const SizedBox(height: 14),
                                 _buildMerchantIntelligenceCard(context, p),
@@ -426,6 +428,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       _buildPricingHeroCard(context, p),
                       const SizedBox(height: 14),
                       _buildStockManagementCard(context, p),
+                      const SizedBox(height: 14),
+                      _buildBatchExpiryCard(context, p),
                       if (isProfitVisible) ...[
                         const SizedBox(height: 14),
                         _buildMerchantIntelligenceCard(context, p),
@@ -1225,6 +1229,412 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               fontWeight: FontWeight.bold,
               color: isNegative ? AppColors.error : AppColors.primary,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- 4C. BATCH & EXPIRY TRACKING & CLEARANCE MARKDOWN ---
+  void _applyClearanceDiscount(ProductModel p, double discountPercent) async {
+    final prodCtrl = context.read<ProductController>();
+    final oldPrice = p.price;
+    final newPrice = (oldPrice * (1.0 - (discountPercent / 100.0))).roundToDouble();
+    final comparePrice = p.comparePrice > oldPrice ? p.comparePrice : oldPrice;
+
+    final success = await prodCtrl.editProduct(p.id, {
+      'price': newPrice,
+      'compare_price': comparePrice,
+    });
+
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.isHindi
+                  ? '✓ ${discountPercent.toInt()}% क्लीयरेंस डिस्काउंट लागू! नई कीमत: ₹${newPrice.toStringAsFixed(0)} (MRP: ₹${comparePrice.toStringAsFixed(0)})'
+                  : '✓ Applied ${discountPercent.toInt()}% Clearance Markdown! New Price: ₹${newPrice.toStringAsFixed(0)}',
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(prodCtrl.errorMessage ?? 'Failed to apply clearance markdown'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showEditBatchExpirySheet(BuildContext context, ProductModel p) {
+    final batchController = TextEditingController(text: p.batchNo);
+    DateTime? selectedExpiry = p.expiryDate;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final isHindi = ctx.isHindi;
+          final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+          return Container(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+            decoration: BoxDecoration(
+              color: ctx.colorSurface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isHindi ? 'बैच और एक्सपायरी सेट करें' : 'Batch & Expiry Setup',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: ctx.colorTextPrimary,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.pop(sheetCtx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: batchController,
+                  decoration: InputDecoration(
+                    labelText: isHindi ? 'बैच नंबर (Batch No.)' : 'Batch Number (Optional)',
+                    hintText: 'e.g. BATCH-2026-A',
+                    prefixIcon: const Icon(Icons.qr_code_2_rounded, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: selectedExpiry ?? DateTime.now().add(const Duration(days: 90)),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2035),
+                    );
+                    if (picked != null) {
+                      setSheetState(() => selectedExpiry = picked);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: ctx.colorBorder),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            selectedExpiry != null
+                                ? '${selectedExpiry!.day}/${selectedExpiry!.month}/${selectedExpiry!.year}'
+                                : (isHindi ? 'एक्सपायरी तिथि चुनें (Select Expiry Date)' : 'Select Expiry Date'),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: selectedExpiry != null ? FontWeight.bold : FontWeight.normal,
+                              color: ctx.colorTextPrimary,
+                            ),
+                          ),
+                        ),
+                        if (selectedExpiry != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setSheetState(() => selectedExpiry = null),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () async {
+                    final updatedAttributes = Map<String, dynamic>.from(p.attributes);
+                    final bText = batchController.text.trim();
+                    if (bText.isNotEmpty) {
+                      updatedAttributes['batch_no'] = bText;
+                    } else {
+                      updatedAttributes.remove('batch_no');
+                    }
+                    if (selectedExpiry != null) {
+                      updatedAttributes['expiry_date'] = selectedExpiry!.toIso8601String().split('T').first;
+                    } else {
+                      updatedAttributes.remove('expiry_date');
+                    }
+
+                    Navigator.pop(sheetCtx);
+                    await context.read<ProductController>().editProduct(p.id, {
+                      'attributes': updatedAttributes,
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text(
+                    isHindi ? 'सेव करें (Save)' : 'Save Batch & Expiry',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBatchExpiryCard(BuildContext context, ProductModel p) {
+    final isHindi = context.isHindi;
+    final exp = p.expiryDate;
+    final hasBatch = p.batchNo.isNotEmpty;
+    final hasExpiry = exp != null;
+    final isExp = p.isExpired;
+    final isNearExp = p.isNearExpiry;
+
+    Color badgeBg;
+    Color badgeFg;
+    String statusText;
+    IconData statusIcon;
+
+    if (isExp) {
+      badgeBg = AppColors.error.withValues(alpha: 0.12);
+      badgeFg = AppColors.error;
+      statusText = isHindi ? '⚠️ एक्सपायर्ड (${p.daysUntilExpiry?.abs()} दिन पहले)' : '⚠️ Expired (${p.daysUntilExpiry?.abs()}d ago)';
+      statusIcon = Icons.error_outline_rounded;
+    } else if (isNearExp) {
+      badgeBg = Colors.orange.withValues(alpha: 0.14);
+      badgeFg = Colors.orange.shade900;
+      statusText = isHindi ? '⏳ एक्सपायरी नजदीक (${p.daysUntilExpiry} दिन बाकी)' : '⏳ Expiring Soon (${p.daysUntilExpiry}d left)';
+      statusIcon = Icons.hourglass_top_rounded;
+    } else if (hasExpiry) {
+      badgeBg = AppColors.success.withValues(alpha: 0.12);
+      badgeFg = AppColors.success;
+      statusText = isHindi ? '✓ वैध उत्पाद (${p.daysUntilExpiry} दिन)' : '✓ Fresh / Valid (${p.daysUntilExpiry}d left)';
+      statusIcon = Icons.verified_rounded;
+    } else {
+      badgeBg = context.colorSurfaceSubtle;
+      badgeFg = context.colorTextMuted;
+      statusText = isHindi ? 'एक्सपायरी सेट नहीं है' : 'Expiry Not Set';
+      statusIcon = Icons.info_outline_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: (isExp || isNearExp) ? badgeFg.withValues(alpha: 0.4) : context.colorBorder,
+          width: (isExp || isNearExp) ? 1.5 : 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(statusIcon, size: 16, color: badgeFg),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isHindi ? 'बैच और एक्सपायरी ट्रैकिंग' : 'Batch & Expiry Alert',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: context.colorTextPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => _showEditBatchExpirySheet(context, p),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.edit_outlined, size: 14, color: AppColors.primary),
+                      const SizedBox(width: 3),
+                      Text(
+                        isHindi ? 'बदलें' : 'Edit',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Details Row
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: context.colorSurfaceSubtle,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isHindi ? 'बैच नंबर' : 'Batch No',
+                        style: TextStyle(fontSize: 10.5, color: context.colorTextMuted, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasBatch ? p.batchNo : '—',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: context.colorSurfaceSubtle,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isHindi ? 'एक्सपायरी डेट' : 'Expiry Date',
+                        style: TextStyle(fontSize: 10.5, color: context.colorTextMuted, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasExpiry ? '${exp.day}/${exp.month}/${exp.year}' : '—',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Status Badge Pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: badgeBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(statusIcon, size: 14, color: badgeFg),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: badgeFg,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 1-Tap Clearance Markdown Buttons
+          const SizedBox(height: 12),
+          Text(
+            isHindi ? '⚡ 1-टैप क्लीयरेंस डिस्काउंट (Clearance Sale Markdown)' : '⚡ 1-Tap Clearance Markdown',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: context.colorTextSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _buildClearanceMarkdownBtn(context, p, 10),
+              const SizedBox(width: 6),
+              _buildClearanceMarkdownBtn(context, p, 20),
+              const SizedBox(width: 6),
+              _buildClearanceMarkdownBtn(context, p, 30),
+              const SizedBox(width: 6),
+              _buildClearanceMarkdownBtn(context, p, 50),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClearanceMarkdownBtn(BuildContext context, ProductModel p, int pct) {
+    return Expanded(
+      child: OutlinedButton(
+        onPressed: () => _applyClearanceDiscount(p, pct.toDouble()),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          backgroundColor: AppColors.primary.withValues(alpha: 0.05),
+        ),
+        child: Text(
+          '$pct% Off',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: AppColors.primary,
           ),
         ),
       ),

@@ -10,6 +10,9 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
+import '../widgets/day_close_reconciliation_sheet.dart';
+import '../widgets/pos_bill_return_modal.dart';
+import '../../auth/controllers/auth_controller.dart';
 
 class TodaySalesScreen extends StatefulWidget {
   const TodaySalesScreen({super.key});
@@ -82,7 +85,70 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
             letterSpacing: -0.2,
           ),
         ),
-        actions: const [],
+        actions: [
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
+            tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 4,
+            onSelected: (val) async {
+              switch (val) {
+                case 'day_close':
+                  DayCloseReconciliationSheet.show(context);
+                  break;
+                case 'refresh':
+                  await context.read<PosController>().fetchBackendSales();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.isHindi ? '✓ आज की बिक्री का डेटा रीफ्रेश हुआ' : '✓ Sales data refreshed'),
+                        duration: const Duration(seconds: 1),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
+                  break;
+                case 'pos':
+                  context.go('/merchant/pos');
+                  break;
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'day_close',
+                child: Row(
+                  children: [
+                    const Icon(Icons.point_of_sale_rounded, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 10),
+                    Text(ctx.isHindi ? 'दुकान बंद / गल्ला मिलान' : 'Day Close & Reconciliation'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'refresh',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh_rounded, color: ctx.colorTextPrimary, size: 18),
+                    const SizedBox(width: 10),
+                    Text(ctx.isHindi ? 'बिक्री डेटा रीफ्रेश करें' : 'Refresh Sales Data'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'pos',
+                child: Row(
+                  children: [
+                    const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 10),
+                    Text(ctx.isHindi ? 'बिलिंग काउंटर पर जाएं' : 'Go to POS Terminal'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       child: SafeArea(
         child: RefreshIndicator(
@@ -392,6 +458,8 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                   Text(
                     '${sale.items.length} ${context.isHindi ? 'सामान' : 'items'} • $customerText',
                     style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -417,6 +485,154 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               ],
             ),
           ],
+        ),
+        onTap: () => _showSaleActionsSheet(context, sale),
+      ),
+    );
+  }
+
+  void _showSaleActionsSheet(BuildContext context, SaleModel sale) {
+    final isHindi = context.isHindi;
+    final shop = context.read<AuthController>().currentShop;
+    final shopName = shop?.name ?? 'ShopSilo Retail Store';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: BoxDecoration(
+          color: sheetCtx.colorSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+          top: 14,
+          left: 20,
+          right: 20,
+        ),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(sheetCtx).size.height * 0.8,
+          maxWidth: 580,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: sheetCtx.colorBorder,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${isHindi ? 'बिल' : 'Bill'} #${sale.billNumber ?? "WALK-IN"}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Text(
+                        '${sale.items.length} ${isHindi ? 'वस्तुएं' : 'items'} • ₹${sale.totalAmount.toStringAsFixed(0)}',
+                        style: TextStyle(fontSize: 12, color: sheetCtx.colorTextSecondary),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(sheetCtx),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+
+              // Items summary list
+              ...sale.items.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${item.product.name} (×${item.quantity})',
+                          style: const TextStyle(fontSize: 12.5),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '₹${item.total.toStringAsFixed(0)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const Divider(height: 20),
+
+              // Action Buttons
+              // 1. Print Thermal Receipt
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.print_rounded, size: 18),
+                label: Text(
+                  isHindi ? 'थर्मल रसीद प्रिंट करें (58mm/80mm)' : 'Print Thermal Slip (58mm/80mm)',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  Navigator.pop(sheetCtx);
+                  context.read<PosController>().generateThermalReceiptPdf(
+                    context,
+                    sale,
+                    shopName,
+                    shopAddress: shop?.address ?? '',
+                    shopPhone: shop?.phone ?? '',
+                    shopGstin: shop?.gstin ?? '',
+                    upiId: shop?.upiId ?? '',
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+
+              // 2. Process Bill Return & Restock
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  side: const BorderSide(color: AppColors.warning),
+                ),
+                icon: const Icon(Icons.assignment_return_rounded, size: 18, color: AppColors.warning),
+                label: Text(
+                  isHindi ? 'सामान वापसी / रिफंड दर्ज करें (Return)' : 'Process Return & Restock',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.warning),
+                ),
+                onPressed: () {
+                  Navigator.pop(sheetCtx);
+                  PosBillReturnModal.show(
+                    context,
+                    sale: sale,
+                    onReturnSuccess: () {
+                      context.read<PosController>().fetchBackendSales();
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

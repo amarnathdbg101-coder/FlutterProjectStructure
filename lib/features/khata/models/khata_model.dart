@@ -28,6 +28,11 @@ class KhataCustomerModel {
   bool get isSettled => balance == 0;
   bool get isOverdue => overdueDays > 0 || (promiseDate != null && DateTime.now().isAfter(promiseDate!));
 
+  String get customerName => name;
+  String get customerPhone => mobile;
+  double get currentBalance => balance;
+  int get overdueCount => overdueDays;
+
   double get creditUtilizationPercent {
     if (creditLimit <= 0) return 0.0;
     if (balance <= 0) return 0.0;

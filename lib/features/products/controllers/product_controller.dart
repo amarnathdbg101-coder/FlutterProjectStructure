@@ -49,6 +49,7 @@ class ProductController extends BaseController {
   StreamSubscription<AppCacheEvent>? _posSaleSub;
   StreamSubscription<AppCacheEvent>? _inventorySub;
   StreamSubscription<AppCacheEvent>? _reservationSub;
+  StreamSubscription<AppCacheEvent>? _productsMutatedSub;
   StreamSubscription<AppCacheEvent>? _logoutSub;
 
   ProductController() {
@@ -80,6 +81,11 @@ class ProductController extends BaseController {
       loadProducts(silent: true);
     });
     _inventorySub = AppEventBus().on(AppCacheEventType.inventoryMutated, (_) {
+      _hydrateFromLocalCache();
+      loadProducts(silent: true);
+    });
+    _productsMutatedSub = AppEventBus().on(AppCacheEventType.productsMutated, (_) {
+      _hydrateFromLocalCache();
       loadProducts(silent: true);
     });
     _reservationSub = AppEventBus().on(AppCacheEventType.reservationMutated, (_) {
@@ -95,6 +101,7 @@ class ProductController extends BaseController {
   void dispose() {
     _posSaleSub?.cancel();
     _inventorySub?.cancel();
+    _productsMutatedSub?.cancel();
     _reservationSub?.cancel();
     _logoutSub?.cancel();
     super.dispose();

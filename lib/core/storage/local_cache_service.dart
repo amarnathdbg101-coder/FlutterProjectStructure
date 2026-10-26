@@ -113,6 +113,20 @@ class LocalCacheService {
     }
   }
 
+  /// Optimistically update single product stock in local cache
+  static Future<void> updateProductStock(dynamic productId, int newStock) async {
+    try {
+      final current = getProducts();
+      final index = current.indexWhere((p) => p.id.toString() == productId.toString());
+      if (index >= 0) {
+        current[index] = current[index].copyWith(stock: newStock);
+        await saveProducts(current);
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error updating single product stock cache: $e');
+    }
+  }
+
   // ==========================================
   // 2. STORE DETAILS PERSISTENCE
   // ==========================================

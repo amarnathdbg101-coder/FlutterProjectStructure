@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/network/api_response.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/audio_haptic_service.dart';
 import '../../../core/services/counter_websocket_service.dart';
@@ -15,6 +16,7 @@ import '../../products/models/product_model.dart';
 import '../../products/repositories/product_repository.dart';
 import '../models/pos_model.dart';
 import '../repositories/pos_repository.dart';
+import '../services/thermal_receipt_pdf_service.dart';
 
 class PosController extends BaseController {
   final PosRepository _repo = PosRepository();
@@ -316,15 +318,20 @@ class PosController extends BaseController {
     notifyListeners();
   }
 
-  void addCustomItem({required String name, required double price, int quantity = 1}) {
+  void addCustomItem({
+    required String name,
+    required double price,
+    int quantity = 1,
+    String unit = 'item',
+  }) {
     final cleanName = name.trim().isNotEmpty ? name.trim() : 'Custom Item';
     final customProduct = ProductModel(
       id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
       name: cleanName,
       price: price > 0 ? price : 0.0,
-      stock: 999,
-      unit: 'item',
-      category: 'Services & Others',
+      stock: 9999,
+      unit: unit.trim().isNotEmpty ? unit.trim() : 'item',
+      category: 'General Store',
     );
     _cart.add(PosCartItem(product: customProduct, quantity: quantity, customPrice: price));
     AppAudioHapticFeedback.scanSuccess();
@@ -747,6 +754,7 @@ class PosController extends BaseController {
       );
     }
 
+    final checkoutSessionKey = 'pos_${_currentActiveToken}_${DateTime.now().millisecondsSinceEpoch}';
     final response = await _repo.createSale(
       customerPhone: _customerPhone,
       customerName: _customerName,
@@ -754,6 +762,7 @@ class PosController extends BaseController {
       discountAmount: _discount,
       paymentMethod: _paymentMethod,
       splitPayments: split,
+      idempotencyKey: checkoutSessionKey,
     );
     setLoading(false);
 
@@ -800,11 +809,12 @@ class PosController extends BaseController {
       await LocalCacheService.saveCompletedSale(_lastCompletedSale!);
       _serverSales.insert(0, _lastCompletedSale!);
 
-      // Enqueue to OfflineSyncService for background reconciliation
+      // Enqueue to OfflineSyncService for background reconciliation with preserved idempotency key
       await OfflineSyncService.instance.enqueue(
         action: SyncActionType.posSale,
         endpoint: ApiConstants.posSale,
         method: 'POST',
+        idempotencyKey: checkoutSessionKey,
         payload: {
           'customer_phone': _customerPhone,
           'customer_name': _customerName,
@@ -831,96 +841,79 @@ class PosController extends BaseController {
     }
   }
 
-  /// 🖨️ Generate 58mm / 80mm Printable Thermal Receipt PDF Engine
-  Future<void> generateThermalReceiptPdf(BuildContext context, SaleModel sale, String shopName) async {
-    final PosRepository posRepo = PosRepository();
-    if (sale.billNumber != null && sale.billNumber!.isNotEmpty) {
-      try {
-        final res = await posRepo.getReceiptPdfUrl(sale.billNumber!);
-        if (res.success && res.data != null && res.data!.isNotEmpty) {
-          final uri = Uri.parse(res.data!);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-            return;
-          }
-        }
-      } catch (_) {}
-    }
-
-    // Clean 58mm / 80mm Thermal Receipt HTML Print Engine
-    final dateStr = AppDateTimeUtils.formatDateTime(sale.createdAt, includeYear: true);
-    String htmlContent = '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Thermal Receipt #${sale.billNumber ?? "1001"}</title>
-      <style>
-        body { font-family: 'Courier New', Courier, monospace; width: 280px; margin: 0 auto; padding: 10px; color: #000; }
-        .center { text-align: center; }
-        .bold { font-weight: bold; }
-        .line { border-bottom: 1px dashed #000; margin: 8px 0; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        td { padding: 3px 0; }
-        .right { text-align: right; }
-        .no-print { margin-bottom: 12px; text-align: center; }
-        @media print { .no-print { display: none; } }
-      </style>
-    </head>
-    <body>
-      <div class="no-print">
-        <button onclick="window.print()" style="background:#000;color:#fff;border:none;padding:8px 14px;border-radius:4px;font-weight:bold;cursor:pointer;">🖨️ Print Receipt</button>
-      </div>
-      <div class="center bold" style="font-size: 16px;">$shopName</div>
-      <div class="center" style="font-size: 11px;">RETAIL POS BILL INVOICE</div>
-      <div class="line"></div>
-      <div style="font-size: 11px;">
-        Bill #: ${sale.billNumber ?? "1001"}<br>
-        Date: $dateStr<br>
-        Pay Mode: ${sale.paymentMethod.toUpperCase()}<br>
-        ${sale.customerPhone.isNotEmpty ? "Customer: ${sale.customerPhone}<br>" : ""}
-      </div>
-      <div class="line"></div>
-      <table>
-        <thead>
-          <tr class="bold">
-            <td style="width:50%;">ITEM</td>
-            <td class="center" style="width:20%;">QTY</td>
-            <td class="right" style="width:30%;">PRICE</td>
-          </tr>
-        </thead>
-        <tbody>
-    ''';
-
-    for (final item in sale.items) {
-      htmlContent += '''
-        <tr>
-          <td>${item.product.name}</td>
-          <td class="center">${item.quantity}</td>
-          <td class="right">₹${item.total.toStringAsFixed(0)}</td>
-        </tr>
-      ''';
-    }
-
-    htmlContent += '''
-        </tbody>
-      </table>
-      <div class="line"></div>
-      <table>
-        <tr><td>Subtotal:</td><td class="right">₹${sale.subtotal.toStringAsFixed(2)}</td></tr>
-        ${sale.discountAmount > 0 ? '<tr><td>Discount:</td><td class="right">-₹${sale.discountAmount.toStringAsFixed(2)}</td></tr>' : ''}
-        <tr class="bold" style="font-size: 14px;"><td>TOTAL:</td><td class="right">₹${sale.totalAmount.toStringAsFixed(2)}</td></tr>
-      </table>
-      <div class="line"></div>
-      <div class="center bold" style="font-size: 12px; margin-top: 10px;">THANK YOU! VISIT AGAIN</div>
-    </body>
-    </html>
-    ''';
-
-    final uri = Uri.dataFromString(htmlContent, mimeType: 'text/html', encoding: Encoding.getByName('utf-8'));
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
+  /// 🖨️ Direct Print 58mm / 80mm Vector Thermal Receipt via OS Spooler & Printer Drivers
+  Future<bool> generateThermalReceiptPdf(
+    BuildContext context,
+    SaleModel sale,
+    String shopName, {
+    String shopAddress = '',
+    String shopPhone = '',
+    String shopGstin = '',
+    String upiId = '',
+    ThermalReceiptWidth width = ThermalReceiptWidth.roll80mm,
+  }) async {
+    return await ThermalReceiptPdfService.directPrintReceipt(
+      sale: sale,
+      shopName: shopName,
+      shopAddress: shopAddress,
+      shopPhone: shopPhone,
+      shopGstin: shopGstin,
+      upiId: upiId,
+      width: width,
+    );
   }
 
+  /// 📤 Share Thermal Receipt PDF directly via WhatsApp or System Share
+  Future<void> shareThermalReceiptPdf(
+    SaleModel sale,
+    String shopName, {
+    String shopAddress = '',
+    String shopPhone = '',
+    String shopGstin = '',
+    String upiId = '',
+    ThermalReceiptWidth width = ThermalReceiptWidth.roll80mm,
+  }) async {
+    await ThermalReceiptPdfService.shareReceiptPdf(
+      sale: sale,
+      shopName: shopName,
+      shopAddress: shopAddress,
+      shopPhone: shopPhone,
+      shopGstin: shopGstin,
+      upiId: upiId,
+      width: width,
+    );
+  }
+
+  /// 🔄 Process In-Store POS Bill Return & Restock Inventory
+  Future<ApiResponse<Map<String, dynamic>>> processBillReturn({
+    required String billNumber,
+    required List<Map<String, dynamic>> items,
+    String refundMode = 'cash',
+    String reason = '',
+  }) async {
+    setLoading(true);
+    clearError();
+
+    final response = await _repo.processPosReturn(
+      billNumber: billNumber,
+      items: items,
+      refundMode: refundMode,
+      reason: reason,
+    );
+
+    setLoading(false);
+
+    if (response.success) {
+      AppEventBus().emit(AppCacheEventType.inventoryMutated);
+      AppEventBus().emit(AppCacheEventType.posSaleCompleted);
+      if (refundMode == 'khata') {
+        AppEventBus().emit(AppCacheEventType.khataMutated);
+      }
+      notifyListeners();
+    } else {
+      setError(response.error ?? 'Failed to process return');
+    }
+
+    return response;
+  }
 }

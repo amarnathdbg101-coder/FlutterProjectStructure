@@ -19,6 +19,7 @@ import 'features/khata/controllers/khata_controller.dart';
 import 'features/offers/controllers/offer_controller.dart';
 import 'features/pos/controllers/pos_controller.dart';
 import 'features/procurement/controllers/procurement_controller.dart';
+import 'features/products/controllers/category_controller.dart';
 import 'features/products/controllers/product_controller.dart';
 import 'features/reservations/controllers/reservation_controller.dart';
 
@@ -123,6 +124,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => DashboardController()),
         ChangeNotifierProvider(create: (_) => PosController()),
         ChangeNotifierProvider(create: (_) => ProductController()),
+        ChangeNotifierProvider(create: (_) => CategoryController()),
         ChangeNotifierProvider(create: (_) => KhataController()),
         ChangeNotifierProvider(create: (_) => ExpenseController()),
         ChangeNotifierProvider(create: (_) => OfferController()),

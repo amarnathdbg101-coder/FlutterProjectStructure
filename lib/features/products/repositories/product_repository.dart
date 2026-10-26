@@ -7,6 +7,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
 import '../models/bulk_import_result.dart';
+import '../models/category_model.dart';
 import '../models/product_model.dart';
 
 class ProductRepository {
@@ -483,4 +484,134 @@ class ProductRepository {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
   }
+
+  /// Fetches global + custom categories for this shop
+  Future<ApiResponse<List<CategoryItemModel>>> getShopCategories() async {
+    try {
+      final res = await _dio.get(ApiConstants.shopCategories);
+      dynamic raw = res.data;
+      if (raw is String) {
+        try {
+          raw = jsonDecode(raw);
+        } catch (_) {}
+      }
+
+      List listData = [];
+      if (raw is List) {
+        listData = raw;
+      } else if (raw is Map && raw['data'] is List) {
+        listData = raw['data'] as List;
+      }
+
+      final categories = <CategoryItemModel>[];
+      final catMaps = <Map<String, dynamic>>[];
+      for (final item in listData) {
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          categories.add(CategoryItemModel.fromJson(map));
+          catMaps.add(map);
+        }
+      }
+
+      // Warm CategoryRegistry cache
+      if (catMaps.isNotEmpty) {
+        CategoryRegistry.registerCategories(catMaps);
+      }
+
+      return ApiResponse(success: true, data: categories);
+    } catch (e) {
+      // Fallback to public categories if shop endpoint has any transient issue
+      try {
+        final res = await _dio.get(ApiConstants.categories);
+        dynamic raw = res.data;
+        List listData = (raw is Map && raw['data'] is List) ? raw['data'] : (raw is List ? raw : []);
+        final categories = <CategoryItemModel>[];
+        for (final item in listData) {
+          if (item is Map) {
+            categories.add(CategoryItemModel.fromJson(Map<String, dynamic>.from(item)));
+          }
+        }
+        return ApiResponse(success: true, data: categories);
+      } catch (_) {
+        return ApiResponse.failure(ApiClient.handleError(e));
+      }
+    }
+  }
+
+  /// Creates a custom category tied specifically to the shop
+  Future<ApiResponse<CategoryItemModel>> createShopCategory({
+    required String name,
+    String icon = '📦',
+    String description = '',
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiConstants.shopCategories,
+        data: {
+          'name': name.trim(),
+          'icon': icon.trim().isEmpty ? '📦' : icon.trim(),
+          'description': description.trim(),
+        },
+      );
+
+      dynamic raw = res.data;
+      if (raw is String) {
+        try {
+          raw = jsonDecode(raw);
+        } catch (_) {}
+      }
+
+      Map<String, dynamic> dataMap = {};
+      if (raw is Map) {
+        dataMap = raw['data'] is Map ? Map<String, dynamic>.from(raw['data']) : Map<String, dynamic>.from(raw);
+      }
+
+      final category = CategoryItemModel.fromJson(dataMap);
+      CategoryRegistry.registerCategory(id: category.id, name: category.name, slug: category.slug);
+      return ApiResponse(success: true, data: category);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  /// Updates an existing custom category
+  Future<ApiResponse<CategoryItemModel>> updateShopCategory({
+    required String id,
+    required String name,
+    String icon = '📦',
+    bool? isActive,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'name': name.trim(),
+        'icon': icon.trim().isEmpty ? '📦' : icon.trim(),
+      };
+      if (isActive != null) {
+        payload['is_active'] = isActive;
+      }
+
+      final res = await _dio.put('${ApiConstants.shopCategories}/$id', data: payload);
+      dynamic raw = res.data;
+      Map<String, dynamic> dataMap = {};
+      if (raw is Map) {
+        dataMap = raw['data'] is Map ? Map<String, dynamic>.from(raw['data']) : Map<String, dynamic>.from(raw);
+      }
+      final category = CategoryItemModel.fromJson(dataMap);
+      CategoryRegistry.registerCategory(id: category.id, name: category.name, slug: category.slug);
+      return ApiResponse(success: true, data: category);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  /// Deletes a custom category (fails gracefully if products are still assigned)
+  Future<ApiResponse<bool>> deleteShopCategory(String id) async {
+    try {
+      await _dio.delete('${ApiConstants.shopCategories}/$id');
+      return ApiResponse(success: true, data: true);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
 }
+
