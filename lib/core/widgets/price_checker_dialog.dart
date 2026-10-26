@@ -152,7 +152,7 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
   }
 
   Future<void> _queryDatabaseFallback(String clean) async {
-    if (clean.length < 2) return;
+    if (clean.isEmpty) return;
     setState(() => _isSearchingDatabase = true);
 
     try {
