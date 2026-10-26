@@ -162,6 +162,12 @@ class ApiConstants {
   static const String shopReservationVerify = '/shops/me/reservations/verify';
   static String shopReservationCancel(String id) => '/shops/me/reservations/$id/cancel';
 
+  // --- 15. Shop Procurement & Mandi Purchase Checklists (Shop) ---
+  static const String shopProcurement = '/shops/me/procurement';
+  static String shopProcurementById(String id) => '/shops/me/procurement/$id';
+  static String shopProcurementToggle(String id) => '/shops/me/procurement/toggle/$id';
+  static const String shopProcurementClearCompleted = '/shops/me/procurement/clear-completed';
+
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);

@@ -62,6 +62,11 @@ class AppEventBus {
         LocalCacheService.invalidateReservations();
         LocalCacheService.invalidateDashboardStats();
         break;
+      case AppCacheEventType.categoriesMutated:
+        LocalCacheService.invalidateProducts();
+        break;
+      case AppCacheEventType.procurementMutated:
+        break;
       case AppCacheEventType.shopProfileUpdated:
         LocalCacheService.invalidateDashboardStats();
         LocalCacheService.invalidateProducts();
@@ -100,6 +105,8 @@ enum AppCacheEventType {
   offerMutated,
   reservationMutated,
   shopProfileUpdated,
+  categoriesMutated,
+  procurementMutated,
   authLogout,
 }
 

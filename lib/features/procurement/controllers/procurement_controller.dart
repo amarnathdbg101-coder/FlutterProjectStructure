@@ -9,8 +9,10 @@ import '../../../core/storage/local_cache_service.dart';
 import '../../products/models/product_model.dart';
 import '../../products/repositories/product_repository.dart';
 import '../models/procurement_model.dart';
+import '../repositories/procurement_repository.dart';
 
 class ProcurementController extends BaseController {
+  final ProcurementRepository _repo = ProcurementRepository();
   List<ProcurementItemModel> _items = [];
 
   List<ProcurementItemModel> get items => _items;
@@ -23,9 +25,11 @@ class ProcurementController extends BaseController {
   double get pendingProcurementCost => totalEstimatedBudget - completedPurchasedExpense;
 
   StreamSubscription<AppCacheEvent>? _logoutSub;
+  StreamSubscription<AppCacheEvent>? _procurementSub;
 
   ProcurementController() {
     _hydrateFromLocalCache();
+    fetchBackendProcurement();
     _subscribeToEvents();
   }
 
@@ -34,16 +38,21 @@ class ProcurementController extends BaseController {
       _items = [];
       notifyListeners();
     });
+
+    _procurementSub = AppEventBus().on(AppCacheEventType.procurementMutated, (_) {
+      fetchBackendProcurement(silent: true);
+    });
   }
 
   @override
   void dispose() {
     _logoutSub?.cancel();
+    _procurementSub?.cancel();
     super.dispose();
   }
 
   void refreshList() {
-    _hydrateFromLocalCache();
+    fetchBackendProcurement();
   }
 
   void _hydrateFromLocalCache() {
@@ -55,7 +64,25 @@ class ProcurementController extends BaseController {
     await LocalCacheService.saveProcurementItems(_items);
   }
 
-  void addItem({
+  /// Syncs procurement items with PostgreSQL backend database
+  Future<void> fetchBackendProcurement({bool silent = false}) async {
+    if (!silent && _items.isEmpty) setLoading(true);
+    try {
+      final res = await _repo.listProcurementItems();
+      if (res.success && res.data != null) {
+        _items = res.data!;
+        await _persistCache();
+        clearError();
+      }
+    } catch (e) {
+      debugPrint('[Procurement] Backend sync failed, using offline cache: $e');
+    } finally {
+      if (!silent) setLoading(false);
+      notifyListeners();
+    }
+  }
+
+  Future<void> addItem({
     required String name,
     required String qty,
     String category = 'General Store',
@@ -64,9 +91,10 @@ class ProcurementController extends BaseController {
     String dealerName = '',
     String dealerPhone = '',
     String notes = '',
-  }) {
+  }) async {
+    final tempId = 'pr_${DateTime.now().millisecondsSinceEpoch}';
     final newItem = ProcurementItemModel(
-      id: 'pr_${DateTime.now().millisecondsSinceEpoch}',
+      id: tempId,
       name: name.trim(),
       category: category,
       qty: qty.trim().isEmpty ? '1' : qty.trim(),
@@ -76,56 +104,111 @@ class ProcurementController extends BaseController {
       dealerPhone: dealerPhone.trim(),
       notes: notes.trim(),
     );
-    _items.insert(0, newItem);
-    _persistCache();
-    notifyListeners();
-  }
 
-  void toggleItem(String id) {
-    final idx = _items.indexWhere((i) => i.id == id);
-    if (idx != -1) {
-      _items[idx].isCompleted = !_items[idx].isCompleted;
-      _persistCache();
-      notifyListeners();
+    // 0ms Optimistic UI update
+    _items.insert(0, newItem);
+    await _persistCache();
+    notifyListeners();
+
+    // Persist to PostgreSQL backend in background
+    try {
+      final res = await _repo.createProcurementItem(
+        name: name,
+        qty: qty,
+        category: category,
+        estimatedPrice: estimatedPrice,
+        actualPrice: actualPrice,
+        dealerName: dealerName,
+        dealerPhone: dealerPhone,
+        notes: notes,
+      );
+      if (res.success && res.data != null) {
+        final idx = _items.indexWhere((i) => i.id == tempId);
+        if (idx != -1) {
+          _items[idx] = res.data!;
+          await _persistCache();
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('[Procurement] Cloud save failed, saved locally: $e');
     }
   }
 
-  void removeItem(String id) {
+  Future<void> toggleItem(String id) async {
+    final idx = _items.indexWhere((i) => i.id == id);
+    if (idx != -1) {
+      _items[idx].isCompleted = !_items[idx].isCompleted;
+      await _persistCache();
+      notifyListeners();
+
+      // Cloud sync
+      try {
+        await _repo.toggleProcurementItem(id);
+      } catch (e) {
+        debugPrint('[Procurement] Cloud toggle failed, saved locally: $e');
+      }
+    }
+  }
+
+  Future<void> removeItem(String id) async {
     _items.removeWhere((i) => i.id == id);
-    _persistCache();
+    await _persistCache();
     notifyListeners();
+
+    // Cloud sync
+    try {
+      await _repo.deleteProcurementItem(id);
+    } catch (e) {
+      debugPrint('[Procurement] Cloud delete failed: $e');
+    }
   }
 
-  void clearAllCompleted() {
+  Future<void> clearAllCompleted() async {
     _items.removeWhere((i) => i.isCompleted);
-    _persistCache();
+    await _persistCache();
     notifyListeners();
+
+    // Cloud sync
+    try {
+      await _repo.clearCompleted();
+    } catch (e) {
+      debugPrint('[Procurement] Cloud clear completed failed: $e');
+    }
   }
 
-  /// Dynamically imports REAL low-stock products from inventory (NO hardcoded data!)
-  void importLowStockProducts(List<ProductModel> lowStockProducts) {
+  /// Dynamically imports REAL low-stock products from inventory with cloud backup
+  Future<void> importLowStockProducts(List<ProductModel> lowStockProducts) async {
     int importedCount = 0;
     for (var prod in lowStockProducts) {
       if (!_items.any((i) => i.name.toLowerCase() == prod.name.toLowerCase())) {
         final reorderQty = '${prod.lowStockThreshold * 2} ${prod.unit}s';
         final estRate = prod.costPrice > 0 ? prod.costPrice : prod.price;
 
-        _items.insert(
-          0,
-          ProcurementItemModel(
-            id: 'pr_${DateTime.now().millisecondsSinceEpoch}_${prod.id}',
-            name: prod.name,
-            category: prod.category,
-            qty: reorderQty,
-            estimatedPrice: estRate,
-            notes: 'Auto-imported from Low Stock Alert',
-          ),
+        final item = ProcurementItemModel(
+          id: 'pr_${DateTime.now().millisecondsSinceEpoch}_${prod.id}',
+          name: prod.name,
+          category: prod.category,
+          qty: reorderQty,
+          estimatedPrice: estRate,
+          notes: 'Auto-imported from Low Stock Alert',
         );
+
+        _items.insert(0, item);
         importedCount++;
+
+        // Async cloud persist
+        _repo.createProcurementItem(
+          name: prod.name,
+          qty: reorderQty,
+          category: prod.category,
+          estimatedPrice: estRate,
+          notes: 'Auto-imported from Low Stock Alert',
+        );
       }
     }
     if (importedCount > 0) {
-      _persistCache();
+      await _persistCache();
       notifyListeners();
     }
   }

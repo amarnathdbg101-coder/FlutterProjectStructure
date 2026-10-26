@@ -164,6 +164,10 @@ class CounterWebSocketService {
         AppEventBus().emit(AppCacheEventType.khataMutated, payload: payload);
       } else if (event == 'SHOP_STATUS_CHANGED') {
         AppEventBus().emit(AppCacheEventType.shopProfileUpdated, payload: payload);
+      } else if (event == 'CATEGORY_MUTATED' || event == 'CATEGORY_DELETED') {
+        AppEventBus().emit(AppCacheEventType.categoriesMutated, payload: payload);
+      } else if (event == 'PROCUREMENT_MUTATED') {
+        AppEventBus().emit(AppCacheEventType.procurementMutated, payload: payload);
       } else if (event == 'POS_PARKED_BILLS_CHANGED' || event == 'POS_PARKED_BILL_DELETED') {
         // Instant Haptic Feedback on remote token update
         try {

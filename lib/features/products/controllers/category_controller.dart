@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/network/base_controller.dart';
+import '../../../core/services/event_bus_service.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../models/category_model.dart';
 import '../repositories/product_repository.dart';
@@ -21,8 +23,19 @@ class CategoryController extends BaseController {
     return names;
   }
 
+  StreamSubscription<AppCacheEvent>? _categorySub;
+
   CategoryController() {
     loadCategories(silent: true);
+    _categorySub = AppEventBus().on(AppCacheEventType.categoriesMutated, (_) {
+      loadCategories(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _categorySub?.cancel();
+    super.dispose();
   }
 
   /// Fetches global defaults and this shop's custom categories
