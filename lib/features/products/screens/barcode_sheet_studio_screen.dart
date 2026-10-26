@@ -45,13 +45,13 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _shopNameController = TextEditingController();
 
-  BarcodeLabelFormat _selectedFormat = BarcodeLabelFormat.a4Sheet65; // Default micro-labels for 1-2 items
+  BarcodeLabelFormat _selectedFormat = BarcodeLabelFormat.a4Sheet84; // Default sleek rectangles (84/page, no wasted space)
   final List<ProductModel> _queue = [];
   final Map<String, int> _quantities = {};
 
   bool _showShopName = true;
-  bool _showPrice = true;
-  bool _showPkd = true;
+  bool _showPrice = false; // Bargaining protection: keep price off sticker by default
+  bool _showPkd = false;
   bool _isProcessing = false;
   int _activePreviewPage = 1;
   String _searchFilter = '';
@@ -583,6 +583,42 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // BARGAINING SAFETY BANNER (Retail negotiation protection)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.shade400, width: 1),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.shield_rounded, color: Colors.amber, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isHindi ? '🛡️ बारगेनिंग सेफ लेआउट (मूल्य छुपा हुआ)' : '🛡️ Bargaining-Safe Layout (Price Hidden)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.brown),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isHindi
+                            ? 'स्टीकर पर मूल्य (Price) नहीं छापा जाता ताकि ग्राहक मोलभाव में न उलझें। काउंटर पर स्कैनर से स्कैन करते ही स्क्रीन पर तुरंत सही दाम दिख जाएगा।'
+                            : 'Price is hidden from sticker labels to prevent customer bargaining friction. Scan at counter to instantly ring up the correct selling price.',
+                        style: TextStyle(fontSize: 10.5, color: Colors.brown.shade800),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // 1. Format Selection Header
           Text(
             isHindi ? '1. स्टीकर शीट फॉर्मेट चुनें' : '1. Select Sticker Sheet Format',
@@ -593,8 +629,14 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
           // Format Cards
           _buildFormatOptionCard(
             context,
+            format: BarcodeLabelFormat.a4Sheet84,
+            badge: isHindi ? '⭐ 84 रेक्टैंगल (मैक्सिमम फिट)' : '⭐ 84 Rectangles (Max Density)',
+          ),
+          const SizedBox(height: 6),
+          _buildFormatOptionCard(
+            context,
             format: BarcodeLabelFormat.a4Sheet65,
-            badge: isHindi ? '⭐ छोटे 1-2 सामान के लिए' : '⭐ Best for 1-2 small items',
+            badge: isHindi ? 'छोटे 1-2 सामान के लिए' : 'Best for 1-2 small items',
           ),
           const SizedBox(height: 6),
           _buildFormatOptionCard(
@@ -933,17 +975,18 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.clip,
                       ),
-                      Text(
-                        '₹${item.sellingPrice.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 5,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primary,
+                      if (_showPrice && item.showPrice)
+                        Text(
+                          '₹${item.sellingPrice.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 5,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.primary,
+                          ),
                         ),
-                      ),
                       Container(
                         margin: const EdgeInsets.only(top: 1),
-                        height: 4,
+                        height: (_showPrice && item.showPrice) ? 4 : 7,
                         color: Colors.black87,
                       ),
                     ],

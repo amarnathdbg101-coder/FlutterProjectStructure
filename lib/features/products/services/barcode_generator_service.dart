@@ -7,6 +7,9 @@ import '../models/product_model.dart';
 
 /// Supported Barcode Sticker Formats for Indian Retailers
 enum BarcodeLabelFormat {
+  /// Sleek Rectangular Stickers (Max capacity, zero wasted space): 4 cols x 21 rows = 84 labels (~48.5mm x 12.5mm).
+  a4Sheet84,
+
   /// Micro Stickers for small items, packets, spices, cosmetics: 5 cols x 13 rows = 65 labels (~38mm x 21mm).
   a4Sheet65,
 
@@ -26,6 +29,8 @@ enum BarcodeLabelFormat {
 extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
   String get title {
     switch (this) {
+      case BarcodeLabelFormat.a4Sheet84:
+        return 'A4 • 84 Sleek Rectangles (4x21)';
       case BarcodeLabelFormat.a4Sheet65:
         return 'A4 • 65 Micro Labels (5x13)';
       case BarcodeLabelFormat.a4Sheet40:
@@ -41,6 +46,8 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
 
   String get subtitleEn {
     switch (this) {
+      case BarcodeLabelFormat.a4Sheet84:
+        return 'Max density sleek horizontal rectangles (48.5 x 12.5 mm, no waste)';
       case BarcodeLabelFormat.a4Sheet65:
         return 'Small items, pouches, spices, cosmetics (38 x 21 mm)';
       case BarcodeLabelFormat.a4Sheet40:
@@ -56,6 +63,8 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
 
   String get subtitleHi {
     switch (this) {
+      case BarcodeLabelFormat.a4Sheet84:
+        return 'अधिकतम स्टीकर स्लीक रेक्टेंगल (48.5x12.5मिमी, ज़ीरो वेस्ट)';
       case BarcodeLabelFormat.a4Sheet65:
         return 'छोटे सामान, मसाले, बिस्कुट पैकेट के लिए (38x21मिमी)';
       case BarcodeLabelFormat.a4Sheet40:
@@ -71,6 +80,8 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
 
   int get labelsPerPage {
     switch (this) {
+      case BarcodeLabelFormat.a4Sheet84:
+        return 84;
       case BarcodeLabelFormat.a4Sheet65:
         return 65;
       case BarcodeLabelFormat.a4Sheet40:
@@ -84,12 +95,15 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
   }
 
   bool get isA4Sheet =>
+      this == BarcodeLabelFormat.a4Sheet84 ||
       this == BarcodeLabelFormat.a4Sheet65 ||
       this == BarcodeLabelFormat.a4Sheet40 ||
       this == BarcodeLabelFormat.a4Sheet24;
 
   int get columns {
     switch (this) {
+      case BarcodeLabelFormat.a4Sheet84:
+        return 4;
       case BarcodeLabelFormat.a4Sheet65:
         return 5;
       case BarcodeLabelFormat.a4Sheet40:
@@ -103,6 +117,8 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
 
   int get rows {
     switch (this) {
+      case BarcodeLabelFormat.a4Sheet84:
+        return 21;
       case BarcodeLabelFormat.a4Sheet65:
         return 13;
       case BarcodeLabelFormat.a4Sheet40:
@@ -195,16 +211,16 @@ class BarcodeLabelItem {
     this.unit = '',
     this.pkdDate,
     this.showShopName = true,
-    this.showPrice = true,
-    this.showPkd = true,
+    this.showPrice = false, // Bargaining-Friendly: Hidden by default so customers can't fixate on a printed price
+    this.showPkd = false,
   });
 
   factory BarcodeLabelItem.fromProduct({
     required ProductModel product,
     String shopName = 'SHOPSILO STORE',
     bool showShopName = true,
-    bool showPrice = true,
-    bool showPkd = true,
+    bool showPrice = false, // Bargaining-Friendly default
+    bool showPkd = false,
   }) {
     String rawBarcode = product.barcode.trim();
     if (rawBarcode.isEmpty) {
@@ -253,6 +269,9 @@ class BarcodeGeneratorService {
     final pdf = pw.Document();
 
     switch (format) {
+      case BarcodeLabelFormat.a4Sheet84:
+        _buildA4Sheet84Pages(pdf, items);
+        break;
       case BarcodeLabelFormat.a4Sheet65:
         _buildA4Sheet65Pages(pdf, items);
         break;
@@ -298,8 +317,112 @@ class BarcodeGeneratorService {
   }
 
   // =========================================================================
-  // 1. A4 65-LABEL MICRO SHEET ENGINE (5 Columns x 13 Rows)
-  // Dimensions per label: ~38.1mm x 21.2mm (Ideal for small items & spices)
+  // 1. A4 84-LABEL SLEEK RECTANGULAR SHEET ENGINE (4 Columns x 21 Rows)
+  // Dimensions per label: ~48.5mm x 12.5mm (Ultra-sleek rectangle, 0 extra space)
+  // =========================================================================
+  static void _buildA4Sheet84Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
+    const int labelsPerPage = 84;
+    const int cols = 4;
+
+    for (int pageStart = 0; pageStart < items.length; pageStart += labelsPerPage) {
+      final pageItems = items.skip(pageStart).take(labelsPerPage).toList();
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          build: (pw.Context context) {
+            return pw.GridView(
+              crossAxisCount: cols,
+              childAspectRatio: 48.5 / 12.5,
+              crossAxisSpacing: 3,
+              mainAxisSpacing: 2,
+              children: List.generate(pageItems.length, (index) {
+                return _buildA4Sheet84SingleLabel(pageItems[index]);
+              }),
+            );
+          },
+        ),
+      );
+    }
+  }
+
+  static pw.Widget _buildA4Sheet84SingleLabel(BarcodeLabelItem item) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.0),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300, width: 0.35),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(1.5)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          // Top Row: Shop Name & Product Name (No Price!)
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              if (item.showShopName)
+                pw.Text(
+                  item.shopName,
+                  style: pw.TextStyle(
+                    fontSize: 3.6,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.grey700,
+                  ),
+                  maxLines: 1,
+                ),
+              pw.Expanded(
+                child: pw.Text(
+                  item.productName,
+                  style: pw.TextStyle(
+                    fontSize: 4.6,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.black,
+                  ),
+                  maxLines: 1,
+                  overflow: pw.TextOverflow.clip,
+                  textAlign: item.showShopName ? pw.TextAlign.right : pw.TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+
+          // Optional Price only if explicitly enabled by merchant
+          if (item.showPrice)
+            pw.Text(
+              'Rs. ${item.sellingPrice.toStringAsFixed(0)}',
+              style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
+            ),
+
+          // Code 128 Vector Barcode (Dominant, clean, laser-scannable)
+          pw.Container(
+            height: item.showPrice ? 9.5 : 13.5,
+            child: pw.BarcodeWidget(
+              barcode: pw.Barcode.code128(),
+              data: item.barcode,
+              drawText: false,
+              color: PdfColors.black,
+            ),
+          ),
+
+          // Barcode Digits
+          pw.Text(
+            item.barcode,
+            style: pw.TextStyle(
+              fontSize: 3.8,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.grey800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // 2. A4 65-LABEL MICRO SHEET ENGINE (5 Columns x 13 Rows)
+  // Dimensions per label: ~38.1mm x 21.2mm (Sleek compact rectangle)
   // =========================================================================
   static void _buildA4Sheet65Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
     const int labelsPerPage = 65;
@@ -368,7 +491,7 @@ class BarcodeGeneratorService {
           pw.Text(
             item.productName,
             style: pw.TextStyle(
-              fontSize: 5.2,
+              fontSize: 5.6,
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.black,
             ),
@@ -377,7 +500,7 @@ class BarcodeGeneratorService {
             textAlign: pw.TextAlign.center,
           ),
 
-          // Price Row
+          // Optional Price only if explicitly turned on
           if (item.showPrice)
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.center,
@@ -405,9 +528,9 @@ class BarcodeGeneratorService {
               ],
             ),
 
-          // Code 128 Vector Barcode
+          // Code 128 Vector Barcode (Expanded when price is omitted)
           pw.Container(
-            height: 10.5,
+            height: item.showPrice ? 10.5 : 14.5,
             child: pw.BarcodeWidget(
               barcode: pw.Barcode.code128(),
               data: item.barcode,
@@ -423,7 +546,7 @@ class BarcodeGeneratorService {
               pw.Text(
                 item.barcode,
                 style: pw.TextStyle(
-                  fontSize: 3.8,
+                  fontSize: 4.0,
                   fontWeight: pw.FontWeight.bold,
                   color: PdfColors.grey800,
                 ),
@@ -441,7 +564,7 @@ class BarcodeGeneratorService {
   }
 
   // =========================================================================
-  // 2. A4 40-LABEL COMPACT SHEET ENGINE (4 Columns x 10 Rows)
+  // 3. A4 40-LABEL COMPACT SHEET ENGINE (4 Columns x 10 Rows)
   // Dimensions per label: ~48.5mm x 25.4mm
   // =========================================================================
   static void _buildA4Sheet40Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
@@ -473,7 +596,7 @@ class BarcodeGeneratorService {
 
   static pw.Widget _buildA4Sheet40SingleLabel(BarcodeLabelItem item) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 3.5, vertical: 2.5),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 3.5, vertical: 2.0),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey300, width: 0.4),
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2.5)),
@@ -511,7 +634,7 @@ class BarcodeGeneratorService {
           pw.Text(
             item.productName,
             style: pw.TextStyle(
-              fontSize: 6.6,
+              fontSize: 6.8,
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.black,
             ),
@@ -520,7 +643,7 @@ class BarcodeGeneratorService {
             textAlign: pw.TextAlign.center,
           ),
 
-          // Price Row
+          // Optional Price only if explicitly enabled
           if (item.showPrice)
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.center,
@@ -550,7 +673,7 @@ class BarcodeGeneratorService {
 
           // Code 128 Barcode
           pw.Container(
-            height: 14,
+            height: item.showPrice ? 13 : 16.5,
             child: pw.BarcodeWidget(
               barcode: pw.Barcode.code128(),
               data: item.barcode,
@@ -566,7 +689,7 @@ class BarcodeGeneratorService {
               pw.Text(
                 item.barcode,
                 style: pw.TextStyle(
-                  fontSize: 4.6,
+                  fontSize: 4.8,
                   fontWeight: pw.FontWeight.bold,
                   color: PdfColors.grey800,
                 ),
@@ -584,7 +707,7 @@ class BarcodeGeneratorService {
   }
 
   // =========================================================================
-  // 3. A4 24-LABEL STANDARD SHEET ENGINE (3 Columns x 8 Rows)
+  // 4. A4 24-LABEL STANDARD SHEET ENGINE (3 Columns x 8 Rows)
   // Dimensions per label: ~64mm x 34mm (Standard Desmat/Avery 24L)
   // =========================================================================
   static void _buildA4Sheet24Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
@@ -654,7 +777,7 @@ class BarcodeGeneratorService {
           pw.Text(
             item.productName,
             style: pw.TextStyle(
-              fontSize: 7.6,
+              fontSize: 7.8,
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.black,
             ),
@@ -663,7 +786,7 @@ class BarcodeGeneratorService {
             textAlign: pw.TextAlign.center,
           ),
 
-          // Price & MRP Row
+          // Optional Price & MRP Row
           if (item.showPrice)
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.center,
@@ -691,9 +814,9 @@ class BarcodeGeneratorService {
               ],
             ),
 
-          // Scannable Code 128 Vector Barcode
+          // Scannable Code 128 Vector Barcode (Expanded when price is omitted)
           pw.Container(
-            height: 18,
+            height: item.showPrice ? 18 : 22,
             child: pw.BarcodeWidget(
               barcode: pw.Barcode.code128(),
               data: item.barcode,
@@ -709,7 +832,7 @@ class BarcodeGeneratorService {
               pw.Text(
                 item.barcode,
                 style: pw.TextStyle(
-                  fontSize: 5.2,
+                  fontSize: 5.5,
                   fontWeight: pw.FontWeight.bold,
                   color: PdfColors.grey800,
                 ),
@@ -727,7 +850,7 @@ class BarcodeGeneratorService {
   }
 
   // =========================================================================
-  // 4. THERMAL CONTINUOUS ROLL ENGINE (Flexible Width/Height Points)
+  // 5. THERMAL CONTINUOUS ROLL ENGINE (Flexible Width/Height Points)
   // =========================================================================
   static void _buildThermalRollPages(
     pw.Document pdf,
@@ -735,7 +858,7 @@ class BarcodeGeneratorService {
     required double widthPt,
     required double heightPt,
   }) {
-    final format = PdfPageFormat(widthPt, heightPt, marginAll: 4.5);
+    final format = PdfPageFormat(widthPt, heightPt, marginAll: 4.0);
 
     for (final item in items) {
       pdf.addPage(
@@ -781,7 +904,7 @@ class BarcodeGeneratorService {
                   textAlign: pw.TextAlign.center,
                 ),
 
-                // Price Row
+                // Optional Price Row
                 if (item.showPrice)
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.center,
@@ -808,9 +931,9 @@ class BarcodeGeneratorService {
                     ],
                   ),
 
-                // Code 128 Barcode
+                // Code 128 Barcode (Enlarged when price omitted)
                 pw.Container(
-                  height: 17,
+                  height: item.showPrice ? 17 : 21,
                   child: pw.BarcodeWidget(
                     barcode: pw.Barcode.code128(),
                     data: item.barcode,
@@ -823,7 +946,7 @@ class BarcodeGeneratorService {
                 pw.Text(
                   item.barcode,
                   style: pw.TextStyle(
-                    fontSize: 5.0,
+                    fontSize: 5.2,
                     fontWeight: pw.FontWeight.bold,
                     color: PdfColors.grey800,
                   ),

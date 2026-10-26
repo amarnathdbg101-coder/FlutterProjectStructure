@@ -250,24 +250,25 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // 1. Verify Dialog Title & Vector Barcode Widget
+      // 1. Verify Dialog Title, Vector Barcode Widget, and Bargaining-Safe Price Hiding
       expect(find.text('Barcode Sticker Generator'), findsOneWidget);
       expect(find.byType(BarcodeWidget), findsOneWidget);
       expect(find.text('Fortune Sunlite Sunflower Oil 1L'), findsWidgets);
-      expect(find.text('₹145'), findsWidgets);
+      // Price is hidden by default to prevent customer bargaining disputes
+      expect(find.textContaining('Price Hidden'), findsOneWidget);
 
       // 2. Format selector check
-      expect(find.text('A4 Sheet (24 Labels - 70x37mm)'), findsOneWidget);
-      expect(find.text('Thermal Roll (Single - 50x25mm)'), findsOneWidget);
+      expect(find.textContaining('A4 • 84 Rectangles'), findsOneWidget);
+      expect(find.textContaining('A4 • 65 Micro'), findsOneWidget);
 
-      // 3. Test copies stepper
-      expect(find.text('24'), findsOneWidget); // default full sheet
+      // 3. Test copies stepper (default 84 for full A4-84 sheet)
+      expect(find.text('84'), findsWidgets);
       final addIcon = find.byIcon(Icons.add_circle_outline_rounded);
       expect(addIcon, findsOneWidget);
       await tester.ensureVisible(addIcon);
       await tester.tap(addIcon);
       await tester.pumpAndSettle();
-      expect(find.text('25'), findsOneWidget);
+      expect(find.text('85'), findsOneWidget);
 
       // 4. Test Print and Share buttons render without overflow
       expect(find.text('Print Stickers'), findsOneWidget);

@@ -15,6 +15,27 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('BarcodeGeneratorService & SheetPackingStats Tests', () {
+    test('calculatePacking computes accurate A4-84 sleek rectangular sheet utilization', () {
+      // 1. Two stickers on A4-84
+      final stats2 = BarcodeGeneratorService.calculatePacking(
+        totalStickers: 2,
+        format: BarcodeLabelFormat.a4Sheet84,
+      );
+      expect(stats2.totalStickers, 2);
+      expect(stats2.labelsPerPage, 84);
+      expect(stats2.pagesNeeded, 1);
+      expect(stats2.emptySlotsOnLastPage, 82);
+      expect(stats2.utilizationPercentage, closeTo((2 / 84) * 100, 0.1));
+
+      // 2. 90 stickers on A4-84 (requires 2 pages: 84 * 2 = 168 capacity)
+      final stats90 = BarcodeGeneratorService.calculatePacking(
+        totalStickers: 90,
+        format: BarcodeLabelFormat.a4Sheet84,
+      );
+      expect(stats90.pagesNeeded, 2);
+      expect(stats90.emptySlotsOnLastPage, 78);
+    });
+
     test('calculatePacking computes accurate A4-65 micro sheet utilization', () {
       // 1. Two stickers on A4-65
       final stats2 = BarcodeGeneratorService.calculatePacking(
@@ -62,6 +83,23 @@ void main() {
       expect(stats24.labelsPerPage, 24);
       expect(stats24.pagesNeeded, 2);
       expect(stats24.emptySlotsOnLastPage, 23);
+    });
+
+    test('BarcodeLabelItem defaults to showPrice=false for retail bargaining protection', () {
+      final p = ProductModel(
+        id: '1',
+        name: 'Tata Salt 1kg',
+        barcode: '8901030000001',
+        sku: 'TATA-SALT',
+        price: 28.0,
+        comparePrice: 30.0,
+        stock: 45,
+        unit: 'pkt',
+        category: 'Grocery',
+      );
+      final item = BarcodeLabelItem.fromProduct(product: p);
+      expect(item.showPrice, isFalse);
+      expect(item.showPkd, isFalse);
     });
 
     test('generatePdfBytes generates valid bytes for A4-65 micro and A4-40 sheets with multi-product mixing', () async {
@@ -181,9 +219,11 @@ void main() {
       expect(find.text('₹28'), findsWidgets);
 
       // 2. Format options exist
+      expect(find.textContaining('A4 • 84 Sleek Rectangles'), findsOneWidget);
       expect(find.textContaining('A4 • 65 Micro'), findsOneWidget);
       expect(find.textContaining('A4 • 40 Compact'), findsOneWidget);
       expect(find.textContaining('A4 • 24 Standard'), findsOneWidget);
+      expect(find.textContaining('Bargaining-Safe Layout'), findsOneWidget);
 
       // 3. Verify Bottom Action Buttons
       expect(find.text('Share PDF'), findsOneWidget);

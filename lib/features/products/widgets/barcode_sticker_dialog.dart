@@ -31,8 +31,8 @@ class BarcodeStickerDialog extends StatefulWidget {
 }
 
 class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
-  BarcodeLabelFormat _format = BarcodeLabelFormat.a4Sheet24;
-  int _copies = 24; // Default to 1 full A4 sheet
+  BarcodeLabelFormat _format = BarcodeLabelFormat.a4Sheet84;
+  int _copies = 84; // Default to 1 full A4 sheet of 84 rectangular stickers
   bool _isProcessing = false;
 
   void _adjustCopies(int delta) {
@@ -252,41 +252,70 @@ class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
                           ),
                           const SizedBox(height: 4),
 
-                          // Selling Price & MRP
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              Text(
-                                '₹${labelItem.sellingPrice.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              if (labelItem.mrp > labelItem.sellingPrice) ...[
-                                const SizedBox(width: 6),
+                          // Selling Price & MRP (Only shown if merchant explicitly turned showPrice on)
+                          if (labelItem.showPrice) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
                                 Text(
-                                  'MRP: ₹${labelItem.mrp.toStringAsFixed(0)}',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.grey.shade600,
-                                    decoration: TextDecoration.lineThrough,
+                                  '₹${labelItem.sellingPrice.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.black,
                                   ),
                                 ),
+                                if (labelItem.mrp > labelItem.sellingPrice) ...[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'MRP: ₹${labelItem.mrp.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: Colors.grey.shade600,
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
-                          ),
-                          const SizedBox(height: 6),
+                            ),
+                            const SizedBox(height: 6),
+                          ] else ...[
+                            // Retail bargaining safety indicator
+                            Container(
+                              margin: const EdgeInsets.symmetric(vertical: 2),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.grey.shade300, width: 0.5),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.shield_outlined, size: 10, color: Colors.grey.shade700),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      context.isHindi ? 'मूल्य छुपा हुआ (सेफ)' : 'Price Hidden (Safe)',
+                                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                          ],
 
-                          // Vector Code 128 Barcode Widget
+                          // Vector Code 128 Barcode Widget (fills rectangle with minimal extra space)
                           BarcodeWidget(
                             barcode: Barcode.code128(),
                             data: labelItem.barcode,
                             width: 200,
-                            height: 38,
+                            height: labelItem.showPrice ? 38 : 46,
                             drawText: false,
                             color: Colors.black,
                           ),
@@ -387,6 +416,19 @@ class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      _buildFormatCard(
+                        context,
+                        title: 'A4 • 84 Rectangles',
+                        subtitle: context.isHindi ? 'स्लीक (48.5x12.5mm)' : 'Max Fit (48.5x12.5mm)',
+                        icon: Icons.view_comfy_alt_rounded,
+                        isSelected: _format == BarcodeLabelFormat.a4Sheet84,
+                        onTap: () {
+                          setState(() {
+                            _format = BarcodeLabelFormat.a4Sheet84;
+                            if (_copies > 84) _copies = 84;
+                          });
+                        },
+                      ),
                       _buildFormatCard(
                         context,
                         title: 'A4 • 65 Micro',
@@ -494,11 +536,11 @@ class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Quick chips - 1, 2, 5, 10, 24, 40, 65
+                  // Quick chips - 1, 2, 5, 10, 24, 40, 65, 84
                   Wrap(
                     spacing: 8,
                     runSpacing: 6,
-                    children: [1, 2, 5, 10, 24, 40, 65].map((count) {
+                    children: [1, 2, 5, 10, 24, 40, 65, 84].map((count) {
                       final isSel = _copies == count;
                       return ActionChip(
                         label: Text(
