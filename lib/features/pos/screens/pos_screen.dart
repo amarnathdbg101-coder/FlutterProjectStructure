@@ -88,22 +88,16 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
       _isSearchingLocal = true;
     });
 
-    // 2. Debounced server database query (350ms) to search full database beyond initial batch
+    // 2. Debounced server database query (300ms) to search full database beyond initial batch
     _posSearchDebounceTimer?.cancel();
     if (clean.length >= 2) {
-      _posSearchDebounceTimer = Timer(const Duration(milliseconds: 350), () async {
+      _posSearchDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
         if (!mounted || _scanController.text.trim().toLowerCase() != clean) return;
         await pos.searchProducts(clean);
         if (mounted && _scanController.text.trim().toLowerCase() == clean) {
-          final refreshedMatches = pos.products.where((p) {
-            final name = p.name.toLowerCase();
-            final barcode = p.barcode.toLowerCase();
-            final sku = p.sku.toLowerCase();
-            final category = p.category.toLowerCase();
-            return name.contains(clean) || barcode.contains(clean) || sku.contains(clean) || category.contains(clean);
-          }).take(6).toList();
+          // Products returned from server are already matched & ranked by PostgreSQL's trigram fuzzy search
           setState(() {
-            _matchingSearchResults = refreshedMatches;
+            _matchingSearchResults = pos.products.take(8).toList();
           });
         }
       });

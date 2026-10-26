@@ -317,28 +317,33 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         }
       }
       if (queryTokens.isNotEmpty) {
-        final buffer = StringBuffer()
-          ..write(p.name.toLowerCase())
-          ..write(' ')
-          ..write(p.sku.toLowerCase())
-          ..write(' ')
-          ..write(p.barcode.toLowerCase())
-          ..write(' ')
-          ..write(p.category.toLowerCase())
-          ..write(' ')
-          ..write(p.brand.toLowerCase());
+        final serverQuery = context.read<ProductController>().searchQuery;
+        final isServerResults = serverQuery.isNotEmpty && serverQuery.trim().toLowerCase() == trimmedQuery;
 
-        for (final val in p.attributes.values) {
-          if (val != null) {
-            buffer.write(' ');
-            buffer.write(val.toString().toLowerCase());
+        if (!isServerResults) {
+          final buffer = StringBuffer()
+            ..write(p.name.toLowerCase())
+            ..write(' ')
+            ..write(p.sku.toLowerCase())
+            ..write(' ')
+            ..write(p.barcode.toLowerCase())
+            ..write(' ')
+            ..write(p.category.toLowerCase())
+            ..write(' ')
+            ..write(p.brand.toLowerCase());
+
+          for (final val in p.attributes.values) {
+            if (val != null) {
+              buffer.write(' ');
+              buffer.write(val.toString().toLowerCase());
+            }
           }
-        }
 
-        final combined = buffer.toString();
-        for (final token in queryTokens) {
-          if (!combined.contains(token)) {
-            return false;
+          final combined = buffer.toString();
+          for (final token in queryTokens) {
+            if (!combined.contains(token)) {
+              return false;
+            }
           }
         }
       }
