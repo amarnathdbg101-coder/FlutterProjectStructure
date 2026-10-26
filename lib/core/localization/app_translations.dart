@@ -1956,6 +1956,62 @@ class AppTranslations {
       'en': 'PKD',
       'hi': 'पैकिंग',
     },
+    'barcode_format_a4_65': {
+      'en': 'A4 Sheet (65 Micro Labels - 38x21mm)',
+      'hi': 'A4 शीट (65 छोटे स्टीकर - 38x21मिमी)',
+    },
+    'barcode_format_a4_40': {
+      'en': 'A4 Sheet (40 Compact Labels - 48x25mm)',
+      'hi': 'A4 शीट (40 कॉम्पैक्ट स्टीकर - 48x25मिमी)',
+    },
+    'barcode_studio_title': {
+      'en': 'Barcode Print Studio',
+      'hi': 'बारकोड प्रिंट स्टूडियो',
+    },
+    'barcode_studio_sub': {
+      'en': 'Multi-product sticker sheet generator & printing',
+      'hi': 'मल्टीपल सामान बारकोड शीट जनरेटर और प्रिंटिंग',
+    },
+    'barcode_studio_queue_empty': {
+      'en': 'No products in print queue',
+      'hi': 'प्रिंट सूची में कोई उत्पाद नहीं है',
+    },
+    'barcode_studio_add_prompt': {
+      'en': 'Search and add products to queue stickers for print',
+      'hi': 'स्टीकर बनाने के लिए ऊपर से सामान सर्च करके जोड़ें',
+    },
+    'barcode_studio_total_stickers': {
+      'en': 'Total Stickers',
+      'hi': 'कुल स्टीकर',
+    },
+    'barcode_studio_pages_needed': {
+      'en': 'A4 Pages Required',
+      'hi': 'कुल A4 पेज',
+    },
+    'barcode_studio_sheet_utilization': {
+      'en': 'Sheet Utilization',
+      'hi': 'शीट उपयोग',
+    },
+    'barcode_studio_slots_free': {
+      'en': 'blank slots on sheet',
+      'hi': 'खाली स्लॉट बचे हैं',
+    },
+    'barcode_studio_add_all_stock': {
+      'en': 'Add In-Stock Items',
+      'hi': 'सभी स्टॉक वाले सामान जोड़ें',
+    },
+    'barcode_studio_clear_queue': {
+      'en': 'Clear Queue',
+      'hi': 'सूची खाली करें',
+    },
+    'barcode_studio_open_btn': {
+      'en': 'Open Barcode Print Studio',
+      'hi': 'बारकोड प्रिंट स्टूडियो खोलें',
+    },
+    'barcode_studio_add_to_studio': {
+      'en': 'Add to Print Studio Sheet',
+      'hi': 'प्रिंट स्टूडियो शीट में जोड़ें',
+    },
   };
 
   static String get(String key, AppLanguage language) {

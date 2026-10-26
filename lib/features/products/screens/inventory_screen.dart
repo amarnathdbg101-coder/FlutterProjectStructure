@@ -28,6 +28,7 @@ import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../widgets/batch_barcode_pairing_dialog.dart';
 import '../services/smart_barcode_catalog_service.dart';
 import 'product_detail_screen.dart';
+import 'barcode_sheet_studio_screen.dart';
 
 /// Comprehensive Inventory Ordering & Sorting Options for Merchants
 enum InventorySortOption {
@@ -3065,6 +3066,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               tooltip: context.tr('price_checker_title'),
               onPressed: () => PriceCheckerDialog.show(context),
             ),
+            IconButton(
+              icon: const Icon(Icons.print_outlined, size: 22),
+              tooltip: context.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio',
+              onPressed: () => BarcodeSheetStudioScreen.show(context),
+            ),
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
               tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
@@ -3072,6 +3078,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               elevation: 4,
               onSelected: (val) async {
                 switch (val) {
+                  case 'barcode_studio':
+                    BarcodeSheetStudioScreen.show(context);
+                    break;
                   case 'import':
                     _showBulkImportDialog(context);
                     break;
@@ -3107,6 +3116,16 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 }
               },
               itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  value: 'barcode_studio',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.print_rounded, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio'),
+                    ],
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'import',
                   child: Row(

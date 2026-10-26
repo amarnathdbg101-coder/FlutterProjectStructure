@@ -10,6 +10,7 @@ import '../models/product_model.dart';
 import '../services/smart_stock_reorder_service.dart';
 import '../services/smart_barcode_catalog_service.dart';
 import '../widgets/barcode_sticker_dialog.dart';
+import 'barcode_sheet_studio_screen.dart';
 
 /// Clean, Aesthetic, High-Vibe E-Commerce Product Details Showcase.
 /// Features studio hero gallery with tap-to-zoom fullscreen preview,
@@ -279,6 +280,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 }
               } else if (value == 'barcode') {
                 BarcodeStickerDialog.show(context, p);
+              } else if (value == 'barcode_studio') {
+                BarcodeSheetStudioScreen.show(context, initialProduct: p);
               } else if (value == 'delete') {
                 _confirmDelete(context, p.id);
               }
@@ -311,6 +314,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const SizedBox(width: 8),
                     Text(
                       'Print Barcodes',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'barcode_studio',
+                child: Row(
+                  children: [
+                    const Icon(Icons.print_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      ctx.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Sheet Studio',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],

@@ -264,6 +264,7 @@ void main() {
       expect(find.text('24'), findsOneWidget); // default full sheet
       final addIcon = find.byIcon(Icons.add_circle_outline_rounded);
       expect(addIcon, findsOneWidget);
+      await tester.ensureVisible(addIcon);
       await tester.tap(addIcon);
       await tester.pumpAndSettle();
       expect(find.text('25'), findsOneWidget);

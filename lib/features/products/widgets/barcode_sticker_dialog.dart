@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../models/product_model.dart';
+import '../screens/barcode_sheet_studio_screen.dart';
 import '../services/barcode_generator_service.dart';
 
 class BarcodeStickerDialog extends StatefulWidget {
@@ -317,6 +318,60 @@ class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
                   ),
                   const SizedBox(height: 16),
 
+                  // STUDIO PROMO BANNER FOR MULTI-PRODUCT PRINTING
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                context.isHindi
+                                    ? '1-2 स्टीकर दूसरे सामान के साथ प्रिंट करें?'
+                                    : 'Print 1-2 labels along with other items?',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                              Text(
+                                context.isHindi
+                                    ? 'बारकोड प्रिंट स्टूडियो में जाकर कई सामानों की संयुक्त शीट बनाएं।'
+                                    : 'Open Barcode Studio to combine multiple items onto one A4 sticker sheet.',
+                                style: TextStyle(fontSize: 10.5, color: context.colorTextSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            BarcodeSheetStudioScreen.show(context, initialProduct: widget.product);
+                          },
+                          child: Text(
+                            context.isHindi ? 'स्टूडियो' : 'Studio',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   // 2. FORMAT SELECTOR
                   Text(
                     context.tr('barcode_format'),
@@ -328,38 +383,61 @@ class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
                   ),
                   const SizedBox(height: 8),
 
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      Expanded(
-                        child: _buildFormatCard(
-                          context,
-                          title: context.tr('barcode_format_a4'),
-                          subtitle: context.isHindi ? '24 लेबल प्रति शीट' : '24 labels per sheet',
-                          icon: Icons.grid_view_rounded,
-                          isSelected: _format == BarcodeLabelFormat.a4Sheet24,
-                          onTap: () {
-                            setState(() {
-                              _format = BarcodeLabelFormat.a4Sheet24;
-                              _copies = 24;
-                            });
-                          },
-                        ),
+                      _buildFormatCard(
+                        context,
+                        title: 'A4 • 65 Micro',
+                        subtitle: context.isHindi ? 'छोटा (38x21mm)' : 'Micro (38x21mm)',
+                        icon: Icons.apps_rounded,
+                        isSelected: _format == BarcodeLabelFormat.a4Sheet65,
+                        onTap: () {
+                          setState(() {
+                            _format = BarcodeLabelFormat.a4Sheet65;
+                            if (_copies > 65) _copies = 65;
+                          });
+                        },
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildFormatCard(
-                          context,
-                          title: context.tr('barcode_format_thermal'),
-                          subtitle: context.isHindi ? 'रोल प्रिंटर' : 'Roll printer',
-                          icon: Icons.receipt_long_rounded,
-                          isSelected: _format == BarcodeLabelFormat.thermalRoll50x25,
-                          onTap: () {
-                            setState(() {
-                              _format = BarcodeLabelFormat.thermalRoll50x25;
-                              if (_copies > 50) _copies = 10;
-                            });
-                          },
-                        ),
+                      _buildFormatCard(
+                        context,
+                        title: 'A4 • 40 Compact',
+                        subtitle: context.isHindi ? 'मीडियम (48x25mm)' : 'Compact (48x25mm)',
+                        icon: Icons.grid_on_rounded,
+                        isSelected: _format == BarcodeLabelFormat.a4Sheet40,
+                        onTap: () {
+                          setState(() {
+                            _format = BarcodeLabelFormat.a4Sheet40;
+                            if (_copies > 40) _copies = 40;
+                          });
+                        },
+                      ),
+                      _buildFormatCard(
+                        context,
+                        title: context.tr('barcode_format_a4'),
+                        subtitle: context.isHindi ? 'बड़ा (64x34mm)' : 'Standard 24L',
+                        icon: Icons.grid_view_rounded,
+                        isSelected: _format == BarcodeLabelFormat.a4Sheet24,
+                        onTap: () {
+                          setState(() {
+                            _format = BarcodeLabelFormat.a4Sheet24;
+                            if (_copies > 24) _copies = 24;
+                          });
+                        },
+                      ),
+                      _buildFormatCard(
+                        context,
+                        title: context.tr('barcode_format_thermal'),
+                        subtitle: context.isHindi ? 'रोल प्रिंटर' : 'Roll Printer',
+                        icon: Icons.receipt_long_rounded,
+                        isSelected: _format == BarcodeLabelFormat.thermalRoll50x25,
+                        onTap: () {
+                          setState(() {
+                            _format = BarcodeLabelFormat.thermalRoll50x25;
+                            if (_copies > 20) _copies = 5;
+                          });
+                        },
                       ),
                     ],
                   ),
@@ -416,11 +494,11 @@ class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Quick chips
+                  // Quick chips - 1, 2, 5, 10, 24, 40, 65
                   Wrap(
                     spacing: 8,
                     runSpacing: 6,
-                    children: [1, 6, 12, 24, 48, 72].map((count) {
+                    children: [1, 2, 5, 10, 24, 40, 65].map((count) {
                       final isSel = _copies == count;
                       return ActionChip(
                         label: Text(
