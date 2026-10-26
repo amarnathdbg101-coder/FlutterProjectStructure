@@ -32,11 +32,27 @@ class ShopSiloLogo extends StatelessWidget {
       decoration: BoxDecoration(
         color: effectiveIconBg,
         borderRadius: BorderRadius.circular(size * 0.28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.18),
+            blurRadius: size * 0.2,
+            offset: Offset(0, size * 0.06),
+          ),
+        ],
       ),
-      child: Icon(
-        Icons.storefront_rounded,
-        size: size * 0.58,
-        color: effectiveIconColor,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.28),
+        child: Image.asset(
+          'assets/images/app_logo.png',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, stack) => Icon(
+            Icons.storefront_rounded,
+            size: size * 0.58,
+            color: effectiveIconColor,
+          ),
+        ),
       ),
     );
 
