@@ -18,8 +18,13 @@ class ExpenseRepository {
         listData = raw['expenses'];
       } else if (raw is Map && raw['data'] is List) {
         listData = raw['data'];
+      } else if (raw is Map && raw['data'] is Map && raw['data']['expenses'] is List) {
+        listData = raw['data']['expenses'];
       }
-      final items = listData.map((e) => ExpenseModel.fromJson(e as Map<String, dynamic>)).toList();
+      final items = listData
+          .whereType<Map>()
+          .map((e) => ExpenseModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
       return ApiResponse(success: true, data: items);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
@@ -30,7 +35,13 @@ class ExpenseRepository {
     try {
       final res = await _dio.post(ApiConstants.expenses, data: data);
       final raw = res.data;
-      Map<String, dynamic> item = (raw is Map<String, dynamic>) ? (raw['expense'] ?? raw['data'] ?? raw) : {};
+      Map<String, dynamic> item = {};
+      if (raw is Map) {
+        final inner = raw['expense'] ?? raw['data'] ?? raw;
+        if (inner is Map) {
+          item = Map<String, dynamic>.from(inner);
+        }
+      }
       return ApiResponse(success: true, data: ExpenseModel.fromJson(item));
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
