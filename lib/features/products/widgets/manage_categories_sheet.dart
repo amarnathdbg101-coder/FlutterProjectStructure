@@ -38,7 +38,7 @@ class ManageCategoriesSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface.withOpacity(0.2),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -64,7 +64,7 @@ class ManageCategoriesSheet extends StatelessWidget {
                       Text(
                         'Total ${categories.length} categories (${catCtrl.customCategories.length} custom)',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -109,7 +109,7 @@ class ManageCategoriesSheet extends StatelessWidget {
                     : ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         itemCount: categories.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (context, index) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final cat = categories[index];
                           return _CategoryTile(category: cat);
@@ -163,13 +163,13 @@ class _CategoryTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: category.isCustom
-            ? AppColors.primary.withOpacity(0.06)
-            : theme.colorScheme.surfaceVariant.withOpacity(0.3),
+            ? AppColors.primary.withValues(alpha: 0.06)
+            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: category.isCustom
-              ? AppColors.primary.withOpacity(0.2)
-              : theme.colorScheme.outline.withOpacity(0.1),
+              ? AppColors.primary.withValues(alpha: 0.2)
+              : theme.colorScheme.outline.withValues(alpha: 0.1),
         ),
       ),
       child: Row(
@@ -216,18 +216,24 @@ class _CategoryTile extends StatelessWidget {
                 Text(
                   '${category.productCount} product(s) linked',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
             ),
           ),
-          if (category.isCustom)
+          if (category.isCustom) ...[
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 20),
+              tooltip: 'Edit Category',
+              onPressed: () => AddCategoryDialog.showEdit(context, category),
+            ),
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
               tooltip: 'Delete Category',
               onPressed: () => _confirmDelete(context),
             ),
+          ],
         ],
       ),
     );

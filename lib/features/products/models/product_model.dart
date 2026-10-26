@@ -451,11 +451,7 @@ String _formatCategoryNameInternal(String raw) {
       return 'Services & Others';
   }
 
-  // 4. Fallback: Clean title-case hyphenated or underscored codes
-  if (!s.contains('-') && !s.contains('_')) {
-    return s;
-  }
-
+  // 4. Fallback: Always return clean Title Case with first letter capitalized!
   return s
       .replaceAll('-', ' ')
       .replaceAll('_', ' ')
@@ -464,7 +460,7 @@ String _formatCategoryNameInternal(String raw) {
       .map((w) {
         final wLow = w.toLowerCase();
         if (wLow == 'and') return '&';
-        return w[0].toUpperCase() + w.substring(1).toLowerCase();
+        return w[0].toUpperCase() + (w.length > 1 ? w.substring(1).toLowerCase() : '');
       })
       .join(' ');
 }
@@ -490,10 +486,10 @@ String getCategorySlug(String category) {
   if (clean.contains('sport') || clean.contains('fitness')) return 'sports-fitness';
   if (clean.contains('automotive') || clean.contains('spare') || clean.contains('vehicle')) return 'hardware-tools';
   if (clean.contains('pet')) return 'pet-care';
-  if (clean.contains('pooja') || clean.contains('spiritual') || clean.contains('service')) return 'general-store';
-  if (clean.contains('general')) return 'general-store';
+  if (clean.contains('pooja') || clean.contains('spiritual') || clean.contains('puja')) return 'pooja-spiritual';
+  if (clean == 'general' || clean == 'general-store' || clean == 'general store') return 'general-store';
 
-  // Generic clean slugify fallback
+  // Generic clean slugify fallback (preserves custom category slugs!)
   final slug = clean
       .replaceAll('&', 'and')
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')

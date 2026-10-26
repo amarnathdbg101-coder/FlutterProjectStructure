@@ -551,7 +551,13 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     required VoidCallback onTap,
     int? count,
     IconData? icon,
+    Color? activeColor,
   }) {
+    final effectiveColor = activeColor ?? AppColors.primary;
+    final effectiveBg = isSelected
+        ? effectiveColor.withValues(alpha: 0.12)
+        : context.colorSurface;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: InkWell(
@@ -560,10 +566,10 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
           decoration: BoxDecoration(
-            color: isSelected ? context.colorPrimaryLight : context.colorSurface,
+            color: effectiveBg,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isSelected ? AppColors.primary : context.colorBorder,
+              color: isSelected ? effectiveColor : context.colorBorder,
               width: isSelected ? 1.5 : 1.0,
             ),
           ),
@@ -574,7 +580,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 Icon(
                   icon,
                   size: 13,
-                  color: isSelected ? AppColors.primary : context.colorTextSecondary,
+                  color: isSelected ? effectiveColor : context.colorTextSecondary,
                 ),
                 const SizedBox(width: 4.5),
               ],
@@ -583,7 +589,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: isSelected ? AppColors.primary : context.colorTextPrimary,
+                  color: isSelected ? effectiveColor : context.colorTextPrimary,
                 ),
               ),
               if (count != null) ...[
@@ -591,7 +597,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primary : context.colorSurfaceSubtle,
+                    color: isSelected ? effectiveColor : context.colorSurfaceSubtle,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -1523,20 +1529,40 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                 : (categoriesList.contains('General Store') ? 'General Store' : categoriesList.first),
                             decoration: InputDecoration(
                               labelText: '${sheetCtx.tr('inv_field_category')} *',
-                              suffixIcon: IconButton(
-                                icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 20),
-                                tooltip: 'Nayi Custom Category Banayein',
-                                onPressed: () async {
-                                  final newCat = await AddCategoryDialog.show(sheetCtx);
-                                  if (newCat != null) {
-                                    setModalState(() {
-                                      if (!categoriesList.contains(newCat.name)) {
-                                        categoriesList.insert(0, newCat.name);
+                              suffixIcon: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 20),
+                                    tooltip: 'Nayi Custom Category Banayein',
+                                    onPressed: () async {
+                                      final newCat = await AddCategoryDialog.show(sheetCtx);
+                                      if (newCat != null) {
+                                        setModalState(() {
+                                          if (!categoriesList.contains(newCat.name)) {
+                                            categoriesList.insert(0, newCat.name);
+                                          }
+                                          categoryCtrl.text = newCat.name;
+                                        });
                                       }
-                                      categoryCtrl.text = newCat.name;
-                                    });
-                                  }
-                                },
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.tune_rounded, color: AppColors.primary, size: 20),
+                                    tooltip: 'Manage Categories (Edit/Delete)',
+                                    onPressed: () async {
+                                      await ManageCategoriesSheet.show(sheetCtx);
+                                      final refreshed = catCtrl.categoryNames;
+                                      setModalState(() {
+                                        categoriesList.clear();
+                                        categoriesList.addAll(refreshed.isNotEmpty ? refreshed : CategoryRegistry.canonicalCategories);
+                                        if (categoryCtrl.text.isNotEmpty && !categoriesList.contains(categoryCtrl.text)) {
+                                          categoriesList.insert(0, categoryCtrl.text);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                             items: [
@@ -1557,6 +1583,19 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                   ],
                                 ),
                               ),
+                              DropdownMenuItem(
+                                value: '__MANAGE_CATEGORIES__',
+                                child: Row(
+                                  children: const [
+                                    Icon(Icons.tune_rounded, color: AppColors.primary, size: 16),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      '⚙️ Manage Categories...',
+                                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
                             onChanged: (val) async {
                               if (val == '__ADD_NEW_CATEGORY__') {
@@ -1569,6 +1608,16 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     categoryCtrl.text = newCat.name;
                                   });
                                 }
+                              } else if (val == '__MANAGE_CATEGORIES__') {
+                                await ManageCategoriesSheet.show(sheetCtx);
+                                final refreshed = catCtrl.categoryNames;
+                                setModalState(() {
+                                  categoriesList.clear();
+                                  categoriesList.addAll(refreshed.isNotEmpty ? refreshed : CategoryRegistry.canonicalCategories);
+                                  if (categoryCtrl.text.isNotEmpty && !categoriesList.contains(categoryCtrl.text)) {
+                                    categoriesList.insert(0, categoryCtrl.text);
+                                  }
+                                });
                               } else if (val != null) {
                                 setModalState(() {
                                   categoryCtrl.text = val;

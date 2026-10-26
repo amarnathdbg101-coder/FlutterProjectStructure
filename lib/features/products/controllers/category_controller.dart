@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/event_bus_service.dart';
 import '../../../core/widgets/custom_snackbar.dart';

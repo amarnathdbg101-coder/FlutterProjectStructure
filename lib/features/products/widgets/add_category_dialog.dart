@@ -3,11 +3,17 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../controllers/category_controller.dart';
 import '../models/category_model.dart';
+import '../models/product_model.dart';
 
 class AddCategoryDialog extends StatefulWidget {
   final String? initialName;
+  final CategoryItemModel? categoryToEdit;
 
-  const AddCategoryDialog({super.key, this.initialName});
+  const AddCategoryDialog({
+    super.key,
+    this.initialName,
+    this.categoryToEdit,
+  });
 
   static Future<CategoryItemModel?> show(BuildContext context, {String? initialName}) {
     return showDialog<CategoryItemModel>(
@@ -15,6 +21,15 @@ class AddCategoryDialog extends StatefulWidget {
       barrierDismissible: false,
       builder: (_) => AddCategoryDialog(initialName: initialName),
     );
+  }
+
+  static Future<bool> showEdit(BuildContext context, CategoryItemModel category) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AddCategoryDialog(categoryToEdit: category),
+    );
+    return result ?? false;
   }
 
   @override
@@ -25,6 +40,8 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
   final TextEditingController _descCtrl = TextEditingController();
+
+  bool get isEdit => widget.categoryToEdit != null;
   
   // Non-vegetable professional icon presets
   static const List<String> _presetIcons = [
@@ -39,7 +56,12 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
   @override
   void initState() {
     super.initState();
-    _nameCtrl = TextEditingController(text: widget.initialName ?? '');
+    _nameCtrl = TextEditingController(
+      text: widget.categoryToEdit?.name ?? widget.initialName ?? '',
+    );
+    _selectedIcon = widget.categoryToEdit?.icon.isNotEmpty == true
+        ? widget.categoryToEdit!.icon
+        : '📦';
   }
 
   @override
@@ -54,17 +76,32 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
 
     setState(() => _isSubmitting = true);
     final catCtrl = context.read<CategoryController>();
+    final cleanName = formatCategoryName(_nameCtrl.text.trim());
 
-    final created = await catCtrl.createCategory(
-      name: _nameCtrl.text.trim(),
-      icon: _selectedIcon,
-      description: _descCtrl.text.trim(),
-    );
+    if (isEdit) {
+      final updated = await catCtrl.updateCategory(
+        id: widget.categoryToEdit!.id,
+        name: cleanName,
+        icon: _selectedIcon,
+      );
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        if (updated) {
+          Navigator.of(context).pop(true);
+        }
+      }
+    } else {
+      final created = await catCtrl.createCategory(
+        name: cleanName,
+        icon: _selectedIcon,
+        description: _descCtrl.text.trim(),
+      );
 
-    if (mounted) {
-      setState(() => _isSubmitting = false);
-      if (created != null) {
-        Navigator.of(context).pop(created);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        if (created != null) {
+          Navigator.of(context).pop(created);
+        }
       }
     }
   }
@@ -93,7 +130,7 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.12),
+                          color: AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -107,16 +144,18 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Nayi Custom Category',
+                              isEdit ? 'Category Edit Karein' : 'Nayi Custom Category',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Apni shop ke hisaab se category banayein',
+                              isEdit
+                                  ? 'Category ka naam ya icon badlein'
+                                  : 'Apni shop ke hisaab se category banayein',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                               ),
                             ),
                           ],
@@ -140,7 +179,8 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _nameCtrl,
-                    autofocus: widget.initialName == null,
+                    autofocus: widget.initialName == null && !isEdit,
+                    textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       hintText: 'Jaise: Paan Masala, Namkeen, Dairy Specials...',
                       prefixIcon: const Icon(Icons.label_outline, size: 20),
@@ -181,8 +221,8 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppColors.primary.withOpacity(0.2)
-                                : theme.colorScheme.surfaceVariant.withOpacity(0.4),
+                                ? AppColors.primary.withValues(alpha: 0.2)
+                                : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isSelected ? AppColors.primary : Colors.transparent,
@@ -194,25 +234,28 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 16),
+                  if (!isEdit) ...[
+                    const SizedBox(height: 16),
 
-                  // Description Input (Optional)
-                  Text(
-                    'Description (Optional)',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                    // Description Input (Optional)
+                    Text(
+                      'Description (Optional)',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _descCtrl,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      hintText: 'Thoda vivaran ya details...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _descCtrl,
+                      maxLines: 2,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        hintText: 'Thoda vivaran ya details...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 22),
 
                   // Action Buttons
@@ -233,7 +276,9 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
                             : const Icon(Icons.check, size: 18),
-                        label: Text(_isSubmitting ? 'Bana rahe hain...' : 'Save Category'),
+                        label: Text(_isSubmitting
+                            ? (isEdit ? 'Update ho raha...' : 'Bana rahe hain...')
+                            : (isEdit ? 'Update Category' : 'Save Category')),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
@@ -252,3 +297,4 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
     );
   }
 }
+
