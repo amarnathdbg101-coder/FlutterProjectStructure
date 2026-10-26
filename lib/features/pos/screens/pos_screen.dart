@@ -21,6 +21,7 @@ import '../../products/models/product_model.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
 import '../widgets/day_close_reconciliation_sheet.dart';
+import '../widgets/smart_sauda_modal.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -2097,6 +2098,15 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   item: item,
                   onIncrement: () => pos.incrementQuantity(item),
                   onDecrement: () => pos.decrementQuantity(item),
+                  onEditPrice: () {
+                    SmartSaudaModal.show(
+                      context: context,
+                      item: item,
+                      onApplyPrice: (newPrice) {
+                        pos.updateCartItemPrice(item, newPrice);
+                      },
+                    );
+                  },
                   onRemove: () {
                     final removedName = item.product.name;
                     pos.removeFromCart(item);
@@ -2945,6 +2955,7 @@ class _PosCartItemTile extends StatelessWidget {
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onRemove;
+  final VoidCallback? onEditPrice;
 
   const _PosCartItemTile({
     super.key,
@@ -2952,6 +2963,7 @@ class _PosCartItemTile extends StatelessWidget {
     required this.onIncrement,
     required this.onDecrement,
     required this.onRemove,
+    this.onEditPrice,
   });
 
   @override
@@ -2973,7 +2985,7 @@ class _PosCartItemTile extends StatelessWidget {
           ),
           const SizedBox(width: 10),
 
-          // Item Name & Unit Price
+          // Item Name & Unit Price (Tappable for Smart Sauda Negotiation)
           Expanded(
             flex: 4,
             child: Column(
@@ -2989,13 +3001,64 @@ class _PosCartItemTile extends StatelessWidget {
                     color: context.colorTextPrimary,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '₹${item.customPrice.toStringAsFixed(0)} / ${item.product.unit}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: context.colorTextMuted,
+                const SizedBox(height: 3),
+                InkWell(
+                  onTap: onEditPrice,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: item.customPrice != item.product.price
+                          ? AppColors.primary.withValues(alpha: 0.12)
+                          : context.colorSurfaceSubtle,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: item.customPrice != item.product.price
+                            ? AppColors.primary.withValues(alpha: 0.35)
+                            : context.colorBorder,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '₹${item.customPrice.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: item.customPrice != item.product.price
+                                ? AppColors.primary
+                                : context.colorTextPrimary,
+                          ),
+                        ),
+                        if (item.customPrice != item.product.price) ...[
+                          const SizedBox(width: 3),
+                          Text(
+                            '₹${item.product.price.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              decoration: TextDecoration.lineThrough,
+                              color: context.colorTextMuted,
+                            ),
+                          ),
+                        ],
+                        Text(
+                          ' / ${item.product.unit}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: context.colorTextMuted,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.handshake_outlined,
+                          size: 13,
+                          color: item.customPrice != item.product.price
+                              ? AppColors.primary
+                              : context.colorTextMuted,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
