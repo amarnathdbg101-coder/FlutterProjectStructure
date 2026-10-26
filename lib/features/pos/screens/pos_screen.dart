@@ -17,6 +17,7 @@ import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../../../core/widgets/price_checker_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../khata/models/khata_model.dart';
+import '../../products/controllers/category_controller.dart';
 import '../../products/models/product_model.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
@@ -1710,13 +1711,12 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   /// Fast Scan & Search Bar with Auto-Add and Live Overlay Matches
   Widget _buildFastScanBar(BuildContext context, PosController pos) {
-    final dynamicCategories = [
-      'All',
-      ...pos.products
-          .map((p) => p.category.trim())
-          .where((c) => c.isNotEmpty)
-          .toSet()
-    ];
+    final catNames = context.watch<CategoryController>().categoryNames;
+    final allCategories = {
+      ...pos.products.map((p) => p.category.trim()).where((c) => c.isNotEmpty),
+      ...catNames,
+    };
+    final dynamicCategories = ['All', ...allCategories];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
