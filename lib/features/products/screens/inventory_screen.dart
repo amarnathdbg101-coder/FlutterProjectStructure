@@ -674,42 +674,150 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     );
   }
 
-  // Directly launches Device Gallery / File Picker (Camera Option Removed)
-  void _pickImagesFromDevice(
+  /// Displays a clean bottom sheet modal offering Camera capture or Device Gallery selection
+  void _showProductImageSourceSheet(
     BuildContext context, {
     required Function(List<XFile> files) onFilesSelected,
     int maxAllowed = 10,
     int currentCount = 0,
-  }) async {
-    try {
-      final picker = ImagePicker();
-      final pickedFiles = await picker.pickMultiImage(
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-        requestFullMetadata: false,
+  }) {
+    if (currentCount >= maxAllowed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.isHindi
+                ? 'अधिकतम $maxAllowed तस्वीरें जोड़ी जा सकती हैं'
+                : 'Maximum $maxAllowed images allowed',
+          ),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
-      if (pickedFiles.isNotEmpty) {
-        final remaining = maxAllowed - currentCount;
-        final selected = pickedFiles.take(remaining).toList();
-        onFilesSelected(selected);
-      }
-    } catch (e) {
-      debugPrint('[InventoryScreen] Image picker warning: $e');
-      try {
-        final picker = ImagePicker();
-        final pickedFiles = await picker.pickMultiImage(
-          requestFullMetadata: false,
-        );
-        if (pickedFiles.isNotEmpty) {
-          final remaining = maxAllowed - currentCount;
-          final selected = pickedFiles.take(remaining).toList();
-          onFilesSelected(selected);
-        }
-      } catch (fallbackError) {
-        debugPrint('[InventoryScreen] Fallback image picker error: $fallbackError');
-      }
+      return;
     }
+
+    final picker = ImagePicker();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: BoxDecoration(
+          color: sheetCtx.colorSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: sheetCtx.colorBorder,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                sheetCtx.isHindi ? 'उत्पाद तस्वीर का स्रोत चुनें' : 'Choose Product Image Source',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: sheetCtx.colorTextPrimary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: sheetCtx.colorPrimaryLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                ),
+                title: Text(
+                  sheetCtx.isHindi ? 'कैमरा से फोटो खींचें' : 'Take Photo with Camera',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: sheetCtx.colorTextPrimary),
+                ),
+                subtitle: Text(
+                  sheetCtx.isHindi ? 'सीधे कैमरे से नई तस्वीर लें' : 'Capture instant photo with camera',
+                  style: TextStyle(fontSize: 12, color: sheetCtx.colorTextSecondary),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  try {
+                    final picked = await picker.pickImage(
+                      source: ImageSource.camera,
+                      maxWidth: 1024,
+                      maxHeight: 1024,
+                      imageQuality: 85,
+                      requestFullMetadata: false,
+                    );
+                    if (picked != null) {
+                      onFilesSelected([picked]);
+                    }
+                  } catch (e) {
+                    debugPrint('[InventoryScreen] Camera picker error: $e');
+                  }
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: sheetCtx.colorPrimaryLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                ),
+                title: Text(
+                  sheetCtx.isHindi ? 'गैलरी / डिवाइस से चुनें' : 'Choose from Gallery / Photos',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: sheetCtx.colorTextPrimary),
+                ),
+                subtitle: Text(
+                  sheetCtx.isHindi ? 'एक साथ कई तस्वीरें चुन सकते हैं' : 'Select multiple photos at once',
+                  style: TextStyle(fontSize: 12, color: sheetCtx.colorTextSecondary),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  try {
+                    final pickedFiles = await picker.pickMultiImage(
+                      maxWidth: 1024,
+                      maxHeight: 1024,
+                      imageQuality: 85,
+                      requestFullMetadata: false,
+                    );
+                    if (pickedFiles.isNotEmpty) {
+                      final remaining = maxAllowed - currentCount;
+                      final selected = pickedFiles.take(remaining).toList();
+                      onFilesSelected(selected);
+                    }
+                  } catch (e) {
+                    debugPrint('[InventoryScreen] MultiImage picker warning: $e');
+                    try {
+                      final pickedFiles = await picker.pickMultiImage(
+                        requestFullMetadata: false,
+                      );
+                      if (pickedFiles.isNotEmpty) {
+                        final remaining = maxAllowed - currentCount;
+                        final selected = pickedFiles.take(remaining).toList();
+                        onFilesSelected(selected);
+                      }
+                    } catch (fallbackError) {
+                      debugPrint('[InventoryScreen] Fallback image picker error: $fallbackError');
+                    }
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Generates a Smart SKU Code based on Product Name & Timestamp
@@ -1369,7 +1477,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             icon: const Icon(Icons.add_photo_alternate_rounded, size: 16),
                             label: const Text('Add Image', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             onPressed: () {
-                              _pickImagesFromDevice(
+                              _showProductImageSourceSheet(
                                 sheetCtx,
                                 maxAllowed: 10,
                                 currentCount: productImages.length,
@@ -1460,7 +1568,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             if (productImages.length < 10)
                               InkWell(
                                 onTap: () {
-                                  _pickImagesFromDevice(
+                                  _showProductImageSourceSheet(
                                     sheetCtx,
                                     maxAllowed: 10,
                                     currentCount: productImages.length,
@@ -3620,8 +3728,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         context.isHindi ? 'कैटेगरी सेटिंग्स' : 'Categories',
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
                       ),
-                      backgroundColor: AppColors.primary.withOpacity(0.08),
-                      side: BorderSide(color: AppColors.primary.withOpacity(0.2)),
+                      backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                      side: BorderSide(color: AppColors.primary.withValues(alpha: 0.2)),
                       onPressed: () => ManageCategoriesSheet.show(context),
                     ),
                   ],
@@ -3892,7 +4000,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     return GridView.builder(
                                       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                                       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                                      cacheExtent: 600,
                                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                         crossAxisCount: crossAxisCount,
