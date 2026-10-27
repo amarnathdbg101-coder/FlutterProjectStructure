@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert' show base64Encode;
 import 'dart:io' show File;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
+import '../../dashboard/repositories/ai_repository.dart';
 import '../../../core/constants/api_constants.dart';
 import '../models/bulk_import_result.dart';
 import 'package:flutter/material.dart';
@@ -1035,6 +1037,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     List<String> productImages = List<String>.from(initialProduct?.images ?? []);
     final Map<String, XFile> pendingXFiles = {};
     bool isSaving = false;
+    bool isAiScanning = false;
 
     // Dynamic Custom JSONB Attributes controllers (exclude reserved system keys)
     List<MapEntry<TextEditingController, TextEditingController>> customAttrPairs = [];
@@ -1238,6 +1241,207 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
+              }
+            }
+          }
+
+          Future<void> runAiAutofill(String imagePathOrKey) async {
+            if (isAiScanning) return;
+            setModalState(() {
+              isAiScanning = true;
+            });
+
+            try {
+              Uint8List? imageBytes;
+              String mimeType = 'image/jpeg';
+
+              if (pendingXFiles.containsKey(imagePathOrKey)) {
+                final xf = pendingXFiles[imagePathOrKey]!;
+                imageBytes = await xf.readAsBytes();
+                if (xf.name.toLowerCase().endsWith('.png')) {
+                  mimeType = 'image/png';
+                }
+              } else if (!imagePathOrKey.startsWith('http') && !kIsWeb) {
+                final file = File(imagePathOrKey);
+                if (await file.exists()) {
+                  imageBytes = await file.readAsBytes();
+                  if (imagePathOrKey.toLowerCase().endsWith('.png')) {
+                    mimeType = 'image/png';
+                  }
+                }
+              }
+
+              if (imageBytes == null || imageBytes.isEmpty) {
+                if (sheetCtx.mounted) {
+                  ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                    SnackBar(
+                      content: Text(sheetCtx.isHindi
+                          ? 'कृपया विश्लेषण के लिए पहले एक तस्वीर चुनें'
+                          : 'Please pick an image first for AI analysis'),
+                      backgroundColor: AppColors.warning,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+                return;
+              }
+
+              final base64String = base64Encode(imageBytes);
+              final aiRepo = AiRepository();
+              final resp = await aiRepo.scanProduct(imageBase64: base64String, mimeType: mimeType);
+
+              if (resp.success && resp.data != null) {
+                final data = resp.data!;
+                setModalState(() {
+                  // 1. Name
+                  final rawName = data['name']?.toString().trim() ?? '';
+                  if (rawName.isNotEmpty) {
+                    nameCtrl.text = rawName;
+                  }
+
+                  // 2. Brand
+                  final rawBrand = data['brand']?.toString().trim() ?? '';
+                  if (rawBrand.isNotEmpty) {
+                    brandCtrl.text = rawBrand;
+                  }
+
+                  // 3. Category
+                  final rawCategory = data['category_hint']?.toString().trim() ?? '';
+                  if (rawCategory.isNotEmpty) {
+                    final canonical = CategoryRegistry.formatCategoryName(rawCategory);
+                    if (!categoriesList.contains(canonical)) {
+                      categoriesList.insert(0, canonical);
+                    }
+                    categoryCtrl.text = canonical;
+                  }
+
+                  // 4. Weight
+                  final rawWeight = data['weight'];
+                  if (rawWeight != null) {
+                    final w = double.tryParse(rawWeight.toString()) ?? 0;
+                    if (w > 0) {
+                      weightCtrl.text = w == w.toInt() ? w.toInt().toString() : w.toString();
+                    }
+                  }
+
+                  // 5. Unit
+                  final rawUnit = data['unit']?.toString().toLowerCase().trim() ?? '';
+                  if (['gm', 'kg', 'ml', 'litre', 'piece', 'meter', 'pack', 'pair', 'box'].contains(rawUnit)) {
+                    unit = rawUnit;
+                  }
+
+                  // 6. MRP
+                  final rawMrp = data['mrp'];
+                  if (rawMrp != null) {
+                    final m = double.tryParse(rawMrp.toString()) ?? 0;
+                    if (m > 0) {
+                      comparePriceCtrl.text = m.toStringAsFixed(0);
+                    }
+                  }
+
+                  // 7. Selling Price
+                  final rawSp = data['selling_price'];
+                  if (rawSp != null) {
+                    final sp = double.tryParse(rawSp.toString()) ?? 0;
+                    if (sp > 0) {
+                      priceCtrl.text = sp.toStringAsFixed(0);
+                    }
+                  }
+
+                  // 8. Cost Price
+                  final rawCost = data['estimated_cost'];
+                  if (rawCost != null) {
+                    final cp = double.tryParse(rawCost.toString()) ?? 0;
+                    if (cp > 0) {
+                      costPriceCtrl.text = cp.toStringAsFixed(0);
+                    }
+                  }
+
+                  // 9. Description
+                  final rawDesc = data['description']?.toString().trim() ?? '';
+                  if (rawDesc.isNotEmpty) {
+                    descriptionCtrl.text = rawDesc;
+                  }
+
+                  // 10. Barcode / SKU
+                  if (barcodeCtrl.text.trim().isEmpty) {
+                    final rawBarcode = data['barcode']?.toString().trim() ?? '';
+                    final rawSku = data['suggested_sku']?.toString().trim() ?? '';
+                    if (rawBarcode.isNotEmpty) {
+                      barcodeCtrl.text = rawBarcode;
+                    } else if (rawSku.isNotEmpty) {
+                      barcodeCtrl.text = rawSku;
+                    }
+                  }
+
+                  // 11. Attributes (Deep specs)
+                  if (data['attributes'] is Map) {
+                    final attrMap = Map<String, dynamic>.from(data['attributes']);
+                    attrMap.forEach((k, v) {
+                      final cleanK = k.toString().trim();
+                      final cleanV = v.toString().trim();
+                      if (cleanK.isNotEmpty && cleanV.isNotEmpty && !cleanK.toLowerCase().contains('specs')) {
+                        final existing = customAttrPairs.firstWhere(
+                          (p) => p.key.text.toLowerCase().trim() == cleanK.toLowerCase(),
+                          orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
+                        );
+                        if (existing.key.text.isEmpty) {
+                          customAttrPairs.add(MapEntry(
+                            TextEditingController(text: CategoryRegistry.formatCategoryName(cleanK)),
+                            TextEditingController(text: cleanV),
+                          ));
+                        } else if (existing.value.text.trim().isEmpty) {
+                          existing.value.text = cleanV;
+                        }
+                      }
+                    });
+                  }
+                });
+
+                if (sheetCtx.mounted) {
+                  ScaffoldMessenger.of(sheetCtx).clearSnackBars();
+                  ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              sheetCtx.isHindi
+                                  ? '✨ AI ने उत्पाद के 10+ विवरण लोड किए: ${data['name'] ?? ''}'
+                                  : '✨ AI Auto-Filled 10+ details for: ${data['name'] ?? ''}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: AppColors.primary,
+                      duration: const Duration(seconds: 4),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } else {
+                if (sheetCtx.mounted) {
+                  ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                    SnackBar(
+                      content: Text(resp.message?.isNotEmpty == true
+                          ? resp.message!
+                          : (sheetCtx.isHindi ? 'AI से विवरण नहीं मिल सका' : 'Could not extract details from AI')),
+                      backgroundColor: AppColors.warning,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            } catch (err) {
+              debugPrint('[InventoryScreen] runAiAutofill exception: $err');
+            } finally {
+              if (sheetCtx.mounted) {
+                setModalState(() {
+                  isAiScanning = false;
+                });
               }
             }
           }
@@ -1483,6 +1687,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                 currentCount: productImages.length,
                                 onFilesSelected: (files) {
                                   setModalState(() {
+                                    String? firstAddedKey;
                                     for (final f in files) {
                                       if (productImages.length < 10) {
                                         final key = f.path.isNotEmpty
@@ -1490,7 +1695,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                             : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
                                         productImages.add(key);
                                         pendingXFiles[key] = f;
+                                        firstAddedKey ??= key;
                                       }
+                                    }
+                                    if (firstAddedKey != null && (nameCtrl.text.trim().isEmpty || isDuplicate)) {
+                                      runAiAutofill(firstAddedKey);
                                     }
                                   });
                                 },
@@ -1574,6 +1783,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     currentCount: productImages.length,
                                     onFilesSelected: (files) {
                                       setModalState(() {
+                                        String? firstAddedKey;
                                         for (final f in files) {
                                           if (productImages.length < 10) {
                                             final key = f.path.isNotEmpty
@@ -1581,7 +1791,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                                 : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
                                             productImages.add(key);
                                             pendingXFiles[key] = f;
+                                            firstAddedKey ??= key;
                                           }
+                                        }
+                                        if (firstAddedKey != null && (nameCtrl.text.trim().isEmpty || isDuplicate)) {
+                                          runAiAutofill(firstAddedKey);
                                         }
                                       });
                                     },
@@ -1610,6 +1824,72 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         ),
                       ),
                     ),
+
+                    // AI AUTO-FILL MAGIC BANNER & BUTTON
+                    if (productImages.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isAiScanning
+                              ? AppColors.primary.withValues(alpha: 0.08)
+                              : sheetCtx.colorPrimaryLight,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: isAiScanning ? 0.35 : 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            if (isAiScanning)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                              )
+                            else
+                              const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isAiScanning
+                                    ? (sheetCtx.isHindi
+                                        ? '⚡ AI तस्वीर का विश्लेषण कर रहा है (10+ विवरण)...'
+                                        : '⚡ AI analyzing image (extracting 10+ details)...')
+                                    : (sheetCtx.isHindi
+                                        ? '✨ AI से 10+ उत्पाद विवरण ऑटो-भरें'
+                                        : '✨ AI Auto-Fill 10+ Details from Image'),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                            if (!isAiScanning)
+                              InkWell(
+                                onTap: () => runAiAutofill(productImages.first),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    sheetCtx.isHindi ? 'ऑटो-भरें' : 'Auto-Fill',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
                     // SECTION 2: BASIC PRODUCT INFORMATION
