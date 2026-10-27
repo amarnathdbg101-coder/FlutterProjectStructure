@@ -1437,6 +1437,15 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               }
             } catch (err) {
               debugPrint('[InventoryScreen] runAiAutofill exception: $err');
+              if (sheetCtx.mounted) {
+                ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                  SnackBar(
+                    content: Text(sheetCtx.isHindi ? 'त्रुटि: $err' : 'Error: $err'),
+                    backgroundColor: AppColors.error,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             } finally {
               if (sheetCtx.mounted) {
                 setModalState(() {
