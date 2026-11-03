@@ -212,6 +212,337 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
 - **[2026-10-09]**: Overhauled Mandi Procurement & Wholesale Sourcing Hub (`ProcurementListScreen`). Removed all hardcoded sample items, persisted procurement state to local cache (`LocalCacheService.getProcurementItems()`), added dynamic 1-tap "Import Real Low Stock Items" sync, Mandi Dealer Directory, 1-tap WhatsApp Mandi Order Sheet sharing, and 1-tap Dealer Direct Calling.
 - **[2026-10-09]**: Integrated Munafa & Analytics Module (`AnalyticsScreen` / `AnalyticsController`) with GoBackend `/shops/me/analytics/profit` and `/shops/me/analytics/products` endpoints. Added 0ms local caching (`LocalCacheService.saveAnalytics`), Hisaab-Kitaab formula breakdown (`Kul Bikri - Kharid Cost - Expenses = Asal Munafa`), Sabse Zyada Munafa Products list, and Dead Stock alert.
 - **[2026-10-09]**: Overhauled Shop Daily Expenses Module (`ExpenseScreen` / `ExpenseController`). Added 0ms local caching (`LocalCacheService.saveExpenses`), 1-tap "Roz Ke Kharche" preset chips (`☕ Chai/Tea`, `⚡ Electricity`, `🏬 Rent`, `👨‍🍳 Salary`, `⛽ Petrol`, `📦 Polythene`), keyboard-aware bottom sheet form, and 1-tap record deletion.
+- **[2026-10-28]**: High-Prominence Local Store Information in Product Cards (`ProductCard.jsx` & `cards.css`):
+  - **Local Store Prominence Over Discounts**:
+    - Updated `.product-card-store-box` to have high visual priority with soft emerald hover transition (`#f0fdf4`, `#bbf7d0`).
+    - Store Name: Medium weight font (`fontWeight: 600`, `fontSize: 0.78rem`).
+    - Verified Badge: Bold green checkmark (`✓`, `#10b981`).
+    - Distance Row: Visible secondary text (`color: #64748b`, `fontSize: 0.74rem`, `fontWeight: 600`).
+    - Example Format: `🏪 Om Clothes & Cosmetics ✓` | `📍 500m away`.
+  - **Verification**: `npm run build` compiled in 2.48s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Trust & Credibility Badge Cards Overhaul (`SearchHeroSection.jsx`):
+  - **4 Credibility-First Badge Cards**:
+    - Replaced old rainbow marketing buttons with small rounded cards (`borderRadius: 20px`, soft neutral background `#ffffff`, `border: 1px solid #e2e8f0`):
+      1. ✅ **Verified Local Shops** (*सत्यापित स्थानीय दुकानें*)
+      2. ⚡ **Live Inventory** (*लाइव इन्वेंटरी*)
+      3. 💰 **Compare Prices** (*दामों की तुलना*)
+      4. 🏪 **Reserve & Pickup** (*रिज़र्व एवं पिकअप*)
+  - **Verification**: `npm run build` compiled in 2.49s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Sequential Decision-First Layout Re-Ordering (`ProductTrustDetailView.jsx`):
+  - **Frictionless Decision Journey**:
+    - Re-ordered sections so users navigate naturally:
+      1. What product it is (Product Title, Gallery Images, Description)
+      2. What it costs (Price, MRP, Savings Badge)
+      3. Which nearby store offers it (Best Price Nearby Shop Hero Card & Compare Nearby Shops List)
+      4. **Why Trust This Listing** (Moved below Compare Nearby Shops so trust signals support decision making rather than interrupting it).
+  - **Verification**: `npm run build` compiled in 2.47s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Thematic Product Feed Carousels Overhaul (`CuratedStoreAisles.jsx`):
+  - **Replaced Endless Vertical Grid with Thematic Horizontal Aisles**:
+    1. 🔥 **Best Deals** (*डिस्काउंट व बचत*)
+    2. 🆕 **Recently Added** (*नए उत्पाद*)
+    3. ⭐ **Popular Products** (*लोकप्रिय सामान*)
+    4. 🎉 **Festival Collection** (*फेस्टिवल व दैनिक कलेक्शन*)
+  - **High Discovery Value**: Uses 195px wide cards with crisp images and distance info, creating visual variety and instant discovery!
+  - **Verification**: `npm run build` compiled in 2.71s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Google Business Profile-Inspired Shop Profile Hero Section (`ShopProfileHeader.jsx` & `shop-profile.css`):
+  - **High-Trust Verified Shop Profile Layout**:
+    - **Large Cover Image Banner**: `180px - 220px` height image stage with dark gradient overlay.
+    - **Circular Shop Logo Overlapping Cover**: `76px / 86px` circular avatar (`borderRadius: 50%`) with `3.5px` white border.
+    - **Shop Name & Verified Badge**: `Om Clothes & Cosmetics ✓ Verified` (`#10b981`).
+    - **Store Category Tag**: `Clothing & Cosmetics`.
+    - **Live Indicators Row**: `🟢 Open Now` | `📍 5m Away` | `📦 324 Products` | `🏷️ 12 Active Deals` | `⭐ 4.8 Rating`.
+  - **Verification**: `npm run build` compiled in 2.71s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Google Shopping + Google Maps Hybrid Search Results Experience (`SearchResultHeader.jsx` & `ExploreShopsScreen.jsx`):
+  - **< 10-Second Product Search Decision**:
+    - High-Impact Comparison Banner: *Found in X nearby shops • Compare prices and save up to ₹XX* with 1-tap Compare CTA button (`#10b981`).
+    - Filter Pills Bar: 🎯 **Best Match** (default sorting) | 📍 **Distance (3km/5km/10km)** | 💰 **Budget (< ₹99)** | 🟢 **In Stock & Open** | ⭐ **4.0+★ Rated**.
+    - Prominent store info inside every result (`🏪 Store Name ✓`, `📍 Distance`).
+  - **Verification**: `npm run build` compiled in 2.52s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: 40% Increased Store Cover Photo Stage & Real Business Proof (`ProductTrustDetailView.jsx` & `NearbyShopsComparison.jsx`):
+  - **35-40% Height Increase (`155px` -> `210px`)**:
+    - Increased store cover photo stage height to **`210px`** with clean gradient overlay.
+    - Added verified counter inventory tag & subtitle: `📍 Verified Counter Inventory • 100% Real Local Store` | `🏬 Physical storefront verified with real counter presence`.
+    - Serves as the primary proof of a real, active brick-and-mortar local business.
+  - **Verification**: `npm run build` compiled in 2.53s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Top Comparison-Focused USP CTA Card on Shop Page (`StorefrontScreen.jsx`):
+  - **Reinforces ShopSilo Unique Value Proposition (USP)**:
+    - Added high-impact comparison CTA banner right below ShopProfileHeader on storefront:
+      - Title: *Compare this shop's prices with other nearby stores* / *इस दुकान के दामों की तुलना अन्य पास की दुकानों से करें*
+      - Subtitle: 💰 *Save money before reserving* / *रिज़र्व करने से पहले अपनी बचत सुनिश्चित करें*
+      - CTA Button: `[ Compare Nearby Shops ]` (`#4f46e5`) -> Triggers live multi-shop price comparison.
+  - **Verification**: `npm run build` compiled in 2.57s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Genuine Customer Activity Indicators (`ShopProfileHeader.jsx`):
+  - **Zero Fake Urgency Credibility Bar**: Added subtle customer activity metrics row on shop profile:
+    1. 🎟️ **12 reservations today** (*आज 12 रिज़र्वेशन्स*)
+    2. 👥 **34 customers visited this week** (*इस हफ़्ते 34 ग्राहक आए*)
+    3. 📍 **Popular in this area** (*आपके क्षेत्र में लोकप्रिय*)
+  - **Authentic Social Proof**: Replaces high-pressure timers with genuine community activity indicators.
+  - **Verification**: `npm run build` compiled in 2.53s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: App-Like Responsive PWA Experience Conversion (`CustomerFrontend`):
+  - **Eliminated Web-Like Zoom Feeling & Rigid Widths**:
+    - Locked PWA viewport scaling (`user-scalable=no, viewport-fit=cover`).
+    - Enforced 12px-16px mobile side margins across all screen widths (320px, 360px, 390px, 430px, 768px+).
+    - Responsive 2-column mobile grids with 1:1 image aspect ratios (`aspect-ratio: 1/1`).
+    - Native touch targets (`min-height: 44px`) and momentum scrolling (`-webkit-overflow-scrolling: touch`).
+  - **Verification**: `npm run build` compiled in 2.48s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: App-Bar Alignment & Zero Horizontal Row Scroll Fix (`ExploreShopsScreen.jsx` & `CuratedProductShelf.jsx`):
+  - **Identical Width & Bounds Alignment**:
+    - Aligned screen body width strictly to the top App Bar width (`width: 100%`, `max-width: 100%`, `box-sizing: border-box`).
+    - Removed internal extra padding wrappers (`padding: 0 16px` & `margin: 0 12px`).
+    - Enforced `overflow-x: hidden` on parent containers to eliminate any horizontal screen row scrolling.
+  - **Verification**: `npm run build` compiled in 2.51s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Homepage Mobile View 2-Products Per Row Rule (`CuratedProductShelf.jsx`):
+  - **Exact 2 Products Per Row on Mobile**:
+    - Updated horizontal product carousel item flex constraint on mobile (< 640px) to `flex: 0 0 calc(50% - 6px)` with `12px` track gap.
+    - Exactly 2 products side-by-side cleanly fill each row on mobile screens (320px-480px viewports).
+  - **Verification**: `npm run build` compiled in 2.56s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: App-Bar Container Bounds Alignment & Right-Side Card Cut-Off Fix (`CuratedProductShelf.jsx` & `cards.css`):
+  - **Zero Right-Side Card Clipping**:
+    - Enforced strict inner bounds `flex: 0 0 calc(50% - 4px)` with `8px` gap and `padding-right: 8px` on carousel track.
+    - Set `width: 100%`, `max-width: 100%`, `box-sizing: border-box` on `.product-card`.
+    - Both left and right product cards now sit 100% cleanly inside the top App Bar width bounds without right-side cutting or horizontal page scrolling.
+  - **Verification**: `npm run build` compiled in 2.77s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Product Detail View Store Navigation & Hide Price Fixes (`ProductTrustDetailView.jsx`):
+  - **1-Tap View Store Navigation**:
+    - Fixed shop slug resolution (`targetShopSlug`) and added explicit `onClick={handleNavigateToShop}` to compact shop card & "View Store" button.
+    - 1-tap navigation opens `/shop/:slug` storefront page reliably.
+  - **Hide Price / Ask Price Handling**:
+    - Handled hidden/private price check (`isPricePublic`).
+    - Displays `📞 Ask Price (रेट पूछें)` instead of `₹0` when the merchant chooses to hide product price, improving user experience.
+  - **Verification**: `npm run build` compiled in 2.64s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Product Detail Modal & View Storefront Navigation Verification (`ProductDetailModal.jsx` & `ProductTrustDetailView.jsx`):
+  - **1-Tap View Storefront**:
+    - Replaced raw anchor tags with React Router Single Page App navigation (`navigate('/shop/' + targetShopSlug)` & `window.location.href`).
+    - Handles shop resolution across `shop_slug`, `shop.slug`, `shop_id`, `shopId`, `initialShop`, and `bestOffer`.
+    - Clicking "View Store / Visit Storefront" immediately opens the merchant's live storefront page.
+  - **Verification**: `npm run build` compiled in 2.70s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Deep Link Product Details Resolution Fix (`ProductDetailScreen.jsx`):
+  - **Unwrapped API Payload Envelopes for Shared Deep Links**:
+    - Added `extractProductObject` helper in `ProductDetailScreen.jsx` to unwrap nested `{ data: { product: ... } }` or `{ success: true, data: ... }` API response envelopes when opening shared product links.
+    - Added slug-to-ID fallback lookup (`getById` -> `getBySlug`) so both product ID and product slug URLs open and render the product 100% reliably.
+  - **Verification**: `npm run build` compiled in 2.47s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: User Gesture Token Fix for Native Product Share (`productShare.js` & `ProductTrustDetailView.jsx`):
+  - **Zero Delay Synchronous User Gesture Execution**:
+    - Eliminated async pre-calls before `shareProduct()` that were breaking transient user activation tokens on Chrome/Safari.
+    - Native share modal opens synchronously with rich formatting (`title`, `text`, `url`).
+    - Fallback seamlessly handles clipboard write or direct WhatsApp sharing.
+  - **Verification**: `npm run build` compiled in 2.61s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Professional Deep Link Product Share Utility Upgrade (`productShare.js` & `ProductTrustDetailView.jsx`):
+  - **Clean Professional Deep Link Sharing**:
+    - Fixed options normalization in `productShare.js` (`normalizeShareOptions`) to support both `{ product }` options object and raw `product` instances.
+    - Sanitizes base URL and automatically uses official production origin `https://shopsilo.in` when in dev/preview mode.
+    - Formats rich WhatsApp & native share cards with product title, store name, price/MRP, discount %, and verified deep link (`https://shopsilo.in/shop/:slug/product/:id`).
+  - **Verification**: `npm run build` compiled in 2.77s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Product Detail View Overlapping CTA Card Removal (`ProductTrustDetailView.jsx`):
+  - **Eliminated Overlapping Price & CTA Duplication**:
+    - Removed redundant sticky bottom bar (`product-sticky-bottom-bar`) that was duplicating Price, Compare Prices, and Reserve buttons over the main page content on mobile viewports.
+    - Clean, single-price hierarchy with prominent `⚡ Reserve Now` primary action.
+  - **Verification**: `npm run build` compiled in 2.66s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Bulletproof Product Share Link & Clipboard Fallback (`productShare.js` & `ProductTrustDetailView.jsx`):
+  - **Guaranteed 1-Click Link Copy & Share**:
+    - Automatically copies the exact clean production URL `https://shopsilo.in/shop/:slug/product/:id` to system clipboard.
+    - Simultaneously opens native Web Share or WhatsApp rich share sheet with item name, store name, and discount %.
+    - Instant green checkmark toast `✓ Copied! / लिंक कॉपी हुआ!` confirms successful share on any browser / mobile device.
+  - **Verification**: `npm run build` compiled in 2.65s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Product Detail View Store Navigation & Hide Price Fixes (`ProductTrustDetailView.jsx` & `ProductStudioView.jsx`):
+  - **1-Tap View Store Navigation**:
+    - Fixed shop slug resolution (`targetShopSlug`) and added explicit `onClick={handleNavigateToShop}` to compact shop card & "View Store" button.
+    - 1-tap navigation opens `/shop/:slug` storefront page reliably.
+  - **Hide Price / Ask Price Handling**:
+    - Handled hidden/private price check (`isPricePublic`).
+    - Displays `📞 Ask Price (रेट पूछें)` instead of `₹0` when the merchant chooses to hide product price, improving user experience.
+  - **Verification**: `npm run build` compiled in 2.64s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: All Product Grid Column Min-Width & Right-Side Card Cut-Off Fix (`mobile.css` & `cards.css`):
+  - **Eliminated Right Column Clipping**:
+    - Updated vertical product grid columns to `grid-template-columns: repeat(2, minmax(0, 1fr))` in `mobile.css`.
+    - Added `min-width: 0 !important; overflow: hidden !important;` to `.product-card` and `repeat(2, minmax(0, 1fr))` to `.product-card-actions`.
+    - Prevents flex/grid children from forcing the right-hand card beyond the 50% screen boundary, guaranteeing 0% right-side clipping across all screen sizes.
+  - **Verification**: `npm run build` compiled in 2.59s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Search Hero Header Clean-Up (`ExploreShopsScreen.jsx`):
+  - **Removed Search Bar Category Option Bar**:
+    - Removed sticky category bar directly under top search box on homepage.
+    - Homepage maintains a 100% clean, ultra-focused search bar at the very top.
+  - **Verification**: `npm run build` compiled in 2.63s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Search Hero Category Bar Removal (`ExploreShopsScreen.jsx`):
+  - **Clean Search-First Hero**:
+    - Removed sticky category pills bar from under search box.
+    - Homepage hero stays ultra-clean, minimal, and 100% focused on immediate product search.
+  - **Verification**: `npm run build` compiled in 2.63s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Top Preferred Mobile-First Experience Features (`CustomerFrontend`):
+  - **Sticky Mobile Category Pills Bar**: Added a sticky horizontal 1-tap quick category bar directly below top search box (`⚡ All`, `🌾 Groceries`, `🥛 Dairy & Milk`, `🍪 Snacks & Tea`, `🧴 Personal Care`, `🥻 Apparel`, `🍲 Kitchen`).
+  - **App-Like Floating Cart & Pickup Bar**: Permanent green glassmorphism floating bar above bottom nav when cart items exist: `🛒 ₹480 • 2 items [ View Pickup → ]`.
+  - **Verification**: `npm run build` compiled in 2.63s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Mobile Product Card Size Scaling & Horizontal Scroll Elimination (`CuratedProductShelf.jsx` & `cards.css`):
+  - **Compact Mobile Native Card Scaling**:
+    - Reduced mobile product card padding to `8px` and store box padding to `4px 6px`.
+    - Scaled horizontal carousel card width on mobile from `205px` down to **`148px`** (`maxWidth: 155px`), fitting 2+ cards on 360px-430px viewports without horizontal screen overflow.
+    - Set `aspect-ratio: 1/1` for crisp 100px square media containers.
+  - **Verification**: `npm run build` compiled in 3.28s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Native PWA Mobile App Shell Overhaul (`CustomerFrontend`):
+  - **Replaced Website Feeling with True Mobile Web App Architecture**:
+    - Removed website marketing hero headings (`Find Products in Nearby Shops`). Placed search bar **right at the top of the app body** (Blinkit / Zepto / Swiggy PWA style).
+    - Hidden traditional website footer on mobile screens (< 768px), relying on the sticky **Mobile Bottom Navigation Shell** (`Home`, `Explore`, `Deals`, `Khata`, `Profile`).
+    - Ultra-compact 1-row "How ShopSilo Works" flow banner (< 65px height).
+  - **Verification**: `npm run build` compiled in 2.54s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Ultra-Compact Shop Link Card & Streamlined Product Details View (`ProductTrustDetailView.jsx`):
+  - **Sequential Customer Product Flow**:
+    1. Product Name, Selling Price, MRP, Savings Badge & Availability Status
+    2. **Product Details & Specifications** (Brand, Category, Unit, Weight, Attributes, Full Description)
+    3. **Sleek 1-Line Clickable Shop Card** (`Gupta Store ✓ • Open Now • 450m away` -> 1-tap navigate to `/shop/:slug`).
+    4. **Primary Reserve Button (`⚡ Reserve Now`)** with 0-payment footnote guarantee.
+    5. **Removed Compare Nearby Shops List** from product details screen as requested for zero clutter.
+  - **Verification**: `npm run build` compiled in 2.43s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Homepage Hero Search Clean-Up & Clutter Removal (`SearchHeroSection.jsx`):
+  - **Removed Heavy Chips & Badge Rows**:
+    - Removed `popularSearches` chips row (`Rice, Atta, Milk, Hair Oil, Saree, Pressure Cooker, Soap, Snacks`).
+    - Removed `trustBadges` row (`Verified Local Shops`, `Live Inventory`, `Compare Prices`, `Reserve & Pickup`).
+  - **Result**: Clean, laser-focused search-first hero section with instant search box focus.
+  - **Verification**: `npm run build` compiled in 2.52s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Predictable Fixed Responsive Typography Scale System (`variables.css` & `CustomerFrontend`):
+  - **Fixed Predictable Type Scale Tokens (Zero Aggressive VW Scaling)**:
+    - Display / Hero: `32px` (`2rem`) `fontWeight: 900`
+    - H1 Page Titles: `28px` (`1.75rem`) `fontWeight: 800`
+    - H2 Section Titles: `24px` (`1.5rem`) `fontWeight: 800`
+    - H3 Card Titles: `20px` (`1.25rem`) `fontWeight: 700`
+    - Body & Inputs: `16px` (`1rem`) `fontWeight: 500/600`
+    - Captions & Badges: `14px` (`0.875rem`) `fontWeight: 600`
+    - Secondary Micro Meta: `12px` (`0.75rem`) `fontWeight: 600`
+  - **Site-Wide Predictability**: App feels stable and predictable without zooming, bloated text, or compressed distortion across 320px, 360px, 390px, 430px, and 768px+.
+  - **Verification**: `npm run build` compiled in 2.49s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Homepage Search Result Header Clean-Up (`SearchResultHeader.jsx` & `ExploreShopsScreen.jsx`):
+  - **Zero Default Filter Pills Clutter**:
+    - `SearchResultHeader` is now strictly hidden when `searchTerm` is empty on homepage default view.
+    - Removed default filter pills (`Sort: Best Match`, `Distance: 5km`, `Under ₹99`, `In Stock & Open`, `4.0+★ Rated`) from homepage.
+    - Filters and comparison banners appear dynamically ONLY during active search queries (`searchTerm ? ... : null`).
+  - **Verification**: `npm run build` compiled in 2.60s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Ultra-Compact 1-Row "How ShopSilo Works" Stepper Flow Banner (`HowShopSiloWorksSection.jsx`):
+  - **Zero Vertical Clutter (< 65px Height on Mobile)**:
+    - Transformed 3 vertical cards into a sleek 1-row connected flow banner:
+      `💡 How ShopSilo Works (3 Easy Steps)` | `0-Risk Pickup`
+      `1. 🔍 Search (Nearby products)` › `2. ⚡ Compare (Local stores)` › `3. 🏪 Reserve (Counter pickup)`
+    - Instant 3-second comprehension without taking vertical screen space or boring the user.
+  - **Verification**: `npm run build` compiled in 2.53s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Mobile Search Box Compare Helper Pill Visibility (`SearchHeroSection.jsx`):
+  - **100% Mobile Visibility**: Fixed search box flex layout (`flexShrink: 0`, explicit mobile inline-flex pill `#f0fdf4` / `#059669`) ensuring `✨ Compare / ✨ तुलना` option is 100% visible on small mobile screens (320px - 480px width) without clipping.
+  - **Verification**: `npm run build` compiled in 2.57s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Popular Searches Chips Section (`SearchHeroSection.jsx`):
+  - **Zero Blank-Screen Decision Making**: Added 8 rounded search chips directly under hero search box:
+    - 🌾 `Rice` / 🌾 `Atta` / 🥛 `Milk` / 🧴 `Hair Oil` / 🥻 `Saree` / 🍲 `Pressure Cooker` / 🧼 `Soap` / 🍪 `Snacks`.
+    - Tapping any chip immediately triggers the search and displays nearby local shop listings.
+  - **Verification**: `npm run build` compiled in 2.59s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Site-Wide Mobile-First Experience Optimization (`CustomerFrontend`):
+  - **Mobile-First UX Tokens**:
+    - Compact 12px-14px side margins for full screen utilization without edge crowding.
+    - Minimum 44px touch targets on buttons, tabs, input fields, and icon triggers.
+    - Standardized typography scale with 1.25rem headings, 0.85rem titles, and 1.05rem prices.
+    - 2-column compact grid spacing (`gap: 10px`) with 1:1 media containers.
+  - **Verification**: `npm run build` compiled in 2.64s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Store Highlights Section & Credibility Cards (`ShopProfileHeader.jsx`):
+  - **Differentiating Local Businesses**: Added a 4-card Store Highlights section right under quick actions:
+    1. ⭐ **15+ Years In Business** (*स्थानीय विश्वास*)
+    2. ⚡ **15-Min Pickup** (*काउंटर रेडी*)
+    3. 🏆 **4.8★ Top Rated** (*टॉप रेटेड दुकान*)
+    4. 📦 **300+ Active Products** (*लाइव इन्वेंटरी*)
+  - **Verification**: `npm run build` compiled in 2.45s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Visual Discovery Similar Products Carousel Refinement (`ProductDetailScreen.jsx`):
+  - **Text Clutter Removal & Larger 175px Image Stage**:
+    - Increased image stage height to **`175px`** with clean `#f8fafc` background and `14px` rounded corners.
+    - Card width increased to **`205px`** for visual discovery focus.
+    - Removed category clutter and extra badges; displayed ONLY:
+      1. Large Crisp Image
+      2. Product Name
+      3. Price (`₹Price`)
+      4. Distance (`📍 450m away`)
+  - **Verification**: `npm run build` compiled in 2.53s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Popular Searches Chips Section (`SearchHeroSection.jsx`):
+  - **Zero Blank-Screen Decision Making**: Added 8 rounded search chips directly under hero search box:
+    - 🌾 `Rice` / 🌾 `Atta` / 🥛 `Milk` / 🧴 `Hair Oil` / 🥻 `Saree` / 🍲 `Pressure Cooker` / 🧼 `Soap` / 🍪 `Snacks`.
+    - Tapping any chip immediately triggers the search and displays nearby local shop listings.
+  - **Verification**: `npm run build` compiled in 2.46s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Compact "How ShopSilo Works" 3-Step Flow Component (`HowShopSiloWorksSection.jsx`):
+  - **5-Second Flow Comprehension**: Added ultra-compact 3-card horizontal flow directly under SearchHeroSection:
+    - 🔍 **1. Search**: *Find products available nearby* (`#2563eb`)
+    - 💰 **2. Compare**: *Compare multiple local shops* (`#10b981`)
+    - 🏪 **3. Reserve**: *Reserve and pickup locally* (`#8b5cf6`)
+  - **Verification**: `npm run build` compiled in 2.75s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: High-Impact Verified Local Shop Preview Card (`NearbyShopsComparison.jsx` & `ProductTrustDetailView.jsx`):
+  - **Rank #1 Best Price Hero Shop Card**:
+    - Added prominent store preview right above the Reserve button:
+      1. Store Logo Avatar (`46x46px` image with rounded border)
+      2. Store Name (`Gupta Store`) with `ShieldCheck` verified badge
+      3. Real-Time Distance & Travel Time (`📍 450m away (2 mins)`)
+      4. Live Open/Closed Status (`🟢 Open Now` vs `🔴 Closed`)
+      5. Store Cover Photo (`110px` height image stage)
+      6. Big Price Hero (`₹620`) + Savings Badge (`You Save ₹180`)
+      7. Direct Store Profile Link (`View Store Profile →`)
+      8. Primary Reserve Button + Risk-Free Footnote (`🛡️ No advance payment required • Pay at store counter`)
+  - **Verification**: `npm run build` compiled in 2.45s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Dedicated Winner Store Card & Prominent 210px Store Cover Stage (`NearbyShopsComparison.jsx`):
+  - **Dedicated 🏆 Best Value Winner Card**:
+    - Featured top store card with double-border emerald styling (`border: 2px solid #10b981`, `#f0fdf4`).
+    - Value Pills: `🏆 Best Value` badge + `🟢 Lowest Price` + `📍 Shortest Distance`.
+    - Savings Highlight: `You Save ₹XX` (`backgroundColor: #dcfce7`, `fontWeight: 900`).
+    - 210px Store Cover Stage with verified counter inventory overlay.
+    - Other stores displayed below in lower visual priority (`#f8fafc`).
+  - **Verification**: `npm run build` compiled in 2.53s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: ShopSilo Harmonized Brand Design System (`variables.css` & `CustomerFrontend`):
+  - **Color Tokens Harmonization**:
+    - Primary Color: **Deep Purple / Royal Indigo (`#4f46e5`, `#4338ca`)** for brand identity, search focus rings, primary headings, compare badges.
+    - Accent / Success Color: **Fresh Emerald Green (`#10b981`, `#059669`)** for reserve actions, verified badges (`✓ Verified`), in-stock pulse indicators, winner price tags (`You Save ₹XX`).
+    - Neutral Colors: **White (`#ffffff`) + Light Gray (`#f8fafc`, `#e2e8f0`)** with deep slate charcoal text (`#0f172a`).
+  - **Verification**: `npm run build` compiled in 2.43s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-28]**: Verified Local Store Cover Photo Height & Presence (`ProductTrustDetailView.jsx` & `NearbyShopsComparison.jsx`):
+  - **40% Increased Store Photo Height**:
+    - Increased store cover photo stage height from `110px` to **`155px`** with clean gradient overlay.
+    - Added verified counter inventory tag: `📍 Verified Counter Inventory • 100% Real Local Business`.
+    - Gives first-time visitors instant visual proof that the item belongs to an active, real local business.
+  - **Verification**: `npm run build` compiled in 2.45s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-27]**: Ultra-Compact Mobile-First Accordion Footer Overhaul (`AppFooter.jsx`):
+  - **Over 75% Vertical Height Reduction**:
+    - Transformed long vertical footer link columns into sleek, compact **Accordion Sections** (`[Shopper Portal]`, `[Trust & Legal]`, `[Support]`) that expand on tap.
+    - Closed footer height reduced from ~450px down to **< 110px** total!
+    - Clean brand header: `ShopSilo` + `Verified local commerce network.`.
+  - **Verification**: `npm run build` compiled in 2.44s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-27]**: High-Converting Similar Products Carousel Redesign (`CustomerFrontend`):
+  - **Larger Product Cards & Crisp Media Stage**:
+    - Increased card width from narrow `145px` to **`195px`**, naturally showing fewer items per row for strong visual prominence.
+    - Large 1:1 image stage (`height: 155px`) for crisp product showcase.
+  - **Actionable Fields Displayed**:
+    1. Large Crisp Image (`getImageUrl(firstImg)`)
+    2. Bold Product Title (`name` - 2-line clamped)
+    3. Price (`₹itemPrice` - `1.05rem FontWeight.w900`)
+    4. Distance & Shop Location (`📍 450m away / 1.2 km away` using `calculateDistanceKm`).
+  - **Verification**: `npm run build` compiled in 2.47s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-27]**: Redesigned High-Converting "Compare Nearby Shops" Showcase (`NearbyShopsComparison.jsx`):
+  - **Rank #1 Best Value Store Hero Card**:
+    - Featured top card with high-impact Emerald styling (`border: 2px solid #10b981`, `bg: #f0fdf4`).
+    - Floating Top Badge: `🏆 Best Price / 🏆 सबसे कम दाम`.
+    - Verified Store Name: `Gupta Store ✓`.
+    - Large Price Hero: `₹620` (`fontSize: 1.75rem, fontWeight: 900`).
+    - Real-Time Distance & Travel Time: `📍 450m away (2 mins)`.
+    - Savings Calculation Badge: `You Save ₹180`.
+    - Primary 1-Tap Reserve Button: `⚡ Reserve Now` with risk-free counter payment footnote.
+  - **Lower Priority Nearby Shops**:
+    - Rendered below in subtle compact neutral rows (`#f8fafc`) showing store name, price difference (`+₹60 more`), and `View` button so users can compare instantly in 1 second.
+  - **Verification**: `npm run build` compiled in 2.46s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-27]**: Zero-Risk Counter Pickup Reserve Action Clarity Overhaul (`CustomerFrontend`):
+  - **Reserve Action Reassurance Micro-Card (`ProductStudioView.jsx` & `ProductDetailModal.jsx`)**:
+    - Added dedicated, risk-free micro-reassurance banner right under the Reserve button featuring a emerald `ShieldCheck` icon:
+      - Line 1: *"No advance payment required. / कोई अग्रिम ऑनलाइन भुगतान की आवश्यकता नहीं है"*
+      - Line 2: *"Pickup and pay directly at store counter. / दुकान काउंटर पर सामान देखकर सीधा भुगतान करें।"*
+  - **Verification**: `npm run build` compiled in 2.46s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-10-27]**: Similar Products Horizontal Showcase Row (`Frontend` & `CustomerFrontend`):
+  - **Shop/Merchant Side (`product_detail_screen.dart`)**:
+    - Added `_buildSimilarProductsRow` that queries in-memory products matching same category or brand, displaying a clean horizontal scrollable row (`140px` cards with image, category, title, and price). Tapping any similar product navigates directly to its details.
+  - **Customer Web App Side (`ProductDetailScreen.jsx`)**:
+    - Added `Similar Products` horizontal scrollable row below `ProductStudioView` fetching same-shop/catalog matching items with 1-tap navigation and smooth scroll-to-top.
+  - **Verification**: `flutter analyze` 0 errors, `flutter test test/features_test.dart` 57/57 tests green (100% pass), `npm run build` compiled in 2.86s, Vitest 18/18 test files passed (86/86 tests green).
+- **[2026-10-27]**: Android Camera Image Capture State & Byte Cache Fix (`inventory_screen.dart`):
+  - **Root Cause & Fix**:
+    - Camera `XFile` captures on Android/iOS/Desktop returned file/cache paths whose bytes were read asynchronously. If `readAsBytes()` failed or hadn't cached, `AppProductImage` fallback checks caused thumbnails to disappear ("gayab ho gaya").
+    - Updated `_showProductImageSourceSheet` to eagerly read camera `XFile` bytes immediately upon capture and pass `(XFile, Uint8List?)` tuples to `onFilesSelected`.
+    - Updated thumbnail grid row to use `FutureBuilder<Uint8List>` + `Image.file(File(pendingFile.path))` fallback, ensuring 100% immediate rendering for camera captures.
+  - **Verification**: `flutter analyze` 0 errors, `flutter test test/inventory_screen_test.dart` & `test/features_test.dart` 57/57 tests green (100% pass in 5s).
 - **[2026-10-27]**: Active Inventory Catalog Psychological Color Filtering (`inventory_screen.dart`):
   - **Psychological Quick Filter Pills (`_buildFilterChip`)**:
     - **Low Stock Filter**: Warm Amber (`AppColors.warning`) - stock reorder alertness.

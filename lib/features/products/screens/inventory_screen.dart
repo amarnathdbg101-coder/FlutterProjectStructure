@@ -679,7 +679,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
   /// Displays a clean bottom sheet modal offering Camera capture or Device Gallery selection
   void _showProductImageSourceSheet(
     BuildContext context, {
-    required Function(List<XFile> files) onFilesSelected,
+    required Function(List<(XFile, Uint8List?)> files) onFilesSelected,
     int maxAllowed = 10,
     int currentCount = 0,
   }) {
@@ -759,7 +759,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       requestFullMetadata: false,
                     );
                     if (picked != null) {
-                      onFilesSelected([picked]);
+                      Uint8List? bytes;
+                      try {
+                        bytes = await picked.readAsBytes();
+                      } catch (_) {}
+                      onFilesSelected([(picked, bytes)]);
                     }
                   } catch (e) {
                     debugPrint('[InventoryScreen] Camera picker error: $e');
@@ -795,22 +799,18 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     if (pickedFiles.isNotEmpty) {
                       final remaining = maxAllowed - currentCount;
                       final selected = pickedFiles.take(remaining).toList();
-                      onFilesSelected(selected);
+                      final List<(XFile, Uint8List?)> resultList = [];
+                      for (final f in selected) {
+                        Uint8List? bytes;
+                        try {
+                          bytes = await f.readAsBytes();
+                        } catch (_) {}
+                        resultList.add((f, bytes));
+                      }
+                      onFilesSelected(resultList);
                     }
                   } catch (e) {
-                    debugPrint('[InventoryScreen] MultiImage picker warning: $e');
-                    try {
-                      final pickedFiles = await picker.pickMultiImage(
-                        requestFullMetadata: false,
-                      );
-                      if (pickedFiles.isNotEmpty) {
-                        final remaining = maxAllowed - currentCount;
-                        final selected = pickedFiles.take(remaining).toList();
-                        onFilesSelected(selected);
-                      }
-                    } catch (fallbackError) {
-                      debugPrint('[InventoryScreen] Fallback image picker error: $fallbackError');
-                    }
+                    debugPrint('[InventoryScreen] MultiImage picker error: $e');
                   }
                 },
               ),
@@ -996,7 +996,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     bool isActive = initialProduct?.isActive ?? true;
     bool isFeatured = initialProduct?.isFeatured ?? false;
     bool isPricePublic = initialProduct?.isPricePublic ?? true;
-    String unit = initialProduct?.unit ?? 'piece';
+    String unit = initialProduct?.unit ?? 'g';
 
     // Instant Master Catalog Pre-fill if initialBarcode was provided (e.g. from Price Checker or external scan)
     if (initialBarcodeVal.isNotEmpty && (resolvedInitialName.isEmpty || isDuplicate)) {
@@ -1023,19 +1023,26 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         if (u.contains('kg')) {
           unit = 'kg';
         } else if (u.contains('gm') || u.contains('g')) {
-          unit = 'gm';
-        } else if (u.contains('litre') || u.contains('l') || u.contains('ml')) {
-          unit = 'litre';
+          unit = 'g';
+        } else if (u.contains('ml')) {
+          unit = 'ml';
+        } else if (u.contains('litre') || u.contains('l')) {
+          unit = 'l';
         } else if (u.contains('packet') || u.contains('pack')) {
-          unit = 'packet';
+          unit = 'pack';
+        } else if (u.contains('pcs') || u.contains('piece')) {
+          unit = 'pcs';
         } else {
-          unit = 'piece';
+          unit = 'g';
         }
       }
     }
 
     List<String> productImages = List<String>.from(initialProduct?.images ?? []);
     final Map<String, XFile> pendingXFiles = {};
+    // In-memory bytes cache: fixes Android camera content:// URI display bug
+    // where File().existsSync() returns false for content:// paths
+    final Map<String, Uint8List> pendingImageBytes = {};
     bool isSaving = false;
     bool isAiScanning = false;
 
@@ -1695,20 +1702,26 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                 maxAllowed: 10,
                                 currentCount: productImages.length,
                                 onFilesSelected: (files) {
+                                  if (files.isEmpty) return;
+                                  String? firstAddedKey;
                                   setModalState(() {
-                                    String? firstAddedKey;
-                                    for (final f in files) {
+                                    for (final (f, bytes) in files) {
                                       if (productImages.length < 10) {
-                                        final key = f.path.isNotEmpty
-                                            ? f.path
+                                        final key = f.path.trim().isNotEmpty
+                                            ? f.path.trim()
                                             : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
-                                        productImages.add(key);
-                                        pendingXFiles[key] = f;
-                                        firstAddedKey ??= key;
+                                        if (!productImages.contains(key)) {
+                                          productImages.add(key);
+                                          pendingXFiles[key] = f;
+                                          if (bytes != null && bytes.isNotEmpty) {
+                                            pendingImageBytes[key] = bytes;
+                                          }
+                                          firstAddedKey ??= key;
+                                        }
                                       }
                                     }
                                     if (firstAddedKey != null && (nameCtrl.text.trim().isEmpty || isDuplicate)) {
-                                      runAiAutofill(firstAddedKey);
+                                      runAiAutofill(firstAddedKey!);
                                     }
                                   });
                                 },
@@ -1734,6 +1747,75 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                               final idx = entry.key;
                               final path = entry.value;
 
+                              Widget thumbnailChild;
+                              if (pendingImageBytes.containsKey(path) && pendingImageBytes[path]!.isNotEmpty) {
+                                thumbnailChild = Image.memory(
+                                  pendingImageBytes[path]!,
+                                  width: 64,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) => Icon(
+                                    Icons.image_rounded,
+                                    color: sheetCtx.colorTextMuted,
+                                    size: 24,
+                                  ),
+                                );
+                              } else if (pendingXFiles.containsKey(path)) {
+                                final xfile = pendingXFiles[path]!;
+                                thumbnailChild = FutureBuilder<Uint8List>(
+                                  future: xfile.readAsBytes(),
+                                  builder: (ctx, snapshot) {
+                                    if (snapshot.hasData && snapshot.data != null && snapshot.data!.isNotEmpty) {
+                                      pendingImageBytes[path] = snapshot.data!;
+                                      return Image.memory(
+                                        snapshot.data!,
+                                        width: 64,
+                                        height: 64,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (c, e, s) => Icon(
+                                          Icons.image_rounded,
+                                          color: sheetCtx.colorTextMuted,
+                                          size: 24,
+                                        ),
+                                      );
+                                    }
+                                    if (xfile.path.isNotEmpty) {
+                                      try {
+                                        final file = File(xfile.path);
+                                        return Image.file(
+                                          file,
+                                          width: 64,
+                                          height: 64,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (c, e, s) => Icon(
+                                            Icons.image_rounded,
+                                            color: sheetCtx.colorTextMuted,
+                                            size: 24,
+                                          ),
+                                        );
+                                      } catch (_) {}
+                                    }
+                                    return const Center(
+                                      child: SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                      ),
+                                    );
+                                  },
+                                );
+                              } else {
+                                thumbnailChild = AppProductImage(
+                                  imageUrl: path,
+                                  width: 64,
+                                  height: 64,
+                                  expand: true,
+                                  fit: BoxFit.cover,
+                                  fallbackIcon: Icons.image_rounded,
+                                  fallbackIconSize: 24,
+                                );
+                              }
+
                               return Container(
                                 width: 64,
                                 height: 64,
@@ -1748,15 +1830,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     Positioned.fill(
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(10),
-                                        child: AppProductImage(
-                                          imageUrl: path,
-                                          width: 64,
-                                          height: 64,
-                                          expand: true,
-                                          fit: BoxFit.cover,
-                                          fallbackIcon: Icons.image_rounded,
-                                          fallbackIconSize: 24,
-                                        ),
+                                        child: thumbnailChild,
                                       ),
                                     ),
                                     Positioned(
@@ -1767,6 +1841,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                           setModalState(() {
                                             final removed = productImages.removeAt(idx);
                                             pendingXFiles.remove(removed);
+                                            pendingImageBytes.remove(removed);
                                           });
                                         },
                                         child: Container(
@@ -1791,20 +1866,26 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     maxAllowed: 10,
                                     currentCount: productImages.length,
                                     onFilesSelected: (files) {
+                                      if (files.isEmpty) return;
+                                      String? firstAddedKey;
                                       setModalState(() {
-                                        String? firstAddedKey;
-                                        for (final f in files) {
+                                        for (final (f, bytes) in files) {
                                           if (productImages.length < 10) {
-                                            final key = f.path.isNotEmpty
-                                                ? f.path
+                                            final key = f.path.trim().isNotEmpty
+                                                ? f.path.trim()
                                                 : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
-                                            productImages.add(key);
-                                            pendingXFiles[key] = f;
-                                            firstAddedKey ??= key;
+                                            if (!productImages.contains(key)) {
+                                              productImages.add(key);
+                                              pendingXFiles[key] = f;
+                                              if (bytes != null && bytes.isNotEmpty) {
+                                                pendingImageBytes[key] = bytes;
+                                              }
+                                              firstAddedKey ??= key;
+                                            }
                                           }
                                         }
                                         if (firstAddedKey != null && (nameCtrl.text.trim().isEmpty || isDuplicate)) {
-                                          runAiAutofill(firstAddedKey);
+                                          runAiAutofill(firstAddedKey!);
                                         }
                                       });
                                     },
@@ -2271,14 +2352,15 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           child: DropdownButtonFormField<String>(
                             key: ValueKey('inv_edit_unit_dropdown_$unit'),
                             isExpanded: true,
-                            initialValue: ['piece', 'kg', 'gm', 'litre', 'packet', 'box', 'dozen'].contains(unit) ? unit : 'piece',
+                            initialValue: ['g', 'gm', 'kg', 'ml', 'litre', 'l', 'pcs', 'piece', 'packet', 'pack', 'box', 'dozen'].contains(unit) ? unit : 'g',
                             decoration: InputDecoration(labelText: sheetCtx.tr('inv_field_unit')),
                             items: [
-                              DropdownMenuItem(value: 'piece', child: Text(sheetCtx.tr('inv_unit_piece'), overflow: TextOverflow.ellipsis)),
+                              const DropdownMenuItem(value: 'g', child: Text('g (Gram)', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: 'kg', child: Text(sheetCtx.tr('inv_unit_kg'), overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: 'gm', child: Text(sheetCtx.tr('inv_unit_gm'), overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'ml', child: Text('ml (mL)', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: 'litre', child: Text(sheetCtx.tr('inv_unit_litre'), overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: 'packet', child: Text(sheetCtx.tr('inv_unit_packet'), overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'pcs', child: Text(sheetCtx.tr('inv_unit_piece'), overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'pack', child: Text(sheetCtx.tr('inv_unit_packet'), overflow: TextOverflow.ellipsis)),
                               const DropdownMenuItem(value: 'box', child: Text('Box / Peti', overflow: TextOverflow.ellipsis)),
                               const DropdownMenuItem(value: 'dozen', child: Text('Dozen', overflow: TextOverflow.ellipsis)),
                             ],
@@ -2378,9 +2460,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           child: TextField(
                             controller: weightCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: 'Weight (Kg)',
-                              hintText: '1.0',
+                            decoration: InputDecoration(
+                              labelText: 'Weight / Vol ($unit)',
+                              hintText: unit == 'g' || unit == 'gm' ? '500' : '1.0',
                             ),
                           ),
                         ),

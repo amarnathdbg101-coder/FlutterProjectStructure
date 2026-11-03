@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/widgets/app_product_image.dart';
+import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
@@ -36,6 +37,8 @@ class ProductDetailScreen extends StatefulWidget {
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late final PageController _pageController;
   int _activeImageIndex = 0;
+  bool _isTitleExpanded = false;
+  bool _isWishlisted = false;
 
   @override
   void initState() {
@@ -425,6 +428,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               _buildSpecificationsGrid(context, p),
                               const SizedBox(height: 14),
                               _buildDescriptionCard(context, p),
+                              const SizedBox(height: 18),
+                              _buildSimilarProductsRow(context, p),
                               const SizedBox(height: 32),
                             ],
                           ),
@@ -454,6 +459,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       _buildSpecificationsGrid(context, p),
                       const SizedBox(height: 14),
                       _buildDescriptionCard(context, p),
+                      const SizedBox(height: 18),
+                      _buildSimilarProductsRow(context, p),
                       const SizedBox(height: 36),
                     ],
                   );
@@ -466,24 +473,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 1. STUDIO HERO GALLERY (Clean, Aesthetic, Zoomable) ---
+  // --- 1. STUDIO HERO GALLERY (Flipkart Style: Clean White Showcase, Floating Heart & Share, Rating Pill, Centered Blue Dot Pagination) ---
   Widget _buildHeroImageStudio(BuildContext context, ProductModel p, List<String> imagesList) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Main Showcase Stage
         Container(
-          height: 310,
+          height: 330,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: context.colorSurfaceSubtle,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: context.colorBorder),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.02),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -502,7 +509,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           return GestureDetector(
                             onTap: () => _openFullScreenImage(context, imagesList, idx),
                             child: Padding(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(16),
                               child: Hero(
                                 tag: 'product_img_${p.id}_$idx',
                                 child: AppProductImage(
@@ -519,55 +526,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         },
                       ),
 
-                      // Floating Top-Left Discount Badge
-                      if (p.comparePrice > p.price)
-                        Positioned(
-                          top: 12,
-                          left: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.error.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.local_fire_department_rounded, color: Colors.white, size: 12),
-                                const SizedBox(width: 3),
-                                Text(
-                                  '${p.discountPct.toStringAsFixed(0)}% OFF',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                      // Floating Top-Right Stock Status Pill
+                      // Floating Top-Left Available Now Status Pill
                       Positioned(
-                        top: 12,
-                        right: 12,
+                        top: 14,
+                        left: 14,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
                           decoration: BoxDecoration(
                             color: (p.isOutOfStock
                                     ? AppColors.error
                                     : (p.isLowStock ? AppColors.warning : AppColors.success))
-                                .withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(10),
+                                .withValues(alpha: 0.95),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                width: 5,
-                                height: 5,
+                                width: 6,
+                                height: 6,
                                 decoration: const BoxDecoration(
                                   color: Colors.white,
                                   shape: BoxShape.circle,
@@ -576,12 +560,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               const SizedBox(width: 5),
                               Text(
                                 p.isOutOfStock
-                                    ? 'Out of Stock'
-                                    : (p.isLowStock ? 'Low (${p.stock})' : '${p.stock} In Stock'),
+                                    ? (context.isHindi ? 'आउट ऑफ स्टॉक' : 'Out of Stock')
+                                    : (p.isLowStock
+                                        ? (context.isHindi ? 'कम स्टॉक (${p.stock})' : 'Low Stock (${p.stock})')
+                                        : (context.isHindi ? 'उपलब्ध है (${p.stock})' : 'In Stock (${p.stock})')),
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ],
@@ -589,24 +575,110 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       ),
 
-                      // Floating Zoom Hint
+                      // Floating Top-Right Circular Action Buttons: Wishlist & Share (Flipkart Style)
                       Positioned(
-                        bottom: 10,
-                        left: 12,
+                        top: 14,
+                        right: 14,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: Icon(
+                                  _isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                  color: _isWishlisted ? const Color(0xFFEF4444) : const Color(0xFF475569),
+                                  size: 20,
+                                ),
+                                onPressed: () => setState(() => _isWishlisted = !_isWishlisted),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.share_outlined, color: Color(0xFF475569), size: 19),
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(context.isHindi ? 'उत्पाद लिंक कॉपी हो गया!' : 'Product Link Copied!'),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Floating Bottom-Left Rating Pill: 4.4 ★ | 14 (Flipkart Style)
+                      Positioned(
+                        bottom: 14,
+                        left: 14,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.10),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.zoom_in_rounded, size: 12, color: Colors.white70),
-                              SizedBox(width: 3),
                               Text(
-                                'Tap to zoom',
-                                style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w500),
+                                '4.4',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12.5,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                              SizedBox(width: 3),
+                              Icon(Icons.star_rounded, color: Color(0xFF16A34A), size: 14),
+                              SizedBox(width: 4),
+                              Text(
+                                '|  14',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11.5,
+                                  color: Color(0xFF64748B),
+                                ),
                               ),
                             ],
                           ),
@@ -615,8 +687,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
                       // Quick Edit / Change Photos Button
                       Positioned(
-                        bottom: 10,
-                        right: 12,
+                        bottom: 14,
+                        right: 14,
                         child: GestureDetector(
                           onTap: () {
                             if (widget.onEditRequested != null) {
@@ -624,9 +696,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             }
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.6),
+                              color: Colors.black.withValues(alpha: 0.65),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Row(
@@ -644,23 +716,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       ),
 
-                      // Animated Smooth Dot Pagination Pills
+                      // Animated Blue Dot Pagination Pills: ● ○ ○ ○ (Flipkart Style)
                       if (imagesList.length > 1)
                         Positioned(
-                          bottom: 12,
+                          bottom: 14,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: List.generate(imagesList.length, (idx) {
                               final isSelected = _activeImageIndex == idx;
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
-                                margin: const EdgeInsets.symmetric(horizontal: 2.5),
-                                width: isSelected ? 16 : 5,
-                                height: 5,
+                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                width: isSelected ? 18 : 6,
+                                height: 6,
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? AppColors.primary
-                                      : context.colorTextMuted.withValues(alpha: 0.35),
+                                      ? const Color(0xFF2563EB)
+                                      : Colors.grey.shade300,
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               );
@@ -718,9 +790,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
         // Gallery Thumbnails Strip
         if (imagesList.length > 1) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           SizedBox(
-            height: 54,
+            height: 56,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: imagesList.length,
@@ -738,25 +810,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    width: 54,
-                    height: 54,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: isSelected ? AppColors.primary : context.colorBorder,
+                        color: isSelected ? const Color(0xFF2563EB) : context.colorBorder,
                         width: isSelected ? 2 : 1,
                       ),
-                      color: context.colorSurfaceSubtle,
+                      color: Colors.white,
                     ),
                     padding: const EdgeInsets.all(3),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(7),
                       child: AppProductImage(
                         imageUrl: imagesList[idx],
-                        width: 54,
-                        height: 54,
+                        width: 56,
+                        height: 56,
                         expand: true,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         fallbackIcon: Icons.image_rounded,
                         fallbackIconSize: 18,
                       ),
@@ -771,134 +843,72 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 2. PRODUCT HEADER, TAGS & BALANCED TITLE ---
+  // --- 2. PRODUCT HEADER: BRAND & EXPANDABLE TITLE (Flipkart Style) ---
   Widget _buildProductHeader(BuildContext context, ProductModel p) {
+    final brandName = p.brand.isNotEmpty
+        ? p.brand
+        : (p.attributes['brand']?.toString() ?? (p.category.isNotEmpty ? p.category.toUpperCase() : 'SHOPSILO'));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Category Tag & SKU Row
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: context.colorPrimaryLight,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                p.category.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-            if (p.brand.isNotEmpty || (p.attributes.containsKey('brand') && p.attributes['brand'].toString().isNotEmpty))
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: context.colorSurfaceSubtle,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: context.colorBorder),
-                ),
-                child: Text(
-                  p.brand.isNotEmpty ? p.brand : p.attributes['brand'].toString(),
-                  style: TextStyle(
-                    color: context.colorTextPrimary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            if (p.isFeatured)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: context.colorWarningLight,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.star_rounded, size: 11, color: AppColors.warning),
-                    SizedBox(width: 2),
-                    Text(
-                      'Featured',
-                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: AppColors.warning),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
-
-        // Product Name (Balanced font scale)
+        // Brand Name (Bold Header Subtitle like Flipkart)
         Text(
-          p.name,
+          brandName,
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 14.5,
             fontWeight: FontWeight.w800,
             color: context.colorTextPrimary,
-            letterSpacing: -0.3,
-            height: 1.25,
+            letterSpacing: -0.2,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
 
-        // Verified Rating & Stock Row
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.success,
-                borderRadius: BorderRadius.circular(5),
+        // Product Name with ...more toggle (Flipkart Style)
+        GestureDetector(
+          onTap: () => setState(() => _isTitleExpanded = !_isTitleExpanded),
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w600,
+                color: context.colorTextPrimary,
+                height: 1.3,
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('4.5', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
-                  SizedBox(width: 2),
-                  Icon(Icons.star_rounded, color: Colors.white, size: 11),
-                ],
-              ),
+              children: [
+                TextSpan(
+                  text: _isTitleExpanded || p.name.length <= 60
+                      ? p.name
+                      : '${p.name.substring(0, 60)}...',
+                ),
+                if (p.name.length > 60)
+                  TextSpan(
+                    text: _isTitleExpanded
+                        ? (context.isHindi ? '  कम दिखाएं' : '  less')
+                        : (context.isHindi ? '  ...और' : '  ...more'),
+                    style: const TextStyle(
+                      color: Color(0xFF2563EB),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13.5,
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(width: 6),
-            Text(
-              'Verified Inventory',
-              style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(width: 6),
-            Text('•', style: TextStyle(color: context.colorTextMuted, fontSize: 10)),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                'SKU: ${p.sku.isNotEmpty ? p.sku : (p.barcode.isNotEmpty ? p.barcode : 'N/A')}',
-                style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
   }
 
-  // --- 3. PRICING HERO CARD (Clean, Balanced Typography) ---
+  // --- 3. PRICING HERO CARD: UNIFIED FLIPKART ROW (↓70%  3,999  ₹1,199) ---
   Widget _buildPricingHeroCard(BuildContext context, ProductModel p) {
-    final hasCompare = p.comparePrice > p.price;
+    final hasDiscount = p.comparePrice > p.price;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: context.colorSurface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: context.colorBorder),
         boxShadow: [
           BoxShadow(
@@ -911,103 +921,66 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Single Unified Flipkart Price Row: ↓70% 3,999 ₹1,199
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              Flexible(
-                child: Text(
-                  'COUNTER SELLING PRICE',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
-                    color: context.colorTextMuted,
+              if (hasDiscount) ...[
+                Text(
+                  '↓${p.discountPct.toInt()}%',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF16A34A),
+                    letterSpacing: -0.5,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: context.colorSuccessLight,
-                  borderRadius: BorderRadius.circular(5),
+                const SizedBox(width: 8),
+                Text(
+                  '₹${p.comparePrice.toInt()}',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: context.colorTextMuted,
+                    decoration: TextDecoration.lineThrough,
+                  ),
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle_outline_rounded, size: 11, color: AppColors.success),
-                    SizedBox(width: 3),
-                    Text(
-                      'Tax Inclusive',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.success),
-                    ),
-                  ],
+                const SizedBox(width: 8),
+              ],
+              Text(
+                '₹${p.price.toInt()}',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: context.colorTextPrimary,
+                  letterSpacing: -0.5,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
 
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  '₹${p.price.toStringAsFixed(0)}',
+          // Subline Delivery / Pickup Fee with Chevron
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '+ ₹0 Delivery Fee • Counter Pickup In Stock',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: context.colorTextPrimary,
-                    letterSpacing: -0.4,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.colorTextMuted,
                   ),
                 ),
-                if (hasCompare) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    '₹${p.comparePrice.toStringAsFixed(0)}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      decoration: TextDecoration.lineThrough,
-                      color: context.colorTextMuted,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                    decoration: BoxDecoration(
-                      color: AppColors.success.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      '${p.discountPct.toStringAsFixed(0)}% OFF',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 5),
-                Text(
-                  '/ ${p.unit}',
-                  style: TextStyle(fontSize: 12, color: context.colorTextMuted, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 2),
+              Icon(Icons.chevron_right_rounded, size: 14, color: context.colorTextMuted),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            p.allowBargain
-                ? 'Counter bargain enabled • Floor limit: ₹${p.floorPrice.toStringAsFixed(0)}'
-                : 'Fixed counter price • No customer bargaining',
-            style: TextStyle(fontSize: 11, color: context.colorTextSecondary),
-          ),
+
           const SizedBox(height: 10),
           Divider(height: 1, color: context.colorBorder),
           const SizedBox(height: 10),
@@ -1803,7 +1776,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     specItems.add(MapEntry('Unit', p.unit));
 
     if (p.weight > 0) {
-      specItems.add(MapEntry('Net Weight', '${p.weight} kg'));
+      specItems.add(MapEntry('Net Weight', '${p.weight} ${p.unit.isNotEmpty ? p.unit : "g"}'));
     }
 
     if (p.sku.isNotEmpty) {
@@ -2012,6 +1985,128 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // --- 8. SIMILAR PRODUCTS HORIZONTAL ROW ---
+  Widget _buildSimilarProductsRow(BuildContext context, ProductModel currentProduct) {
+    final allProducts = context.watch<ProductController>().products;
+    final cleanCat = CategoryRegistry.formatCategoryName(currentProduct.category);
+    final cleanBrand = currentProduct.brand.trim().toLowerCase();
+
+    final similarItems = allProducts.where((item) {
+      if (item.id.toString() == currentProduct.id.toString()) return false;
+      final itemCat = CategoryRegistry.formatCategoryName(item.category);
+      final itemBrand = item.brand.trim().toLowerCase();
+
+      final sameCat = cleanCat.isNotEmpty && (itemCat == cleanCat || CategoryRegistry.isCategoryMatch(item.category, currentProduct.category));
+      final sameBrand = cleanBrand.isNotEmpty && itemBrand == cleanBrand;
+      return sameCat || sameBrand;
+    }).take(10).toList();
+
+    if (similarItems.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppSectionHeader(
+          title: context.isHindi ? 'मिलते-जुलते उत्पाद (Similar Products)' : 'Similar Products',
+          trailing: AppBadge(
+            label: '${similarItems.length} ${context.isHindi ? 'उत्पाद' : 'Items'}',
+            type: AppBadgeType.neutral,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: similarItems.map((item) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProductDetailScreen(
+                          product: item,
+                          onEditRequested: widget.onEditRequested,
+                          onDuplicateRequested: widget.onDuplicateRequested,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 140,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: context.colorSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.colorBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 124,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            color: context.colorSurfaceSubtle,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: AppProductImage(
+                            imageUrl: item.imageUrl,
+                            width: 124,
+                            height: 100,
+                            fit: BoxFit.cover,
+                            fallbackIcon: Icons.inventory_2_outlined,
+                            fallbackIconSize: 28,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          CategoryRegistry.formatCategoryName(item.category),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: context.colorTextMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          item.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: context.colorTextPrimary,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '₹${item.price.toStringAsFixed(0)} / ${item.unit}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 
