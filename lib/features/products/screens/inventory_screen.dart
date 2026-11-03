@@ -1322,19 +1322,26 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     categoryCtrl.text = canonical;
                   }
 
-                  // 4. Weight
-                  final rawWeight = data['weight'];
-                  if (rawWeight != null) {
-                    final w = double.tryParse(rawWeight.toString()) ?? 0;
-                    if (w > 0) {
-                      weightCtrl.text = w == w.toInt() ? w.toInt().toString() : w.toString();
-                    }
-                  }
+                  // 4. Weight: Intentionally omitted from AI Auto-Fill per user request
 
-                  // 5. Unit
+                  // 5. Unit: Intelligent mapping to valid inventory dropdown values ('g', 'kg', 'ml', 'litre', 'pcs', 'pack', 'box', 'dozen')
                   final rawUnit = data['unit']?.toString().toLowerCase().trim() ?? '';
-                  if (['gm', 'kg', 'ml', 'litre', 'piece', 'meter', 'pack', 'pair', 'box'].contains(rawUnit)) {
-                    unit = rawUnit;
+                  if (rawUnit == 'g' || rawUnit == 'gm' || rawUnit == 'gram' || rawUnit == 'grams') {
+                    unit = 'g';
+                  } else if (rawUnit == 'kg' || rawUnit == 'kilo' || rawUnit == 'kilogram') {
+                    unit = 'kg';
+                  } else if (rawUnit == 'ml' || rawUnit == 'millilitre') {
+                    unit = 'ml';
+                  } else if (rawUnit == 'l' || rawUnit == 'litre' || rawUnit == 'liter') {
+                    unit = 'litre';
+                  } else if (rawUnit == 'pcs' || rawUnit == 'piece' || rawUnit == 'pieces' || rawUnit == 'pair' || rawUnit == 'meter') {
+                    unit = 'pcs';
+                  } else if (rawUnit == 'pack' || rawUnit == 'packet' || rawUnit == 'pouch') {
+                    unit = 'pack';
+                  } else if (rawUnit == 'box' || rawUnit == 'peti') {
+                    unit = 'box';
+                  } else if (rawUnit == 'dozen') {
+                    unit = 'dozen';
                   }
 
                   // 6. MRP
@@ -1388,13 +1395,14 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       final cleanK = k.toString().trim();
                       final cleanV = v.toString().trim();
                       if (cleanK.isNotEmpty && cleanV.isNotEmpty && !cleanK.toLowerCase().contains('specs')) {
+                        final formattedKey = CategoryRegistry.formatCategoryName(cleanK);
                         final existing = customAttrPairs.firstWhere(
-                          (p) => p.key.text.toLowerCase().trim() == cleanK.toLowerCase(),
+                          (p) => p.key.text.toLowerCase().trim() == formattedKey.toLowerCase().trim(),
                           orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
                         );
                         if (existing.key.text.isEmpty) {
                           customAttrPairs.add(MapEntry(
-                            TextEditingController(text: CategoryRegistry.formatCategoryName(cleanK)),
+                            TextEditingController(text: formattedKey),
                             TextEditingController(text: cleanV),
                           ));
                         } else if (existing.value.text.trim().isEmpty) {
@@ -1402,6 +1410,21 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         }
                       }
                     });
+                  }
+
+                  // 12. Ingredients or Material composition specs
+                  final rawIngredients = data['ingredients']?.toString().trim() ?? '';
+                  if (rawIngredients.isNotEmpty && !rawIngredients.toLowerCase().contains('standard')) {
+                    final existing = customAttrPairs.firstWhere(
+                      (p) => p.key.text.toLowerCase().contains('ingredient') || p.key.text.toLowerCase().contains('material'),
+                      orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
+                    );
+                    if (existing.key.text.isEmpty) {
+                      customAttrPairs.add(MapEntry(
+                        TextEditingController(text: 'Key Composition'),
+                        TextEditingController(text: rawIngredients),
+                      ));
+                    }
                   }
                 });
 
