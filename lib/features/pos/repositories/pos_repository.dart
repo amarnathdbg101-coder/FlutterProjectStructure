@@ -98,6 +98,7 @@ class PosRepository {
         options: Options(
           headers: {
             'X-Idempotency-Key': key,
+            'Idempotency-Key': key,
           },
         ),
       );

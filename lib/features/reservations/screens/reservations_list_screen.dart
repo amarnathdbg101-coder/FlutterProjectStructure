@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
@@ -222,8 +223,20 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
     final shop = authCtrl.currentShop;
 
     return MerchantShell(
-      currentIndex: 0,
+      currentIndex: -1,
+      showBottomNav: false,
       appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_rounded, color: context.colorTextPrimary, size: 22),
+          tooltip: context.isHindi ? 'वापस जाएं' : 'Back',
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              context.go('/merchant');
+            }
+          },
+        ),
         title: const Text(
           'Customer Pickup Orders',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),

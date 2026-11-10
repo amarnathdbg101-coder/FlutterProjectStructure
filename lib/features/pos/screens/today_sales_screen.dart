@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
@@ -10,6 +11,7 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
+import '../repositories/pos_advanced_repository.dart';
 import '../widgets/day_close_reconciliation_sheet.dart';
 import '../widgets/pos_bill_return_modal.dart';
 import '../../auth/controllers/auth_controller.dart';
@@ -22,12 +24,52 @@ class TodaySalesScreen extends StatefulWidget {
 }
 
 class _TodaySalesScreenState extends State<TodaySalesScreen> {
+  bool _isDownloadingPdf = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PosController>().fetchBackendSales();
     });
+  }
+
+  Future<void> _downloadEodPdf() async {
+    setState(() => _isDownloadingPdf = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            const SizedBox(width: 12),
+            Text(context.isHindi
+                ? 'हेडलेस क्रोम द्वारा स्वचालित P&L रिपोर्ट बनाई जा रही है...'
+                : 'Generating automated Chromedp P&L PDF report...'),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+        backgroundColor: const Color(0xFF0F172A),
+      ),
+    );
+
+    final res = await PosAdvancedRepository().downloadEndOfDayReportPdfBytes();
+    setState(() => _isDownloadingPdf = false);
+
+    if (res.success && res.data != null) {
+      await Printing.layoutPdf(
+        onLayout: (format) async => res.data!,
+        name: 'ShopSilo_Executive_EOD_Report.pdf',
+      );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res.error ?? 'Failed to download P&L PDF report'),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -56,7 +98,8 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
     }
 
     return MerchantShell(
-      currentIndex: 0,
+      currentIndex: -1,
+      showBottomNav: false,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: context.colorSurface,
@@ -86,6 +129,13 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: _isDownloadingPdf
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                : const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 22),
+            tooltip: context.isHindi ? 'P&L PDF डाउनलोड करें' : 'Download Executive P&L PDF',
+            onPressed: _isDownloadingPdf ? null : _downloadEodPdf,
+          ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
             tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
@@ -93,6 +143,9 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
             elevation: 4,
             onSelected: (val) async {
               switch (val) {
+                case 'eod_pdf':
+                  await _downloadEodPdf();
+                  break;
                 case 'day_close':
                   DayCloseReconciliationSheet.show(context);
                   break;
@@ -114,6 +167,16 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'eod_pdf',
+                child: Row(
+                  children: [
+                    const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 18),
+                    const SizedBox(width: 10),
+                    Text(ctx.isHindi ? 'स्वचालित P&L PDF रिपोर्ट' : 'Automated P&L PDF Report'),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'day_close',
                 child: Row(
@@ -238,6 +301,59 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                     ),
                     const SizedBox(height: 18),
                   ],
+
+                  // 2B. Chromedp Automated Executive P&L PDF Report
+                  InkWell(
+                    onTap: _isDownloadingPdf ? null : _downloadEodPdf,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: _isDownloadingPdf
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFDC2626)),
+                                  )
+                                : const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.isHindi ? 'स्वचालित दैनिक P&L रिपोर्ट (PDF)' : 'Executive End-of-Day P&L PDF',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF991B1B)),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  context.isHindi
+                                      ? 'हेडलेस क्रोम द्वारा पूर्ण वित्तीय विश्लेषण व गल्ला मिलान रसीद'
+                                      : 'Chromedp automated daily profit & loss breakdown with shift telemetry',
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFFB91C1C)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFDC2626)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
 
                   // 3. Section Header: Sold Products Ranking
                   AppSectionHeader(
@@ -478,8 +594,15 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
   void _showSaleActionsSheet(BuildContext context, SaleModel sale) {
     final isHindi = context.isHindi;
-    final shop = context.read<AuthController>().currentShop;
-    final shopName = shop?.name ?? 'ShopSilo Retail Store';
+    final authShop = context.read<AuthController>().currentShop;
+    final cachedShop = LocalCacheService.getShop();
+    final shop = authShop ?? cachedShop;
+    final rawShopName = (shop?.name ?? '').trim();
+    final shopName = rawShopName.isNotEmpty && rawShopName != 'ShopSilo Retail Store'
+        ? rawShopName
+        : (cachedShop?.name.trim().isNotEmpty ?? false
+            ? cachedShop!.name.trim()
+            : 'ShopSilo Retail Store');
 
     showModalBottomSheet(
       context: context,
@@ -541,7 +664,11 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               const Divider(height: 20),
 
               // Items summary list
-              ...sale.items.map((item) {
+              ...sale.items.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final item = entry.value;
+                final rawName = item.product.name.trim();
+                final cleanName = rawName.isNotEmpty ? rawName : 'Item #${idx + 1}';
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
@@ -549,7 +676,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          '${item.product.name} (×${item.quantity})',
+                          '$cleanName (×${item.quantity})',
                           style: const TextStyle(fontSize: 12.5),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -565,19 +692,11 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               const Divider(height: 20),
 
               // Action Buttons
-              // 1. Print Thermal Receipt
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 44),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.print_rounded, size: 18),
-                label: Text(
-                  isHindi ? 'थर्मल रसीद प्रिंट करें (58mm/80mm)' : 'Print Thermal Slip (58mm/80mm)',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+              // 1. Print Thermal Receipt (Reusable AppButton)
+              AppButton(
+                text: isHindi ? 'थर्मल रसीद प्रिंट करें (58mm/80mm)' : 'Print Thermal Slip (58mm/80mm)',
+                icon: Icons.print_rounded,
+                isFullWidth: true,
                 onPressed: () {
                   Navigator.pop(sheetCtx);
                   context.read<PosController>().generateThermalReceiptPdf(
@@ -585,7 +704,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                     sale,
                     shopName,
                     shopAddress: shop?.address ?? '',
-                    shopPhone: shop?.phone ?? '',
+                    shopPhone: shop?.phone ?? shop?.whatsappNumber ?? '',
                     shopGstin: shop?.gstin ?? '',
                     upiId: shop?.upiId ?? '',
                   );
@@ -593,18 +712,12 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 2. Process Bill Return & Restock
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  side: const BorderSide(color: AppColors.warning),
-                ),
-                icon: const Icon(Icons.assignment_return_rounded, size: 18, color: AppColors.warning),
-                label: Text(
-                  isHindi ? 'सामान वापसी / रिफंड दर्ज करें (Return)' : 'Process Return & Restock',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.warning),
-                ),
+              // 2. Process Bill Return & Restock (Reusable AppButton)
+              AppButton.outline(
+                text: isHindi ? 'सामान वापसी / रिफंड दर्ज करें (Return)' : 'Process Return & Restock',
+                icon: Icons.assignment_return_rounded,
+                customColor: AppColors.warning,
+                isFullWidth: true,
                 onPressed: () {
                   Navigator.pop(sheetCtx);
                   PosBillReturnModal.show(

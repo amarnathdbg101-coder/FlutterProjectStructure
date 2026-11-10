@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/localization/language_controller.dart';
-import '../../../../core/utils/responsive.dart';
 import '../models/pos_model.dart';
 
 /// 🤝 Smart Sauda Modal: Privacy-First Bargaining & Rate Negotiation Engine
@@ -82,7 +81,6 @@ class _SmartSaudaModalState extends State<SmartSaudaModal> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isHindi = context.isHindi;
 
     return Container(

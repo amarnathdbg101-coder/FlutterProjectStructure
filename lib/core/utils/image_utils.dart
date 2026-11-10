@@ -1,3 +1,7 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import '../constants/api_constants.dart';
 
 /// Checks if the path is a local device file path (Android cache, iOS sandbox, Windows file path).
@@ -75,3 +79,131 @@ String formatImageUrl(String? url) {
   return '${ApiConstants.baseUrl}/$trimmed';
 }
 
+/// Normalizes an XFile captured from the camera or selected from the gallery.
+///
+/// Mobile camera hardware sensors physically capture images in landscape orientation
+/// and store an EXIF orientation tag (e.g., orientation 6 = 90 deg clockwise).
+/// This method reads EXIF metadata, bakes the true upright orientation directly
+/// into the pixel buffer via a background isolate (using `compute`), resizes if needed,
+/// overwrites the local cache file (if not web) so all downstream viewers see the upright
+/// image, and returns a tuple of the normalized `XFile` and its `Uint8List` bytes.
+Future<(XFile, Uint8List)> normalizeXFile(
+  XFile file, {
+  int maxDimension = 1280,
+  int quality = 85,
+}) async {
+  Uint8List rawBytes;
+  try {
+    rawBytes = await file.readAsBytes();
+  } catch (e) {
+    debugPrint('[ImageUtils] Error reading XFile bytes: $e');
+    return (file, Uint8List(0));
+  }
+
+  final normalizedBytes = await normalizeBytes(
+    rawBytes,
+    maxDimension: maxDimension,
+    quality: quality,
+  );
+
+  // If on mobile/desktop with a valid local file path, overwrite the file on disk
+  // so that Image.file, multipart uploaders, and external viewers receive the upright JPEG.
+  if (!kIsWeb && file.path.isNotEmpty) {
+    try {
+      final diskFile = File(file.path);
+      await diskFile.writeAsBytes(normalizedBytes, flush: true);
+      final normalizedXFile = XFile(
+        file.path,
+        bytes: normalizedBytes,
+        name: file.name,
+        mimeType: 'image/jpeg',
+      );
+      return (normalizedXFile, normalizedBytes);
+    } catch (e) {
+      debugPrint('[ImageUtils] Could not overwrite local file at ${file.path}: $e');
+    }
+  }
+
+  final normalizedXFile = XFile.fromData(
+    normalizedBytes,
+    name: file.name,
+    mimeType: 'image/jpeg',
+  );
+  return (normalizedXFile, normalizedBytes);
+}
+
+/// Parameters passed to the background isolate for baking EXIF orientation.
+class _BakeOrientationParams {
+  final Uint8List rawBytes;
+  final int maxDimension;
+  final int quality;
+
+  const _BakeOrientationParams({
+    required this.rawBytes,
+    required this.maxDimension,
+    required this.quality,
+  });
+}
+
+/// Top-level function executed in a background isolate via [compute].
+Uint8List _isolateBakeOrientation(_BakeOrientationParams params) {
+  try {
+    final image = img.decodeImage(params.rawBytes);
+    if (image == null) {
+      return params.rawBytes;
+    }
+
+    // Physically transform the pixels according to EXIF orientation tag
+    // (e.g. rotates 90 degrees left if sensor was landscape-right, tag 6 -> 1)
+    var upright = img.bakeOrientation(image);
+
+    // Downscale if image exceeds maxDimension while preserving aspect ratio
+    if (params.maxDimension > 0 &&
+        (upright.width > params.maxDimension || upright.height > params.maxDimension)) {
+      if (upright.width >= upright.height) {
+        upright = img.copyResize(upright, width: params.maxDimension);
+      } else {
+        upright = img.copyResize(upright, height: params.maxDimension);
+      }
+    }
+
+    final encoded = img.encodeJpg(upright, quality: params.quality);
+    return Uint8List.fromList(encoded);
+  } catch (e) {
+    return params.rawBytes;
+  }
+}
+
+/// Bakes EXIF orientation into raw image bytes and optionally downscales it.
+/// Executes in a background isolate to keep Flutter's UI running smoothly at 60fps.
+Future<Uint8List> normalizeBytes(
+  Uint8List rawBytes, {
+  int maxDimension = 1280,
+  int quality = 85,
+}) async {
+  if (rawBytes.isEmpty) return rawBytes;
+
+  try {
+    return await compute(
+      _isolateBakeOrientation,
+      _BakeOrientationParams(
+        rawBytes: rawBytes,
+        maxDimension: maxDimension,
+        quality: quality,
+      ),
+    );
+  } catch (e) {
+    debugPrint('[ImageUtils] compute bakeOrientation failed: $e, falling back to synchronous decode');
+    try {
+      return _isolateBakeOrientation(
+        _BakeOrientationParams(
+          rawBytes: rawBytes,
+          maxDimension: maxDimension,
+          quality: quality,
+        ),
+      );
+    } catch (_) {
+      return rawBytes;
+    }
+  }
+}

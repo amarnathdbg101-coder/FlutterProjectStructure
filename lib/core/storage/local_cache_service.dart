@@ -667,6 +667,22 @@ class LocalCacheService {
     return [];
   }
 
+  // ==========================================
+  // 14. POS HARDWARE & PRINT SETTINGS
+  // ==========================================
+  static const String _keyAutoPrintEnabled = 'pos_auto_print_enabled';
+
+  /// Returns whether Zero-Click Instant Auto-Print is enabled in POS counter settings
+  static bool getAutoPrintEnabled() {
+    return _prefs?.getBool(_keyAutoPrintEnabled) ?? false;
+  }
+
+  /// Sets Zero-Click Instant Auto-Print state
+  static Future<void> setAutoPrintEnabled(bool enabled) async {
+    await init();
+    await _prefs?.setBool(_keyAutoPrintEnabled, enabled);
+  }
+
   /// Wipe ALL caches (in-memory & persistent storage) on user logout
   static Future<void> clearCache() async {
     // 1. Wipe all in-memory static caches immediately

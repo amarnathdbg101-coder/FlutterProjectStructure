@@ -126,24 +126,36 @@ class KhataTransactionModel {
   final dynamic id;
   final String customerMobile;
   final double amount;
+  final double? originalAmount;
   final double balanceAfter;
   final String type; // 'credit' / 'GIVE_CREDIT' vs 'payment' / 'RECEIVE_PAYMENT'
   final String notes;
   final String? billNumber;
   final String paymentMode;
   final String status;
+  final bool isDeleted;
+  final DateTime? deletedAt;
+  final String deleteReason;
+  final String editReason;
+  final DateTime? updatedAt;
   final DateTime createdAt;
 
   KhataTransactionModel({
     required this.id,
     required this.customerMobile,
     required this.amount,
+    this.originalAmount,
     this.balanceAfter = 0.0,
     required this.type,
     this.notes = '',
     this.billNumber,
     this.paymentMode = 'cash',
     this.status = 'CONFIRMED',
+    this.isDeleted = false,
+    this.deletedAt,
+    this.deleteReason = '',
+    this.editReason = '',
+    this.updatedAt,
     required this.createdAt,
   });
 
@@ -157,11 +169,14 @@ class KhataTransactionModel {
     return t == 'RECEIVE_PAYMENT' || t == 'PAYMENT' || t == 'JAMA' || t.contains('PAYMENT');
   }
 
+  bool get isCancelled => isDeleted || status.toUpperCase() == 'CANCELLED';
+
   factory KhataTransactionModel.fromJson(Map<String, dynamic> json) {
     return KhataTransactionModel(
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       customerMobile: json['customer_mobile'] ?? json['mobile'] ?? '',
       amount: (json['amount'] is num) ? (json['amount'] as num).toDouble() : 0.0,
+      originalAmount: (json['original_amount'] is num) ? (json['original_amount'] as num).toDouble() : null,
       balanceAfter: (json['balance_after'] is num)
           ? (json['balance_after'] as num).toDouble()
           : (json['balance'] is num)
@@ -172,6 +187,11 @@ class KhataTransactionModel {
       billNumber: json['bill_number']?.toString(),
       paymentMode: json['payment_mode']?.toString() ?? 'cash',
       status: json['status']?.toString() ?? 'CONFIRMED',
+      isDeleted: json['is_deleted'] == true || json['status']?.toString().toUpperCase() == 'CANCELLED',
+      deletedAt: AppDateTimeUtils.parseToLocalNullable(json['deleted_at']),
+      deleteReason: json['delete_reason']?.toString() ?? '',
+      editReason: json['edit_reason']?.toString() ?? '',
+      updatedAt: AppDateTimeUtils.parseToLocalNullable(json['updated_at']),
       createdAt: AppDateTimeUtils.parseToLocal(json['created_at']),
     );
   }
@@ -180,12 +200,18 @@ class KhataTransactionModel {
     'id': id,
     'customer_mobile': customerMobile,
     'amount': amount,
+    'original_amount': originalAmount,
     'balance_after': balanceAfter,
     'type': type,
     'notes': notes,
     'bill_number': billNumber,
     'payment_mode': paymentMode,
     'status': status,
+    'is_deleted': isDeleted,
+    'deleted_at': deletedAt?.toIso8601String(),
+    'delete_reason': deleteReason,
+    'edit_reason': editReason,
+    'updated_at': updatedAt?.toIso8601String(),
     'created_at': createdAt.toIso8601String(),
   };
 }

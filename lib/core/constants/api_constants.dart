@@ -55,11 +55,16 @@ class ApiConstants {
   static const String shopCategories = '/shops/me/categories';
   static const String merchantCategories = '/api/v1/merchant/categories';
   static const String aiScanProduct = '/ai/scan-product';
+  static const String aiSmartStudioScan = '/ai/smart-studio-scan';
   static const String aiParseParchi = '/ai/parse-parchi';
-  static const String aiVoiceBill = '/ai/voice-bill';
-  static const String aiMarketingCampaign = '/ai/marketing-campaign';
+  static const String aiVoiceBill = '/api/ai/voice-bill';
+  static const String aiMarketingCampaign = '/api/ai/marketing-campaign';
   static const String aiBargainAssist = '/ai/bargain-assist';
   static const String aiMerchantCopilot = '/ai/merchant-copilot';
+  static const String aiSupplierInvoice = '/api/ai/supplier-invoice';
+  static const String aiCrossSell = '/api/ai/cross-sell';
+  static const String aiDeadStockBundles = '/api/ai/dead-stock-bundles';
+  static const String aiRecoveryNudge = '/api/ai/recovery-nudge';
 
   // --- 4. User Profile (Both) ---
   static const String profile = '/user/me';
@@ -129,6 +134,47 @@ class ApiConstants {
   static String posCustomerRecentBasket(String phone) => '/shops/me/pos/customers/$phone/recent-basket';
   static const String posReturns = '/shops/me/pos/returns';
 
+  // --- 10A. Live Margin Floor Check & Touch Counter Hotkeys ---
+  static const String posMarginCheck = '/api/pos/margin-check';
+  static const String posHotkeys = '/api/pos/hotkeys';
+  static const String posHotkeysAutoPopulate = '/api/pos/hotkeys/auto-populate';
+  static String posHotkeyById(String id) => '/api/pos/hotkeys/$id';
+
+  // --- 10B. Cash Drawer Shift Accountability & Safe Drops ---
+  static const String drawerCurrent = '/api/pos/drawer/current';
+  static const String drawerOpen = '/api/pos/drawer/open';
+  static const String drawerClose = '/api/pos/drawer/close';
+  static const String drawerSafeDrop = '/api/pos/drawer/safe-drop';
+  static const String drawerExpense = '/api/pos/drawer/expense';
+  static const String drawerHistory = '/api/pos/drawer/history';
+
+  // --- 10C. Rush-Hour Scan & Go (Queue Buster) ---
+  static const String scanGoSession = '/api/v1/customer/scan-go/session';
+  static String scanGoSessionItems(String id) => '/api/v1/customer/scan-go/session/$id/items';
+  static String scanGoSessionItemById(String id, String itemId) => '/api/v1/customer/scan-go/session/$id/items/$itemId';
+  static String scanGoSessionById(String id) => '/api/v1/customer/scan-go/session/$id';
+  static String scanGoVerify(String code) => '/api/pos/scan-go/verify/$code';
+  static String scanGoConvert(String code) => '/api/pos/scan-go/convert/$code';
+
+  // --- 10D. Company Damage Claim Vault & Receiptless Return Lookup ---
+  static const String claims = '/api/claims';
+  static String claimStatus(String id) => '/api/claims/$id/status';
+  static const String claimsDistributorSummary = '/api/claims/distributor/summary';
+  static const String posReturnsLookup = '/api/pos/returns/lookup';
+
+  // --- 10E. Batch Expiry Radar & Near-Expiry Auto-Markdown ---
+  static const String batches = '/api/batches';
+  static const String batchesNearExpiry = '/api/batches/near-expiry';
+  static const String batchMarkdownScan = '/api/batches/markdown-scan';
+
+  // --- 10F. Khata Daily Micro-Installments ---
+  static const String khataMicroPlans = '/api/khata/micro-plans';
+  static String khataMicroPlanById(String id) => '/api/khata/micro-plans/$id';
+  static String khataMicroPlanPay(String id) => '/api/khata/micro-plans/$id/pay';
+
+  // --- 10G. Chromedp Automated End-of-Day P&L PDF ---
+  static const String posDayCloseEodPdf = '/api/pos/day-close/eod-report.pdf';
+
   // --- 11. Store Expenses (Shop) ---
   static const String expenses = '/shops/me/expenses';
   static String expenseById(String id) => '/shops/me/expenses/$id';
@@ -147,6 +193,8 @@ class ApiConstants {
   static String khataRequestClosure(String id) => '/shops/me/khata/$id/request-closure';
   static String khataVerifyClosureOtp(String id) => '/shops/me/khata/$id/verify-closure-otp';
   static String khataReverseTx(String id, String txId) => '/shops/me/khata/$id/transactions/$txId/reverse';
+  static String khataUpdateTx(String id, String txId) => '/shops/me/khata/$id/transactions/$txId';
+  static String khataDeleteTx(String id, String txId) => '/shops/me/khata/$id/transactions/$txId';
   static String khataResolveDispute(String id, String txId) => '/shops/me/khata/$id/dispute/$txId/resolve';
   static String khataPromiseDate(String id) => '/shops/me/khata/$id/promise-date';
   static String khataTrustScore(String mobile) => '/shops/me/khata/$mobile/trust-score';

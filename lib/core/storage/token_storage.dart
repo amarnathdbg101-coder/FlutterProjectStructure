@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class TokenStorage {
   static const String _keyToken = 'shopsilo_token';
+  static const String _keyRefreshToken = 'shopsilo_refresh_token';
   static const String _keyUserJson = 'shopsilo_user';
   static const String _keyShopJson = 'shopsilo_shop';
   static const String _keyStaffJson = 'shopsilo_staff';
@@ -48,13 +49,26 @@ class TokenStorage {
     await _prefs!.setString(_keyToken, token);
   }
 
+  static Future<void> saveRefreshToken(String refreshToken) async {
+    await init();
+    await _prefs!.setString(_keyRefreshToken, refreshToken);
+  }
+
+  static String? getRefreshToken() {
+    return _prefs?.getString(_keyRefreshToken);
+  }
+
   static Future<void> saveSession({
     required String token,
+    String? refreshToken,
     Map<String, dynamic>? user,
     Map<String, dynamic>? shop,
   }) async {
     await init();
     await _prefs!.setString(_keyToken, token);
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      await _prefs!.setString(_keyRefreshToken, refreshToken);
+    }
     if (user != null) {
       await _prefs!.setString(_keyUserJson, jsonEncode(user));
     }
@@ -152,6 +166,7 @@ class TokenStorage {
   static Future<void> clearSession() async {
     await init();
     await _prefs!.remove(_keyToken);
+    await _prefs!.remove(_keyRefreshToken);
     await _prefs!.remove(_keyUserJson);
     await _prefs!.remove(_keyShopJson);
     await _prefs!.remove(_keyStaffJson);

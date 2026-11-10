@@ -283,10 +283,60 @@ class KhataRepository {
     }
   }
 
-  Future<ApiResponse<bool>> deleteKhataTransaction(String khataId, String txId) async {
+  // --- Secure Transaction Edit & Soft Deletion ---
+  Future<ApiResponse<bool>> updateKhataTransaction({
+    required String khataId,
+    required String txId,
+    required double amount,
+    String notes = '',
+    String billNumber = '',
+    required String reason,
+    String securityPin = '',
+    String password = '',
+  }) async {
+    if (reason.trim().isEmpty) {
+      return ApiResponse(success: false, error: 'Reason for modification is required', message: 'Reason for modification is required');
+    }
     try {
-      await _dio.delete('${ApiConstants.khata}/$khataId/transactions/$txId');
-      return ApiResponse(success: true, data: true);
+      final res = await _dio.put(
+        ApiConstants.khataUpdateTx(khataId, txId),
+        data: {
+          'amount': amount,
+          'notes': notes.trim(),
+          'bill_number': billNumber.trim(),
+          'reason': reason.trim(),
+          'security_pin': securityPin.trim(),
+          'password': password.trim(),
+        },
+      );
+      final isOk = res.statusCode == 200 || res.statusCode == 201;
+      return ApiResponse(success: isOk, data: isOk);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<bool>> deleteKhataTransaction(
+    String khataId,
+    String txId, {
+    required String reason,
+    String securityPin = '',
+    String password = '',
+  }) async {
+    if (reason.trim().isEmpty) {
+      return ApiResponse(success: false, error: 'Reason for deletion is required', message: 'Reason for deletion is required');
+    }
+    try {
+      final res = await _dio.delete(
+        ApiConstants.khataDeleteTx(khataId, txId),
+        data: {
+          'reason': reason.trim(),
+          'security_pin': securityPin.trim(),
+          'password': password.trim(),
+        },
+      );
+      final isOk = res.statusCode == 200 || res.statusCode == 204;
+      return ApiResponse(success: isOk, data: isOk);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }

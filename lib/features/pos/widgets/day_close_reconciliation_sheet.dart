@@ -8,9 +8,13 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
-import '../../../core/widgets/app_ui_components.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../repositories/pos_repository.dart';
+import 'package:dio/dio.dart';
+import '../../../core/constants/api_constants.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/storage/token_storage.dart';
+import '../../../core/widgets/custom_snackbar.dart';
 
 /// Interactive Day Close & Cash Reconciliation Bottom Sheet (गल्ला मिलान & Z-Report)
 class DayCloseReconciliationSheet extends StatefulWidget {
@@ -40,6 +44,7 @@ class _DayCloseReconciliationSheetState extends State<DayCloseReconciliationShee
 
   // Physical Denomination Notes Counter
   bool _showCashCounter = false;
+  bool _isDownloadingChromedpPdf = false;
   final Map<int, int> _noteCounts = {
     500: 0,
     200: 0,
@@ -540,6 +545,29 @@ class _DayCloseReconciliationSheetState extends State<DayCloseReconciliationShee
                                 expectedCash: expectedCash,
                               ),
                             ),
+                            const SizedBox(height: 10),
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF1E293B),
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 44),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: _isDownloadingChromedpPdf
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.picture_as_pdf_rounded, size: 18, color: Color(0xFF38BDF8)),
+                              label: Text(
+                                _isDownloadingChromedpPdf
+                                    ? (isHindi ? 'PDF तैयार हो रही है (Chromedp)...' : 'Generating Executive PDF...')
+                                    : (isHindi ? 'डाउनलोड करें Executive P&L PDF (A4 Headless)' : 'Download Executive P&L PDF (A4)'),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: _isDownloadingChromedpPdf ? null : () => _downloadChromedpEODPdf(dateStr),
+                            ),
                           ],
                         ),
                       ),
@@ -786,5 +814,45 @@ _Generated via ShopSilo | shopsilo.in_
       onLayout: (PdfPageFormat format) async => pdf.save(),
       name: 'Z_Report_$dateStr',
     );
+  }
+
+  /// Downloads and previews high-fidelity End-of-Day P&L PDF rendered via Headless Chrome on GoBackend
+  Future<void> _downloadChromedpEODPdf(String dateStr) async {
+    setState(() => _isDownloadingChromedpPdf = true);
+    final isHindi = TokenStorage.getLanguage() == 'hi';
+
+    try {
+      final dio = ApiClient().dio;
+      final res = await dio.get<List<int>>(
+        ApiConstants.posDayCloseEodPdf,
+        queryParameters: {'date': dateStr},
+        options: Options(
+          responseType: ResponseType.bytes,
+        ),
+      );
+
+      if (res.data != null && res.data!.isNotEmpty) {
+        final pdfBytes = Uint8List.fromList(res.data!);
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) async => pdfBytes,
+          name: 'ShopSilo_Executive_PL_Report_$dateStr.pdf',
+        );
+      } else {
+        throw Exception('Server returned an empty PDF document');
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.showError(
+          context,
+          isHindi
+              ? 'PDF डाउनलोड करने में त्रुटि: ${ApiClient.handleError(e)}'
+              : 'Failed to download executive PDF: ${ApiClient.handleError(e)}',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloadingChromedpPdf = false);
+      }
+    }
   }
 }

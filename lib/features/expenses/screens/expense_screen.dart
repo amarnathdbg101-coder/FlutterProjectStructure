@@ -291,6 +291,90 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
     );
   }
 
+  void _showMonthlySummarySheet(
+    BuildContext context,
+    ExpenseController expCtrl,
+    double todaySales,
+    dynamic profitSummary,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: ctx.colorSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    ctx.isHindi ? 'दुकान खर्च व मुनाफा रिपोर्ट' : 'Monthly Expense & Profit Summary',
+                    style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close_rounded, color: ctx.colorTextSecondary),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: AppStatCard(
+                    title: ctx.tr('exp_kpi_sales'),
+                    value: '₹${todaySales.toStringAsFixed(0)}',
+                    subtitle: ctx.isHindi ? 'आज की बिक्री' : "Today's Sales",
+                    icon: Icons.point_of_sale_rounded,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: AppStatCard(
+                    title: ctx.tr('exp_kpi_today'),
+                    value: '₹${expCtrl.todayExpenses.toStringAsFixed(0)}',
+                    subtitle: ctx.isHindi ? 'आज के खर्चे' : "Today's Expenses",
+                    icon: Icons.receipt_long_rounded,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: AppStatCard(
+                    title: profitSummary.isLoss ? ctx.tr('exp_kpi_net_balance') : ctx.tr('exp_kpi_net_profit'),
+                    value: '${profitSummary.netProfit < 0 ? "-" : (profitSummary.netProfit > 0 ? "+" : "")}₹${profitSummary.netProfit.abs().toStringAsFixed(0)}',
+                    subtitle: profitSummary.isLoss ? (ctx.isHindi ? 'घाटा' : 'Net Loss') : (ctx.isHindi ? 'शुद्ध बचत' : 'Net In-Hand'),
+                    icon: profitSummary.isLoss ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: AppStatCard(
+                    title: ctx.tr('exp_kpi_monthly'),
+                    value: '₹${expCtrl.monthlyExpenses.toStringAsFixed(0)}',
+                    subtitle: '${expCtrl.expenses.length} ${ctx.isHindi ? 'प्रविष्टियां' : 'Records'}',
+                    icon: Icons.account_balance_wallet_rounded,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _formatCategoryName(BuildContext context, String cat) {
     switch (cat.toLowerCase()) {
       case 'chai_nashta':
@@ -440,38 +524,89 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.share_rounded, color: AppColors.primary),
-              tooltip: context.isHindi ? 'दैनिक सारांश शेयर करें' : 'Share Daily Summary',
-              onPressed: () {
-                final summaryMessage = SmartExpenseService.formatDailyExpenseSummary(
-                  shopName: authCtrl?.currentShop?.name ?? '',
-                  todaySales: todaySales,
-                  todayExpenses: expController.todayExpenses,
-                  todayExpensesList: expController.expenses.where((e) {
-                    final now = DateTime.now();
-                    final dt = e.expenseDate;
-                    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
-                  }).toList(),
-                  isHindi: context.isHindi,
-                );
-                SmartExpenseService.shareExpenseSummaryOnWhatsApp(
-                  context: context,
-                  message: summaryMessage,
-                );
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-              tooltip: 'Refresh Expenses',
-              onPressed: () async {
-                await expController.loadExpenses();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('✓ Shop Expenses Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
-                  );
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
+              tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 4,
+              onSelected: (val) async {
+                switch (val) {
+                  case 'add':
+                    _showAddExpenseDialog(context);
+                    break;
+                  case 'share':
+                    final summaryMessage = SmartExpenseService.formatDailyExpenseSummary(
+                      shopName: authCtrl?.currentShop?.name ?? '',
+                      todaySales: todaySales,
+                      todayExpenses: expController.todayExpenses,
+                      todayExpensesList: expController.expenses.where((e) {
+                        final now = DateTime.now();
+                        final dt = e.expenseDate;
+                        return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+                      }).toList(),
+                      isHindi: context.isHindi,
+                    );
+                    SmartExpenseService.shareExpenseSummaryOnWhatsApp(
+                      context: context,
+                      message: summaryMessage,
+                    );
+                    break;
+                  case 'monthly':
+                    _showMonthlySummarySheet(context, expController, todaySales, profitSummary);
+                    break;
+                  case 'refresh':
+                    await expController.loadExpenses();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('✓ Shop Expenses Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
+                      );
+                    }
+                    break;
                 }
               },
+              itemBuilder: (ctx) => [
+                PopupMenuItem<String>(
+                  value: 'add',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'नया खर्च दर्ज करें' : 'Add New Expense'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'share',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.share_rounded, color: Color(0xFF25D366), size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'व्हाट्सएप सारांश शेयर करें' : 'Share WhatsApp Summary'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'monthly',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.analytics_outlined, color: AppColors.warning, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'महीने की रिपोर्ट देखें' : 'Monthly Summary Report'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: 'refresh',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh_rounded, color: ctx.colorTextPrimary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'कैशबुक रीफ्रेश करें' : 'Refresh Cashbook'),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(width: 4),
           ],
@@ -489,73 +624,79 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
           maxWidth: 1200,
           child: Column(
             children: [
-              // 1. EXECUTIVE EXPENSE SUMMARY & NET PROFIT KPI CARDS
+              // 1. CLEAN HERO TODAY'S EXPENSE CASHBOOK CARD
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isDesktop = constraints.maxWidth >= 720;
-                    final salesCard = AppStatCard(
-                      title: context.tr('exp_kpi_sales'),
-                      value: '₹${todaySales.toStringAsFixed(0)}',
-                      subtitle: context.isHindi ? 'आज की बिक्री' : "Today's Sales",
-                      icon: Icons.point_of_sale_rounded,
-                    );
-                    final expensesCard = AppStatCard(
-                      title: context.tr('exp_kpi_today'),
-                      value: '₹${expController.todayExpenses.toStringAsFixed(0)}',
-                      subtitle: context.isHindi ? 'आज के खर्चे' : "Today's Expenses",
-                      icon: Icons.receipt_long_rounded,
-                    );
-                    final profitCard = AppStatCard(
-                      title: profitSummary.isLoss ? context.tr('exp_kpi_net_balance') : context.tr('exp_kpi_net_profit'),
-                      value: '${profitSummary.netProfit < 0 ? "-" : (profitSummary.netProfit > 0 ? "+" : "")}₹${profitSummary.netProfit.abs().toStringAsFixed(0)}',
-                      subtitle: profitSummary.isLoss
-                          ? (context.isHindi ? 'घाटा' : 'Net Loss')
-                          : (context.isHindi ? 'शुद्ध बचत' : 'Net In-Hand'),
-                      icon: profitSummary.isLoss ? Icons.trending_down_rounded : Icons.trending_up_rounded,
-                    );
-                    final monthlyCard = AppStatCard(
-                      title: context.tr('exp_kpi_monthly'),
-                      value: '₹${expController.monthlyExpenses.toStringAsFixed(0)}',
-                      subtitle: '${expController.expenses.length} ${context.isHindi ? 'प्रविष्टियां' : 'Records'}',
-                      icon: Icons.account_balance_wallet_rounded,
-                    );
-
-                    if (isDesktop) {
-                      return Row(
-                        children: [
-                          Expanded(child: salesCard),
-                          const SizedBox(width: 10),
-                          Expanded(child: expensesCard),
-                          const SizedBox(width: 10),
-                          Expanded(child: profitCard),
-                          const SizedBox(width: 10),
-                          Expanded(child: monthlyCard),
-                        ],
-                      );
-                    } else {
-                      return Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: salesCard),
-                              const SizedBox(width: 10),
-                              Expanded(child: expensesCard),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(child: profitCard),
-                              const SizedBox(width: 10),
-                              Expanded(child: monthlyCard),
-                            ],
-                          ),
-                        ],
-                      );
-                    }
-                  },
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: AppCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: context.colorErrorLight,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.receipt_long_rounded,
+                          color: AppColors.error,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.tr('exp_kpi_today'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: context.colorTextSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '₹${expController.todayExpenses.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  color: context.colorTextPrimary,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Sales: ₹${todaySales.toStringAsFixed(0)} • Net: ${profitSummary.netProfit < 0 ? "-" : "+"}₹${profitSummary.netProfit.abs().toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: profitSummary.isLoss ? AppColors.error : AppColors.success,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => _showAddExpenseDialog(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(100, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: Text(context.isHindi ? 'खर्च जोड़ें' : '+ Add Expense'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 

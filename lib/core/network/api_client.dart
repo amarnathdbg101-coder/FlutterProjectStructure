@@ -163,8 +163,8 @@ class ApiClient {
                 : 'The requested item or record could not be found.';
           case 409:
             return isHindi
-                ? 'यह आइटम या रिकॉर्ड पहले से मौजूद है।'
-                : 'A record with these details already exists in your store.';
+                ? 'अनुरोध पहले से प्रक्रिया में है (सिंगल-फ़्लाइट लॉक) या डुप्लिकेट है। कृपया कुछ पल प्रतीक्षा करें।'
+                : 'Request is already being processed or duplicated. Please wait a moment.';
           case 422:
             return isHindi
                 ? 'दर्ज किया गया डेटा अमान्य है। कृपया सभी फ़ील्ड सही से भरें।'

@@ -6,6 +6,9 @@ import 'package:flutter_project_structure/core/storage/local_cache_service.dart'
 import 'package:flutter_project_structure/core/localization/language_controller.dart';
 import 'package:flutter_project_structure/features/auth/controllers/auth_controller.dart';
 import 'package:flutter_project_structure/features/pos/controllers/pos_controller.dart';
+import 'package:flutter_project_structure/features/pos/controllers/cash_drawer_controller.dart';
+import 'package:flutter_project_structure/features/pos/controllers/hotkey_controller.dart';
+import 'package:flutter_project_structure/features/pos/controllers/ai_features_controller.dart';
 import 'package:flutter_project_structure/features/pos/screens/pos_screen.dart';
 import 'package:flutter_project_structure/features/products/models/product_model.dart';
 
@@ -43,6 +46,9 @@ void main() {
     final langCtrl = LanguageController();
     final authCtrl = AuthController();
     final posCtrl = PosController();
+    final drawerCtrl = CashDrawerController();
+    final hotkeyCtrl = HotkeyController();
+    final aiCtrl = AIFeaturesController();
 
     await tester.pumpWidget(
       MultiProvider(
@@ -50,6 +56,9 @@ void main() {
           ChangeNotifierProvider<LanguageController>.value(value: langCtrl),
           ChangeNotifierProvider<AuthController>.value(value: authCtrl),
           ChangeNotifierProvider<PosController>.value(value: posCtrl),
+          ChangeNotifierProvider<CashDrawerController>.value(value: drawerCtrl),
+          ChangeNotifierProvider<HotkeyController>.value(value: hotkeyCtrl),
+          ChangeNotifierProvider<AIFeaturesController>.value(value: aiCtrl),
         ],
         child: const MaterialApp(
           home: PosScreen(),
@@ -69,7 +78,7 @@ void main() {
     posCtrl.addToCart(testProducts[0]);
     await tester.pumpAndSettle();
 
-    expect(find.text('Tata Salt Vacuum Evaporated 1kg'), findsOneWidget);
+    expect(find.text('Tata Salt Vacuum Evaporated 1kg'), findsWidgets);
     expect(find.text('₹28 / pkt'), findsOneWidget);
     expect(find.text('1'), findsOneWidget); // quantity
     expect(find.text('₹28'), findsWidgets); // line total & grand total

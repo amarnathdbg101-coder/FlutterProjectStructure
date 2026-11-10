@@ -54,9 +54,9 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
     }).toList();
 
     return MerchantShell(
-      currentIndex: 2,
-      child: Scaffold(
-        appBar: AppBar(
+      currentIndex: -1,
+      showBottomNav: false,
+      appBar: AppBar(
           elevation: 0,
           backgroundColor: context.colorSurface,
           surfaceTintColor: Colors.transparent,
@@ -106,7 +106,7 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
             const SizedBox(width: 4),
           ],
         ),
-        body: SafeArea(
+        child: SafeArea(
           child: RefreshIndicator(
             onRefresh: () async {
               await prodController.loadProducts();
@@ -557,7 +557,6 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../utils/image_utils.dart';
 
+export 'reusable/app_reusable.dart';
+
 /// Standard, reusable, production-grade Card container.
 /// Ensures 100% visual consistency across Light and Dark themes.
 class AppCard extends StatelessWidget {
@@ -382,67 +384,6 @@ class AppSummaryBanner extends StatelessWidget {
   }
 }
 
-/// Standard Status Badge.
-enum AppBadgeType { neutral, success, warning, error, primary }
-
-class AppBadge extends StatelessWidget {
-  final String label;
-  final AppBadgeType type;
-
-  const AppBadge({
-    super.key,
-    required this.label,
-    this.type = AppBadgeType.neutral,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    Color bg;
-    Color fg;
-
-    switch (type) {
-      case AppBadgeType.success:
-        bg = context.colorSuccessLight;
-        fg = AppColors.success;
-        break;
-      case AppBadgeType.warning:
-        bg = context.colorWarningLight;
-        fg = AppColors.warning;
-        break;
-      case AppBadgeType.error:
-        bg = context.colorErrorLight;
-        fg = AppColors.error;
-        break;
-      case AppBadgeType.primary:
-        bg = context.colorPrimaryLight;
-        fg = AppColors.primary;
-        break;
-      case AppBadgeType.neutral:
-        bg = context.colorSurfaceSubtle;
-        fg = context.colorTextSecondary;
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: fg.withValues(alpha: 0.2)),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: fg,
-        ),
-      ),
-    );
-  }
-}
 
 /// Standard, production-grade Avatar component.
 /// Seamlessly handles network images with caching, fallback initials, loading state, and edit camera badge.

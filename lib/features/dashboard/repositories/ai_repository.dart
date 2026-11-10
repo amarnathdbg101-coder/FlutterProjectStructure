@@ -57,6 +57,36 @@ class AiRepository {
       final res = await _dio.post(
         ApiConstants.aiScanProduct,
         data: {'image_base64': imageBase64, 'mime_type': mimeType},
+        options: Options(
+          receiveTimeout: const Duration(seconds: 60),
+          sendTimeout: const Duration(seconds: 45),
+        ),
+      );
+      final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
+      return ApiResponse(success: true, data: data as Map<String, dynamic>);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  // --- Smart Studio & Vision Fusion (Cloudflare + Gemini + Dynamic Backdrop) ---
+  Future<ApiResponse<Map<String, dynamic>>> smartStudioScan({
+    required String imageBase64,
+    String mimeType = 'image/jpeg',
+    String themeHint = 'auto',
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiConstants.aiSmartStudioScan,
+        data: {
+          'image_base64': imageBase64,
+          'mime_type': mimeType,
+          'theme_hint': themeHint,
+        },
+        options: Options(
+          receiveTimeout: const Duration(seconds: 60),
+          sendTimeout: const Duration(seconds: 45),
+        ),
       );
       final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: data as Map<String, dynamic>);
@@ -67,12 +97,16 @@ class AiRepository {
 
   // --- Handwritten Parchi / Customer List Parser ---
   Future<ApiResponse<Map<String, dynamic>>> parseParchi({
-    required String imageBase64,
+    required String rawText,
+    String? imageBase64,
   }) async {
     try {
       final res = await _dio.post(
         ApiConstants.aiParseParchi,
-        data: {'image_base64': imageBase64},
+        data: {
+          'raw_text': rawText.trim(),
+          if (imageBase64 != null) 'image_base64': imageBase64,
+        },
       );
       final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: data as Map<String, dynamic>);

@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../../core/utils/whatsapp_share_helper.dart';
 import '../controllers/khata_controller.dart';
 import '../models/khata_model.dart';
 import '../repositories/khata_repository.dart';
 import '../services/smart_khata_reminder_service.dart';
+import '../widgets/khata_micro_plan_card.dart';
+import '../widgets/smart_recovery_nudge_modal.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -597,32 +599,18 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.border),
-                  ),
+                child: AppButton.outline(
+                  text: context.tr('btn_cancel'),
                   onPressed: isSaving ? null : () => Navigator.pop(ctx),
-                  child: Text(
-                    context.tr('btn_cancel'),
-                    style: TextStyle(
-                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 2,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                    backgroundColor: currentIsCredit ? AppColors.error : AppColors.success,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                child: AppButton(
+                  text: context.tr('btn_save'),
+                  variant: currentIsCredit ? AppButtonVariant.danger : AppButtonVariant.success,
+                  isLoading: isSaving,
                   onPressed: isSaving
                       ? null
                       : () async {
@@ -681,7 +669,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                   'Total Outstanding Balance: ₹${remainingBal.toStringAsFixed(0)}.\n\n'
                                   'Thank you for shopping with us!',
                                 );
-                                final waUrl = Uri.parse('https://wa.me/91$cleanPhone?text=$msg');
 
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
@@ -692,15 +679,11 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                       label: 'WhatsApp Slip',
                                       textColor: Colors.white,
                                       onPressed: () async {
-                                        try {
-                                          if (await canLaunchUrl(waUrl)) {
-                                            await launchUrl(waUrl, mode: LaunchMode.externalApplication);
-                                          } else {
-                                            await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
-                                          }
-                                        } catch (_) {
-                                          await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
-                                        }
+                                        await WhatsAppShareHelper.shareToWhatsApp(
+                                          context: context,
+                                          phone: cleanPhone,
+                                          message: Uri.decodeComponent(msg),
+                                        );
                                       },
                                     ),
                                   ),
@@ -713,7 +696,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                   'Remaining Khata Balance: ₹${remainingBal.toStringAsFixed(0)}.\n\n'
                                   'Thank you for shopping with us!',
                                 );
-                                final waUrl = Uri.parse('https://wa.me/91$cleanPhone?text=$msg');
 
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
@@ -724,15 +706,11 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                       label: 'WhatsApp Receipt',
                                       textColor: Colors.white,
                                       onPressed: () async {
-                                        try {
-                                          if (await canLaunchUrl(waUrl)) {
-                                            await launchUrl(waUrl, mode: LaunchMode.externalApplication);
-                                          } else {
-                                            await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
-                                          }
-                                        } catch (_) {
-                                          await Clipboard.setData(ClipboardData(text: Uri.decodeComponent(msg)));
-                                        }
+                                        await WhatsAppShareHelper.shareToWhatsApp(
+                                          context: context,
+                                          phone: cleanPhone,
+                                          message: Uri.decodeComponent(msg),
+                                        );
                                       },
                                     ),
                                   ),
@@ -756,16 +734,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                             }
                           }
                         },
-                  child: isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(
-                          context.tr('btn_save'),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                        ),
                 ),
               ),
             ],
@@ -903,17 +871,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
-                      style: TextButton.styleFrom(minimumSize: const Size(70, 42)),
+                    AppButton.outline(
+                      text: context.tr('btn_cancel'),
+                      size: AppButtonSize.sm,
                       onPressed: () => Navigator.pop(ctx),
-                      child: Text(context.tr('btn_cancel')),
                     ),
                     const SizedBox(width: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(90, 42),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
+                    AppButton(
+                      text: context.tr('btn_save'),
+                      size: AppButtonSize.sm,
                       onPressed: () async {
                         final newLimit = double.tryParse(limitCtrl.text) ?? 10000.0;
                         final ok = await context
@@ -926,7 +892,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                           );
                         }
                       },
-                      child: Text(context.tr('btn_save')),
                     ),
                   ],
                 ),
@@ -996,18 +961,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
-                      style: TextButton.styleFrom(minimumSize: const Size(70, 42)),
+                    AppButton.outline(
+                      text: context.tr('btn_cancel'),
+                      size: AppButtonSize.sm,
                       onPressed: () => Navigator.pop(ctx),
-                      child: Text(context.tr('btn_cancel')),
                     ),
                     const SizedBox(width: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.error,
-                        minimumSize: const Size(90, 42),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
+                    AppButton.danger(
+                      text: context.tr('btn_confirm'),
+                      size: AppButtonSize.sm,
                       onPressed: () async {
                         final ok = await context.read<KhataController>().reverseTransaction(
                               khataId,
@@ -1022,11 +984,798 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                           );
                         }
                       },
-                      child: Text(context.tr('btn_confirm')),
                     ),
                   ],
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // MODAL: EDIT KHATA TRANSACTION ENTRY (SECURE)
+  // ==========================================
+  void _showEditTransactionModal(
+    BuildContext context,
+    KhataTransactionModel tx,
+    String khataId,
+    String customerMobile,
+    double currentCustomerBalance,
+  ) {
+    final amountCtrl = TextEditingController(text: tx.amount.toStringAsFixed(0));
+    final notesCtrl = TextEditingController(text: tx.notes);
+    final billNoCtrl = TextEditingController(text: tx.billNumber ?? '');
+    final reasonCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
+    bool isSaving = false;
+    bool obscurePin = true;
+    String? validationError;
+
+    final quickReasons = [
+      context.isHindi ? 'गलत राशि सुधार' : 'Amount Correction',
+      context.isHindi ? 'बिल संशोधन' : 'Bill Updated',
+      context.isHindi ? 'डिस्काउंट समायोजन' : 'Discount Adjustment',
+      context.isHindi ? 'ग्राहक अनुरोध' : 'Customer Request',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final double enteredAmount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+          final double amountDiff = enteredAmount - tx.amount;
+          final double projectedBalance = tx.isCredit
+              ? currentCustomerBalance + amountDiff
+              : currentCustomerBalance - amountDiff;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.edit_note_rounded, color: AppColors.primary, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                context.isHindi ? 'लेजर प्रविष्टि संपादित करें' : 'Edit Ledger Entry',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Text(
+                                tx.isCredit
+                                    ? (context.isHindi ? 'उधार प्रविष्टि (GIVE CREDIT)' : 'Credit Given Entry')
+                                    : (context.isHindi ? 'जमा प्रविष्टि (PAYMENT)' : 'Payment Received Entry'),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: tx.isCredit ? AppColors.error : AppColors.success,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Current vs Projected Impact Card
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                context.isHindi ? 'मूल राशि:' : 'Original Amount:',
+                                style: TextStyle(fontSize: 12, color: context.colorTextSecondary),
+                              ),
+                              Text(
+                                '₹${tx.amount.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                context.isHindi ? 'अनुमानित बकाया:' : 'Projected Due:',
+                                style: TextStyle(fontSize: 12, color: context.colorTextSecondary),
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    '₹${currentCustomerBalance.toStringAsFixed(0)} ➔ ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.colorTextSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${projectedBalance.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: projectedBalance > currentCustomerBalance
+                                          ? AppColors.error
+                                          : AppColors.success,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Amount Field
+                    TextField(
+                      controller: amountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: context.isHindi ? 'नई संशोधित राशि (₹) *' : 'New Amount (₹) *',
+                        prefixText: '₹ ',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Bill Number & Notes Row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: billNoCtrl,
+                            decoration: InputDecoration(
+                              labelText: context.isHindi ? 'बिल सं. (वैकल्पिक)' : 'Bill No (Opt)',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: notesCtrl,
+                            decoration: InputDecoration(
+                              labelText: context.isHindi ? 'विवरण (वैकल्पिक)' : 'Notes (Opt)',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Mandatory Audit Reason Label
+                    Text(
+                      context.isHindi ? 'संशोधन का कारण (अनिवार्य) *' : 'Reason for Modification (Mandatory) *',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: quickReasons.map((chipText) {
+                        return InkWell(
+                          onTap: () {
+                            setDialogState(() {
+                              reasonCtrl.text = chipText;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: reasonCtrl.text == chipText
+                                  ? AppColors.primary.withValues(alpha: 0.15)
+                                  : (isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: reasonCtrl.text == chipText
+                                    ? AppColors.primary
+                                    : (isDark ? AppColors.darkBorder : AppColors.border),
+                              ),
+                            ),
+                            child: Text(
+                              chipText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: reasonCtrl.text == chipText ? FontWeight.bold : FontWeight.normal,
+                                color: reasonCtrl.text == chipText ? AppColors.primary : context.colorTextSecondary,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: reasonCtrl,
+                      decoration: InputDecoration(
+                        hintText: context.isHindi ? 'कारण लिखें (कम से कम 3 अक्षर)' : 'Reason (min 3 chars)',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Master Security PIN / Password
+                    TextField(
+                      controller: pinCtrl,
+                      obscureText: obscurePin,
+                      keyboardType: TextInputType.visiblePassword,
+                      decoration: InputDecoration(
+                        labelText: context.isHindi ? 'सुरक्षा पिन / पासवर्ड *' : 'Security PIN / Password *',
+                        hintText: context.isHindi ? 'मास्टर पिन (1234) या खाता पासवर्ड' : 'Master PIN (1234) or Password',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePin ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            size: 18,
+                          ),
+                          onPressed: () => setDialogState(() => obscurePin = !obscurePin),
+                        ),
+                      ),
+                    ),
+
+                    if (validationError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        validationError!,
+                        style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton.outline(
+                          text: context.tr('btn_cancel'),
+                          size: AppButtonSize.sm,
+                          onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                        ),
+                        const SizedBox(width: 8),
+                        AppButton.primary(
+                          text: isSaving
+                              ? (context.isHindi ? 'अपडेट हो रहा है...' : 'Saving...')
+                              : (context.isHindi ? 'सुरक्षित अपडेट करें' : 'Save Changes'),
+                          size: AppButtonSize.sm,
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  final amt = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                                  final reason = reasonCtrl.text.trim();
+                                  final pin = pinCtrl.text.trim();
+
+                                  if (amt <= 0) {
+                                    setDialogState(() {
+                                      validationError = context.isHindi
+                                          ? 'कृपया मान्य राशि (> 0) दर्ज करें'
+                                          : 'Please enter a valid amount (> 0)';
+                                    });
+                                    return;
+                                  }
+
+                                  if (reason.length < 3) {
+                                    setDialogState(() {
+                                      validationError = context.isHindi
+                                          ? 'कारण लिखना अनिवार्य है (कम से कम 3 अक्षर)'
+                                          : 'Mandatory reason required (min 3 chars)';
+                                    });
+                                    return;
+                                  }
+
+                                  setDialogState(() {
+                                    isSaving = true;
+                                    validationError = null;
+                                  });
+
+                                  final khataCtrl = context.read<KhataController>();
+                                  final success = await khataCtrl.updateTransaction(
+                                    khataId: khataId,
+                                    txId: tx.id.toString(),
+                                    customerMobile: customerMobile,
+                                    amount: amt,
+                                    notes: notesCtrl.text.trim(),
+                                    billNumber: billNoCtrl.text.trim(),
+                                    reason: reason,
+                                    securityPin: pin,
+                                    password: pin,
+                                  );
+
+                                  if (ctx.mounted) {
+                                    if (success) {
+                                      Navigator.pop(ctx);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            context.isHindi
+                                                ? '✓ प्रविष्टि सफलतापूर्वक अपडेट की गई'
+                                                : '✓ Entry updated successfully',
+                                          ),
+                                          backgroundColor: AppColors.success,
+                                        ),
+                                      );
+                                    } else {
+                                      setDialogState(() {
+                                        isSaving = false;
+                                        validationError = khataCtrl.errorMessage ??
+                                            (context.isHindi
+                                                ? 'अपडेट विफल हुआ। कृपया पिन/पासवर्ड जांचें।'
+                                                : 'Update failed. Please check PIN/password.');
+                                      });
+                                    }
+                                  }
+                                },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ==========================================
+  // DIALOG: DELETE TRANSACTION ENTRY (SAFE 2-STEP WITH AUDIT)
+  // ==========================================
+  void _showDeleteTransactionDialog(
+    BuildContext context,
+    KhataTransactionModel tx,
+    String khataId,
+    String customerMobile, [
+    double currentCustomerBalance = 0.0,
+  ]) {
+    final reasonCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
+    bool isDeleting = false;
+    bool obscurePin = true;
+    String? validationError;
+
+    final quickReasons = [
+      context.isHindi ? 'गलत प्रविष्टि' : 'Mistake Entry',
+      context.isHindi ? 'डुप्लीकेट बिल' : 'Duplicate Bill',
+      context.isHindi ? 'बिल रद्द हुआ' : 'Bill Cancelled',
+      context.isHindi ? 'ग्राहक से समझौता' : 'Customer Settlement',
+    ];
+
+    // Deletion reversal impact:
+    // If we delete CREDIT: customer owed this, now they don't -> balance decreases
+    // If we delete PAYMENT: customer paid this, now it's reversed -> balance increases
+    final double resultingBalance = tx.isCredit
+        ? currentCustomerBalance - tx.amount
+        : currentCustomerBalance + tx.amount;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.delete_forever_rounded, color: AppColors.error, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            context.isHindi ? 'प्रविष्टि रद्द / डिलीट करें' : 'Cancel / Delete Entry',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Security & Reversal Explanation
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.shield_outlined, size: 16, color: AppColors.error),
+                              const SizedBox(width: 6),
+                              Text(
+                                context.isHindi ? 'सुरक्षित वित्तीय ऑडिट' : 'Secure Financial Audit',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            context.isHindi
+                                ? 'यह प्रविष्टि पूरी तरह मिटाई नहीं जाएगी, बल्कि "रद्द" (Soft Cancelled) की जाएगी। लेजर बैलेंस स्वतः समायोजित होगा।'
+                                : 'This entry will not be erased; it will be marked "Cancelled" with an audit trail. Balance will be recalculated.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                              height: 1.35,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                context.isHindi ? 'प्रभाव:' : 'Balance Impact:',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                '₹${currentCustomerBalance.toStringAsFixed(0)} ➔ ₹${resultingBalance.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Mandatory Reason Chips
+                    Text(
+                      context.isHindi ? 'डिलीट करने का कारण (अनिवार्य) *' : 'Reason for Deletion (Mandatory) *',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: quickReasons.map((chipText) {
+                        return InkWell(
+                          onTap: () {
+                            setDialogState(() {
+                              reasonCtrl.text = chipText;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: reasonCtrl.text == chipText
+                                  ? AppColors.error.withValues(alpha: 0.15)
+                                  : (isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: reasonCtrl.text == chipText
+                                    ? AppColors.error
+                                    : (isDark ? AppColors.darkBorder : AppColors.border),
+                              ),
+                            ),
+                            child: Text(
+                              chipText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: reasonCtrl.text == chipText ? FontWeight.bold : FontWeight.normal,
+                                color: reasonCtrl.text == chipText ? AppColors.error : context.colorTextSecondary,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: reasonCtrl,
+                      decoration: InputDecoration(
+                        hintText: context.isHindi ? 'कारण लिखें (उदा. गलत एंट्री दर्ज हो गई)' : 'Reason (e.g. Wrong entry)',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // PIN / Password
+                    TextField(
+                      controller: pinCtrl,
+                      obscureText: obscurePin,
+                      keyboardType: TextInputType.visiblePassword,
+                      decoration: InputDecoration(
+                        labelText: context.isHindi ? 'मास्टर सुरक्षा पिन / पासवर्ड *' : 'Security PIN / Password *',
+                        hintText: context.isHindi ? 'मास्टर पिन (1234) या पासवर्ड' : 'Master PIN (1234) or Password',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePin ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            size: 18,
+                          ),
+                          onPressed: () => setDialogState(() => obscurePin = !obscurePin),
+                        ),
+                      ),
+                    ),
+
+                    if (validationError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        validationError!,
+                        style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton.outline(
+                          text: context.tr('btn_cancel'),
+                          size: AppButtonSize.sm,
+                          onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+                        ),
+                        const SizedBox(width: 8),
+                        AppButton.danger(
+                          text: isDeleting
+                              ? (context.isHindi ? 'डिलीट हो रहा है...' : 'Deleting...')
+                              : (context.isHindi ? 'सुरक्षित डिलीट करें' : 'Delete Entry'),
+                          size: AppButtonSize.sm,
+                          onPressed: isDeleting
+                              ? null
+                              : () async {
+                                  final reason = reasonCtrl.text.trim();
+                                  final pin = pinCtrl.text.trim();
+
+                                  if (reason.length < 3) {
+                                    setDialogState(() {
+                                      validationError = context.isHindi
+                                          ? 'डिलीट करने का कारण लिखना अनिवार्य है (कम से कम 3 अक्षर)'
+                                          : 'Mandatory reason required (min 3 chars)';
+                                    });
+                                    return;
+                                  }
+
+                                  setDialogState(() {
+                                    isDeleting = true;
+                                    validationError = null;
+                                  });
+
+                                  final khataCtrl = context.read<KhataController>();
+                                  final success = await khataCtrl.deleteTransaction(
+                                    khataId,
+                                    tx.id.toString(),
+                                    customerMobile,
+                                    reason: reason,
+                                    securityPin: pin,
+                                    password: pin,
+                                  );
+
+                                  if (ctx.mounted) {
+                                    if (success) {
+                                      Navigator.pop(ctx);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            context.isHindi
+                                                ? '✓ प्रविष्टि सफलतापूर्वक रद्द कर दी गई'
+                                                : '✓ Entry cancelled successfully',
+                                          ),
+                                          backgroundColor: AppColors.success,
+                                        ),
+                                      );
+                                    } else {
+                                      setDialogState(() {
+                                        isDeleting = false;
+                                        validationError = khataCtrl.errorMessage ??
+                                            (context.isHindi
+                                                ? 'डिलीट विफल हुआ। कृपया पिन/पासवर्ड जांचें।'
+                                                : 'Delete failed. Check PIN/password.');
+                                      });
+                                    }
+                                  }
+                                },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ==========================================
+  // DIALOG: DELETE CUSTOMER KHATA ACCOUNT (SAFE 2-STEP)
+  // ==========================================
+  void _showDeleteCustomerDialog(
+    BuildContext context,
+    KhataCustomerModel customer,
+  ) {
+    final bool hasPendingDues = customer.balance.abs() > 0.01;
+    bool isDeleting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: hasPendingDues
+                              ? AppColors.warning.withValues(alpha: 0.15)
+                              : AppColors.error.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          hasPendingDues ? Icons.warning_amber_rounded : Icons.delete_forever_rounded,
+                          color: hasPendingDues ? AppColors.warning : AppColors.error,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          hasPendingDues
+                              ? (context.isHindi ? 'खाता डिलीट नहीं हो सकता' : 'Cannot Delete Account')
+                              : (context.isHindi ? 'ग्राहक खाता डिलीट करें' : 'Delete Customer Account'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  if (hasPendingDues) ...[
+                    Text(
+                      context.isHindi
+                          ? 'इस ग्राहक (${customer.name}) का ₹${customer.balance.toStringAsFixed(0)} का उधारी बैलेंस बाकी है। सुरक्षा कारणों से खाता डिलीट करने से पहले बैलेंस 0 (चुका) करें।'
+                          : '${customer.name} has an active balance of ₹${customer.balance.toStringAsFixed(0)}. Please settle the balance before deleting this account.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: context.colorTextSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: AppButton.primary(
+                        text: context.isHindi ? 'ठीक है' : 'OK',
+                        size: AppButtonSize.sm,
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ),
+                  ] else ...[
+                    Text(
+                      context.isHindi
+                          ? 'क्या आप वाकई ${customer.name} (${customer.mobile}) का खाता हमेशा के लिए डिलीट करना चाहते हैं? यह क्रिया वापस नहीं की जा सकती।'
+                          : 'Are you sure you want to permanently delete ${customer.name}\'s (${customer.mobile}) khata account?',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: context.colorTextSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton.outline(
+                          text: context.tr('btn_cancel'),
+                          size: AppButtonSize.sm,
+                          onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+                        ),
+                        const SizedBox(width: 8),
+                        AppButton.danger(
+                          text: isDeleting ? 'Deleting...' : (context.isHindi ? 'डिलीट करें' : 'Delete Account'),
+                          size: AppButtonSize.sm,
+                          onPressed: isDeleting
+                              ? null
+                              : () async {
+                                  setDialogState(() => isDeleting = true);
+                                  final khataCtrl = context.read<KhataController>();
+                                  final success = await khataCtrl.deleteCustomer(
+                                    customer.id.toString(),
+                                    customer.mobile,
+                                  );
+                                  if (ctx.mounted) {
+                                    Navigator.pop(ctx);
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          success
+                                              ? (context.isHindi ? '✓ ग्राहक खाता डिलीट हुआ' : '✓ Customer account deleted')
+                                              : (khataCtrl.errorMessage ?? 'Failed to delete customer'),
+                                        ),
+                                        backgroundColor: success ? AppColors.success : AppColors.error,
+                                      ),
+                                    );
+                                  }
+                                },
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1144,6 +1893,41 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                     ),
                                   ],
                                 ),
+                              ),
+                              PopupMenuButton<String>(
+                                icon: Icon(Icons.more_vert_rounded, size: 20, color: isDark ? Colors.white : AppColors.textPrimary),
+                                tooltip: context.isHindi ? 'ग्राहक विकल्प' : 'Customer Options',
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                onSelected: (val) {
+                                  if (val == 'delete_customer') {
+                                    _showDeleteCustomerDialog(context, liveCustomer);
+                                  } else if (val == 'send_pdf') {
+                                    khata.openStatementPdf(context, liveCustomer.mobile, customer: liveCustomer);
+                                  }
+                                },
+                                itemBuilder: (menuCtx) => [
+                                  PopupMenuItem<String>(
+                                    value: 'send_pdf',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.picture_as_pdf_outlined, size: 16, color: AppColors.primary),
+                                        const SizedBox(width: 8),
+                                        Text(menuCtx.isHindi ? 'पीडीएफ लेजर डाउनलोड' : 'Download PDF Statement'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuDivider(),
+                                  PopupMenuItem<String>(
+                                    value: 'delete_customer',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.delete_forever_rounded, size: 16, color: AppColors.error),
+                                        const SizedBox(width: 8),
+                                        Text(menuCtx.isHindi ? 'ग्राहक खाता डिलीट करें' : 'Delete Customer Account'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                               IconButton(
                                 icon: const Icon(Icons.close_rounded, size: 20),
@@ -1312,25 +2096,24 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 10),
+
+                                // 2B. Daily Micro-Installment Settle Card (Chillar Settle)
+                                KhataMicroPlanCard(
+                                  customerPhone: liveCustomer.mobile,
+                                  customerName: liveCustomer.name,
+                                  currentBalance: liveCustomer.balance,
+                                ),
+                                const SizedBox(height: 10),
 
                                 // 3. Primary Quick Action Buttons (+Udhar & +Jama)
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: ElevatedButton.icon(
-                                        icon: const Icon(Icons.arrow_outward_rounded, size: 16),
-                                        label: Text(
-                                          context.tr('khata_dialog_give_credit'),
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                        ),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.error,
-                                          foregroundColor: Colors.white,
-                                          elevation: 0,
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                        ),
+                                      child: AppButton.danger(
+                                        icon: Icons.arrow_outward_rounded,
+                                        text: context.tr('khata_dialog_give_credit'),
+                                        isFullWidth: true,
                                         onPressed: () async {
                                           Navigator.pop(ctx);
                                           await Future.delayed(const Duration(milliseconds: 150));
@@ -1342,19 +2125,11 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: ElevatedButton.icon(
-                                        icon: const Icon(Icons.arrow_downward_rounded, size: 16),
-                                        label: Text(
-                                          context.tr('khata_dialog_receive_payment'),
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                        ),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.success,
-                                          foregroundColor: Colors.white,
-                                          elevation: 0,
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                        ),
+                                      child: AppButton(
+                                        icon: Icons.arrow_downward_rounded,
+                                        text: context.tr('khata_dialog_receive_payment'),
+                                        variant: AppButtonVariant.success,
+                                        isFullWidth: true,
                                         onPressed: () async {
                                           Navigator.pop(ctx);
                                           await Future.delayed(const Duration(milliseconds: 150));
@@ -1368,6 +2143,47 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                 ),
                                 const SizedBox(height: 10),
 
+                                if (liveCustomer.balance > 0) ...[
+                                  InkWell(
+                                    onTap: () {
+                                      SmartRecoveryNudgeModal.show(
+                                        context: context,
+                                        customerName: liveCustomer.name,
+                                        customerPhone: liveCustomer.mobile,
+                                        totalDebt: liveCustomer.balance,
+                                        daysOverdue: liveCustomer.overdueDays,
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.auto_awesome_rounded, color: Color(0xFF7C3AED), size: 16),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            context.isHindi
+                                                ? '🧠 AI स्मार्ट रिकवरी मैसेज (WhatsApp + Dynamic UPI)'
+                                                : '🧠 AI Smart Recovery Nudge (WhatsApp + Dynamic UPI)',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF7C3AED),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
                                 // 4. Secondary Utilities Toolbar (PDF, WhatsApp, Copy)
                                 Row(
                                   children: [
@@ -1525,14 +2341,20 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                     itemBuilder: (context, idx) {
                                       final tx = filteredTxs[idx];
                                       final isCredit = tx.isCredit;
+                                      final isCancelled = tx.isCancelled;
+                                      final isEdited = tx.editReason.isNotEmpty;
 
                                       return Container(
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color: isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle,
+                                          color: isCancelled
+                                              ? (isDark ? AppColors.error.withValues(alpha: 0.05) : AppColors.error.withValues(alpha: 0.03))
+                                              : (isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle),
                                           borderRadius: BorderRadius.circular(12),
                                           border: Border.all(
-                                            color: isDark ? AppColors.darkBorder : AppColors.border,
+                                            color: isCancelled
+                                                ? AppColors.error.withValues(alpha: 0.25)
+                                                : (isDark ? AppColors.darkBorder : AppColors.border),
                                           ),
                                         ),
                                         child: Row(
@@ -1541,15 +2363,16 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                             Container(
                                               padding: const EdgeInsets.all(8),
                                               decoration: BoxDecoration(
-                                                color: (isCredit ? AppColors.error : AppColors.success)
-                                                    .withValues(alpha: 0.12),
+                                                color: isCancelled
+                                                    ? AppColors.error.withValues(alpha: 0.1)
+                                                    : (isCredit ? AppColors.error : AppColors.success).withValues(alpha: 0.12),
                                                 borderRadius: BorderRadius.circular(8),
                                               ),
                                               child: Icon(
-                                                isCredit
-                                                    ? Icons.arrow_outward_rounded
-                                                    : Icons.arrow_downward_rounded,
-                                                color: isCredit ? AppColors.error : AppColors.success,
+                                                isCancelled
+                                                    ? Icons.block_rounded
+                                                    : (isCredit ? Icons.arrow_outward_rounded : Icons.arrow_downward_rounded),
+                                                color: isCancelled ? AppColors.error : (isCredit ? AppColors.error : AppColors.success),
                                                 size: 18,
                                               ),
                                             ),
@@ -1566,11 +2389,50 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                                         isCredit
                                                             ? context.tr('khata_dialog_give_credit')
                                                             : context.tr('khata_dialog_receive_payment'),
-                                                        style: const TextStyle(
+                                                        style: TextStyle(
                                                           fontWeight: FontWeight.w700,
                                                           fontSize: 13,
+                                                          color: isCancelled
+                                                              ? (isDark ? AppColors.darkTextMuted : AppColors.textMuted)
+                                                              : null,
                                                         ),
                                                       ),
+                                                      if (isCancelled) ...[
+                                                        const SizedBox(width: 6),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                          decoration: BoxDecoration(
+                                                            color: AppColors.error.withValues(alpha: 0.15),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                            border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                                                          ),
+                                                          child: Text(
+                                                            context.isHindi ? 'रद्द (CANCELLED)' : 'CANCELLED',
+                                                            style: const TextStyle(
+                                                              fontSize: 9,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: AppColors.error,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ] else if (isEdited) ...[
+                                                        const SizedBox(width: 6),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                          decoration: BoxDecoration(
+                                                            color: AppColors.primary.withValues(alpha: 0.12),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                          ),
+                                                          child: Text(
+                                                            context.isHindi ? 'संपादित' : 'EDITED',
+                                                            style: const TextStyle(
+                                                              fontSize: 9,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: AppColors.primary,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
                                                       if (tx.paymentMode.isNotEmpty && tx.paymentMode.toLowerCase() != 'cash') ...[
                                                         const SizedBox(width: 6),
                                                         Container(
@@ -1611,6 +2473,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                                           ),
                                                         ),
                                                       ],
+                                                      if (isEdited && tx.originalAmount != null && tx.originalAmount! > 0 && tx.originalAmount != tx.amount) ...[
+                                                        Text(
+                                                          ' • ${context.isHindi ? "मूल" : "Orig"}: ₹${tx.originalAmount!.toStringAsFixed(0)}',
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ],
                                                   ),
                                                   if (tx.notes.isNotEmpty) ...[
@@ -1619,6 +2490,31 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                                       tx.notes,
                                                       style: TextStyle(
                                                         fontSize: 11,
+                                                        fontStyle: FontStyle.italic,
+                                                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                  if (isCancelled && tx.deleteReason.isNotEmpty) ...[
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '${context.isHindi ? "कारण" : "Reason"}: ${tx.deleteReason}',
+                                                      style: const TextStyle(
+                                                        fontSize: 10,
+                                                        fontStyle: FontStyle.italic,
+                                                        color: AppColors.error,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ] else if (isEdited && tx.editReason.isNotEmpty) ...[
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '${context.isHindi ? "संशोधन" : "Edit reason"}: ${tx.editReason}',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
                                                         fontStyle: FontStyle.italic,
                                                         color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
                                                       ),
@@ -1637,9 +2533,12 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                                 Text(
                                                   '${isCredit ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}',
                                                   style: TextStyle(
-                                                    fontWeight: FontWeight.w900,
-                                                    fontSize: 14,
-                                                    color: isCredit ? AppColors.error : AppColors.success,
+                                                    fontWeight: isCancelled ? FontWeight.w700 : FontWeight.w900,
+                                                    fontSize: isCancelled ? 13 : 14,
+                                                    decoration: isCancelled ? TextDecoration.lineThrough : null,
+                                                    color: isCancelled
+                                                        ? (isDark ? AppColors.darkTextMuted : AppColors.textMuted)
+                                                        : (isCredit ? AppColors.error : AppColors.success),
                                                   ),
                                                 ),
                                                 const SizedBox(height: 2),
@@ -1654,19 +2553,88 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                               ],
                                             ),
 
-                                            // Reversal Undo Button
+                                            // Options Menu (Edit / Reverse / Delete)
                                             const SizedBox(width: 4),
-                                            IconButton(
-                                              icon: const Icon(Icons.undo_rounded, size: 16),
-                                              splashRadius: 16,
-                                              tooltip: context.tr('khata_btn_reverse'),
-                                              onPressed: () => _showReverseDialog(
-                                                context,
-                                                tx,
-                                                liveCustomer.id.toString(),
-                                                liveCustomer.mobile,
+                                            if (isCancelled)
+                                              Tooltip(
+                                                message: context.isHindi ? 'यह प्रविष्टि रद्द की जा चुकी है' : 'This entry is cancelled',
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(6),
+                                                  child: Icon(
+                                                    Icons.info_outline_rounded,
+                                                    size: 16,
+                                                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                                  ),
+                                                ),
+                                              )
+                                            else
+                                              PopupMenuButton<String>(
+                                                icon: Icon(
+                                                  Icons.more_vert_rounded,
+                                                  size: 18,
+                                                  color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                                ),
+                                                tooltip: context.isHindi ? 'प्रविष्टि विकल्प' : 'Entry Options',
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                onSelected: (val) {
+                                                  if (val == 'edit') {
+                                                    _showEditTransactionModal(
+                                                      context,
+                                                      tx,
+                                                      liveCustomer.id.toString(),
+                                                      liveCustomer.mobile,
+                                                      liveCustomer.balance,
+                                                    );
+                                                  } else if (val == 'reverse') {
+                                                    _showReverseDialog(
+                                                      context,
+                                                      tx,
+                                                      liveCustomer.id.toString(),
+                                                      liveCustomer.mobile,
+                                                    );
+                                                  } else if (val == 'delete') {
+                                                    _showDeleteTransactionDialog(
+                                                      context,
+                                                      tx,
+                                                      liveCustomer.id.toString(),
+                                                      liveCustomer.mobile,
+                                                      liveCustomer.balance,
+                                                    );
+                                                  }
+                                                },
+                                                itemBuilder: (menuCtx) => [
+                                                  PopupMenuItem<String>(
+                                                    value: 'edit',
+                                                    child: Row(
+                                                      children: [
+                                                        const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
+                                                        const SizedBox(width: 8),
+                                                        Text(menuCtx.isHindi ? 'प्रविष्टि संपादित करें (Edit)' : 'Edit Entry'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  PopupMenuItem<String>(
+                                                    value: 'reverse',
+                                                    child: Row(
+                                                      children: [
+                                                        const Icon(Icons.undo_rounded, size: 16, color: AppColors.warning),
+                                                        const SizedBox(width: 8),
+                                                        Text(menuCtx.isHindi ? 'प्रविष्टि वापस लें (Reverse)' : 'Reverse Entry'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  PopupMenuItem<String>(
+                                                    value: 'delete',
+                                                    child: Row(
+                                                      children: [
+                                                        const Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error),
+                                                        const SizedBox(width: 8),
+                                                        Text(menuCtx.isHindi ? 'प्रविष्टि डिलीट करें (Delete)' : 'Delete Entry'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ),
                                           ],
                                         ),
                                       );
@@ -1744,8 +2712,14 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
               elevation: 4,
               onSelected: (val) async {
                 switch (val) {
+                  case 'add':
+                    _showAddTransactionModal(context, isCredit: true);
+                    break;
                   case 'broadcast':
                     khata.broadcastWhatsAppOverdueReminders(context);
+                    break;
+                  case 'aging':
+                    _showAgingBreakdownSheet(context);
                     break;
                   case 'refresh':
                     await khata.loadCustomers();
@@ -1759,34 +2733,9 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                       );
                     }
                     break;
-                  case 'add':
-                    _showAddTransactionModal(context, isCredit: true);
-                    break;
                 }
               },
               itemBuilder: (ctx) => [
-                if (khata.overdueCount > 0)
-                  PopupMenuItem(
-                    value: 'broadcast',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.campaign_rounded, color: Color(0xFF25D366), size: 18),
-                        const SizedBox(width: 10),
-                        Text(ctx.isHindi ? 'ओवरड्यू व्हाट्सएप तगादा भेजें' : 'Send WhatsApp Reminders'),
-                      ],
-                    ),
-                  ),
-                PopupMenuItem(
-                  value: 'refresh',
-                  child: Row(
-                    children: [
-                      Icon(Icons.refresh_rounded, color: isDark ? Colors.white : AppColors.textPrimary, size: 18),
-                      const SizedBox(width: 10),
-                      Text(ctx.isHindi ? 'खाता रीफ्रेश करें' : 'Refresh Khata Ledger'),
-                    ],
-                  ),
-                ),
-                const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'add',
                   child: Row(
@@ -1794,6 +2743,38 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                       const Icon(Icons.person_add_outlined, color: AppColors.primary, size: 18),
                       const SizedBox(width: 10),
                       Text(ctx.isHindi ? 'नया खाता ग्राहक जोड़ें' : 'Add New Customer'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'aging',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.analytics_outlined, color: AppColors.warning, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'उधारी एजिंग रिपोर्ट' : 'View Aging Report'),
+                    ],
+                  ),
+                ),
+                if (khata.overdueCount > 0)
+                  PopupMenuItem(
+                    value: 'broadcast',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.campaign_rounded, color: Color(0xFF25D366), size: 18),
+                        const SizedBox(width: 10),
+                        Text(ctx.isHindi ? 'व्हाट्सएप तगादा भेजें' : 'Send WhatsApp Reminders'),
+                      ],
+                    ),
+                  ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'refresh',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh_rounded, color: isDark ? Colors.white : AppColors.textPrimary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'खाता रीफ्रेश करें' : 'Refresh Khata Ledger'),
                     ],
                   ),
                 ),
@@ -1818,71 +2799,103 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
             maxWidth: 1200,
             child: Column(
               children: [
-                // Top 2 KPI Stat Cards Row
+                // Clean Single Hero Total Market Debt Card
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: AppStatCard(
-                          title: context.tr('khata_banner_title'),
-                          value: '₹${khata.totalMarketDebt.toStringAsFixed(0)}',
-                          subtitle: '${khata.debtorsCount} ${context.tr('khata_kpi_debtors')}',
-                          icon: Icons.account_balance_wallet_rounded,
+                  child: AppCard(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: context.colorPrimaryLight,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.account_balance_wallet_rounded,
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: AppStatCard(
-                          title: context.tr('khata_aging_60_plus'),
-                          value: '₹${khata.aging?.days61Plus.toStringAsFixed(0) ?? '0'}',
-                          subtitle: '${khata.overdueCount} ${context.tr('khata_kpi_overdue')}',
-                          icon: Icons.warning_amber_rounded,
-                          isAlert: (khata.aging?.days61Plus ?? 0) > 0 || khata.overdueCount > 0,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                context.tr('khata_banner_title'),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.colorTextSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '₹${khata.totalMarketDebt.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                    color: context.colorTextPrimary,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${khata.debtorsCount} ${context.tr('khata_kpi_debtors')}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: context.colorTextMuted,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () => _showAddTransactionModal(context, isCredit: true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.error,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(100, 34),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                              ),
+                              icon: const Icon(Icons.remove_circle_outline, size: 14),
+                              label: Text(context.isHindi ? 'दिए (उधारी)' : '+ Give Credit'),
+                            ),
+                            const SizedBox(height: 6),
+                            OutlinedButton.icon(
+                              onPressed: () => _showAddTransactionModal(context, isCredit: false),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.success,
+                                side: const BorderSide(color: AppColors.success, width: 1.2),
+                                minimumSize: const Size(100, 34),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                              ),
+                              icon: const Icon(Icons.add_circle_outline, size: 14),
+                              label: Text(context.isHindi ? 'मिले (जमा)' : '+ Settle Cash'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-
-                // Aging Analysis Breakdown Pills
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Row(
-                    children: [
-                      _buildAgingPill(
-                        label: context.tr('khata_aging_0_30'),
-                        amount: '₹${khata.aging?.currentDays0To30.toStringAsFixed(0) ?? '0'}',
-                        icon: Icons.timelapse_rounded,
-                        color: AppColors.primary,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildAgingPill(
-                        label: context.tr('khata_aging_31_60'),
-                        amount: '₹${khata.aging?.days31To60.toStringAsFixed(0) ?? '0'}',
-                        icon: Icons.alarm_rounded,
-                        color: AppColors.warning,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildAgingPill(
-                        label: context.tr('khata_aging_60_plus'),
-                        amount: '₹${khata.aging?.days61Plus.toStringAsFixed(0) ?? '0'}',
-                        icon: Icons.warning_amber_rounded,
-                        color: AppColors.error,
-                        isDark: isDark,
-                        isAlert: (khata.aging?.days61Plus ?? 0) > 0,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
 
                 // Search Input
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
@@ -1902,7 +2915,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                     onChanged: (query) => khata.setSearchQuery(query),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
 
                 // Horizontal Segment Filter Chips
                 SingleChildScrollView(
@@ -1987,7 +3000,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                 if (isMultiColumn) {
                                   final crossAxisCount = width > 1050 ? 3 : 2;
                                   return GridView.builder(
-                                    cacheExtent: 600,
                                     physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -2005,7 +3017,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                 }
 
                                 return ListView.separated(
-                                  cacheExtent: 500,
                                   physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                   itemCount: khata.filteredCustomers.length,
@@ -2027,50 +3038,119 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
   }
 
   // ==========================================
-  // WIDGET: AGING BREAKDOWN PILL
+  // WIDGET: AGING BREAKDOWN BOTTOM SHEET
   // ==========================================
-  Widget _buildAgingPill({
+  void _showAgingBreakdownSheet(BuildContext context) {
+    final khata = context.read<KhataController>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final aging = khata.aging;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : AppColors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.isHindi ? 'उधारी एजिंग रिपोर्ट (Aging Analysis)' : 'Udhar Aging Analysis',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _buildAgingRow(
+              ctx,
+              label: context.tr('khata_aging_0_30'),
+              amount: '₹${aging?.currentDays0To30.toStringAsFixed(0) ?? '0'}',
+              color: AppColors.primary,
+              icon: Icons.timelapse_rounded,
+              isDark: isDark,
+            ),
+            const SizedBox(height: 10),
+            _buildAgingRow(
+              ctx,
+              label: context.tr('khata_aging_31_60'),
+              amount: '₹${aging?.days31To60.toStringAsFixed(0) ?? '0'}',
+              color: AppColors.warning,
+              icon: Icons.alarm_rounded,
+              isDark: isDark,
+            ),
+            const SizedBox(height: 10),
+            _buildAgingRow(
+              ctx,
+              label: context.tr('khata_aging_60_plus'),
+              amount: '₹${aging?.days61Plus.toStringAsFixed(0) ?? '0'}',
+              color: AppColors.error,
+              icon: Icons.warning_amber_rounded,
+              isDark: isDark,
+              isAlert: (aging?.days61Plus ?? 0) > 0,
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAgingRow(
+    BuildContext context, {
     required String label,
     required String amount,
-    required IconData icon,
     required Color color,
+    required IconData icon,
     required bool isDark,
     bool isAlert = false,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isAlert
             ? color.withValues(alpha: 0.12)
             : (isDark ? AppColors.darkSurfaceSubtle : AppColors.surfaceSubtle),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isAlert
-              ? color.withValues(alpha: 0.4)
-              : (isDark ? AppColors.darkBorder : AppColors.border),
-          width: 0.8,
+          color: isAlert ? color.withValues(alpha: 0.4) : (isDark ? AppColors.darkBorder : AppColors.border),
         ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+              ),
             ),
           ),
-          const SizedBox(width: 6),
           Text(
             amount,
             style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: isAlert ? color : (isDark ? Colors.white : AppColors.textPrimary),
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: color,
             ),
           ),
         ],
@@ -2312,6 +3392,44 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                     ),
                   ),
                 ),
+              if (hasDues)
+                InkWell(
+                  onTap: () => SmartRecoveryNudgeModal.show(
+                    context: context,
+                    customerName: c.name,
+                    customerPhone: c.mobile,
+                    totalDebt: c.balance,
+                    daysOverdue: c.overdueDays,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.auto_awesome_rounded, size: 13, color: Color(0xFF7C3AED)),
+                        SizedBox(width: 4),
+                        Text(
+                          'AI Nudge',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF7C3AED),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
 
               Row(
                 mainAxisSize: MainAxisSize.min,

@@ -310,6 +310,31 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - Handled hidden/private price check (`isPricePublic`).
     - Displays `📞 Ask Price (रेट पूछें)` instead of `₹0` when the merchant chooses to hide product price, improving user experience.
   - **Verification**: `npm run build` compiled in 2.64s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-11-09]**: Real Data Profit & Shop Analytics Overhaul (`analytics_controller.dart` & `analytics_screen.dart`):
+  - **Zero Fake / Hardcoded Data Guarantee**:
+    - Completely removed all fake fallback data (`Amul Gold Milk`, `Fortune Rice Bran Oil`, `45800.0`).
+    - Computes 100% real financial metrics from actual POS bills, Khata debtors, and recorded store expenses.
+    - If no sales or expenses exist yet, displays an encouraging Real Zero State encouraging POS sales & expense entry.
+  - **Verification**: `flutter analyze` passed with 0 errors (No issues found!).
+- **[2026-11-09]**: Daily Store Expenses / Cashbook Redesign & Streamlined Layout (`expense_screen.dart`):
+  - **Ultra-Clean & Streamlined Expense Cashbook Screen**:
+    - Replaced 4 stacked KPI cards with 1 Hero Today's Expense Cashbook Banner (`Today's Expenses: ₹X,XXX` | `Net In-Hand Summary`).
+    - Consolidated secondary actions & monthly reports (WhatsApp summary, monthly profit report, quick presets, refresh) inside 3-dot overflow menu (`PopupMenuButton`).
+    - Integrated safe 2-step deletion confirmation dialog (`_confirmDeleteExpense`) for expense records.
+  - **Verification**: `flutter analyze` passed with 0 errors on expense_screen.dart.
+- **[2026-11-09]**: Customer Credit Ledger Simplification & Safe 2-Step Update/Delete Options (`khata_screen.dart`):
+  - **Ultra-Clean & Streamlined Khata Screen**:
+    - Replaced 5 bulky stacked sections with a single sleek Hero Total Market Debt Banner (`Total Market Debt: ₹X,XXX` | `X Debtors`) + 2 instant 1-tap action buttons (`+ Give Credit` / `+ Settle Cash`).
+    - Hidden secondary complexity (Aging Analysis, Reminders, PDF export) behind 3-dot overflow menus (`PopupMenuButton`).
+  - **Safe & Reliable Deletion Protections**:
+    - `_showDeleteCustomerDialog`: Safety check blocks deleting customer accounts with active udhar balance (`> ₹0`), prompting merchant to settle balance first.
+    - `_showDeleteTransactionDialog`: 2-step confirmation dialog with mandatory deletion reason recalculates running balances automatically.
+  - **Verification**: `flutter analyze` passed with 0 errors (No issues found!).
+- **[2026-11-09]**: Dashboard Instant Price Checker Card Overflow & KPI Aspect Ratio Fix (`dashboard_price_checker_card.dart` & `dashboard_screen.dart`):
+  - **Zero Pixel Overflow**:
+    - Added `Flexible` wrapper to title text in `dashboard_price_checker_card.dart` and `MainAxisSize.min` on inner Column, eliminating 120px overflow on compact mobile viewports.
+    - Adjusted GridView aspect ratios in `dashboard_screen.dart` to grant sufficient vertical breathing room to `AppStatCard` and `AppActionTile`.
+  - **Verification**: `flutter analyze` passed with 0 errors (No issues found!).
 - **[2026-10-28]**: Product Detail Modal & View Storefront Navigation Verification (`ProductDetailModal.jsx` & `ProductTrustDetailView.jsx`):
   - **1-Tap View Storefront**:
     - Replaced raw anchor tags with React Router Single Page App navigation (`navigate('/shop/' + targetShopSlug)` & `window.location.href`).

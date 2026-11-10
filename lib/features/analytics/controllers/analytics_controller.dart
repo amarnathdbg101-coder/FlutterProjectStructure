@@ -95,24 +95,17 @@ class AnalyticsController extends BaseController {
       setLoading(false);
     }
 
-    // Fallback if network fails and cache is empty
+    // Real Zero State when no data or offline cache exists (Zero Fake Data)
     if (_analytics == null) {
       _analytics = AnalyticsModel(
-        totalRevenue: 45800.0,
-        totalCost: 32400.0,
-        totalExpenses: 2800.0,
-        netPocketProfit: 10600.0,
-        averageMarginPct: 23.1,
-        totalSalesCount: 142,
-        bestProfitable: [
-          AnalyticsProductItem(productId: '1', name: 'Amul Gold Milk 500ml', soldQty: 84, profitAmount: 1680.0, marginPct: 15.0),
-          AnalyticsProductItem(productId: '2', name: 'Fortune Rice Bran Oil 1L', soldQty: 26, profitAmount: 2340.0, marginPct: 22.0),
-          AnalyticsProductItem(productId: '3', name: 'Tata Salt 1kg', soldQty: 48, profitAmount: 720.0, marginPct: 18.0),
-        ],
-        deadStock: [
-          AnalyticsProductItem(productId: '4', name: 'Nivea Soft Cream 100ml', currentStock: 14, daysInStock: 45),
-          AnalyticsProductItem(productId: '5', name: 'Badam Hair Oil 200ml', currentStock: 8, daysInStock: 60),
-        ],
+        totalRevenue: 0.0,
+        totalCost: 0.0,
+        totalExpenses: 0.0,
+        netPocketProfit: 0.0,
+        averageMarginPct: 0.0,
+        totalSalesCount: 0,
+        bestProfitable: [],
+        deadStock: [],
       );
       notifyListeners();
     }

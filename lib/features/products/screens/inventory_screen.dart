@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert' show base64Encode;
 import 'dart:io' show File;
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +9,7 @@ import '../../dashboard/repositories/ai_repository.dart';
 import '../../../core/constants/api_constants.dart';
 import '../models/bulk_import_result.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -186,6 +188,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     super.initState();
     _searchController.addListener(_onSearchChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndRecoverLostCameraData();
       context.read<ProductController>().loadProducts();
       try {
         final uri = GoRouterState.of(context).uri;
@@ -676,6 +679,37 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     );
   }
 
+  /// Recovers camera photo if Android OS destroyed MainActivity to free RAM on low-spec phones (e.g. Vivo T3x)
+  Future<void> _checkAndRecoverLostCameraData() async {
+    if (kIsWeb) return;
+    try {
+      final picker = ImagePicker();
+      final LostDataResponse response = await picker.retrieveLostData();
+      if (response.isEmpty) return;
+      if (response.file != null) {
+        final (normalizedFile, normalizedBytes) =
+            await normalizeXFile(response.file!, maxDimension: 1024, quality: 80);
+        if (mounted) {
+          _showAddProductDialog(
+            context,
+            initialImages: [(normalizedFile, normalizedBytes)],
+          );
+        }
+      } else if (response.files != null && response.files!.isNotEmpty) {
+        final List<(XFile, Uint8List?)> recovered = [];
+        for (final f in response.files!) {
+          final (normF, normBytes) = await normalizeXFile(f, maxDimension: 1024, quality: 80);
+          recovered.add((normF, normBytes));
+        }
+        if (mounted && recovered.isNotEmpty) {
+          _showAddProductDialog(context, initialImages: recovered);
+        }
+      }
+    } catch (e) {
+      debugPrint('[InventoryScreen] retrieveLostData check: $e');
+    }
+  }
+
   /// Displays a clean bottom sheet modal offering Camera capture or Device Gallery selection
   void _showProductImageSourceSheet(
     BuildContext context, {
@@ -703,13 +737,13 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Container(
-        decoration: BoxDecoration(
-          color: sheetCtx.colorSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        child: SafeArea(
+      builder: (sheetCtx) => Material(
+        color: sheetCtx.colorSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -741,32 +775,63 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                   child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
                 ),
                 title: Text(
-                  sheetCtx.isHindi ? 'कैमरा से फोटो खींचें' : 'Take Photo with Camera',
+                  sheetCtx.isHindi ? '📸 AI मैजिक कैमरा (स्टूडियो बैकग्राउंड + विवरण)' : '📸 AI Magic Camera (Studio Photo + Details)',
                   style: TextStyle(fontWeight: FontWeight.w600, color: sheetCtx.colorTextPrimary),
                 ),
                 subtitle: Text(
-                  sheetCtx.isHindi ? 'सीधे कैमरे से नई तस्वीर लें' : 'Capture instant photo with camera',
+                  sheetCtx.isHindi ? 'बैकग्राउंड हटेगा और 10+ उत्पाद विवरण खुद भर जाएंगे' : 'Auto-removes background & auto-fills product info',
                   style: TextStyle(fontSize: 12, color: sheetCtx.colorTextSecondary),
                 ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   try {
+                    // Optimized for Low-Memory / Mid-range phones (e.g. Vivo T3x 50MP sensor)
+                    // Restricting native hardware capture to 1024x1024 prevents OOM & Android OS process kills!
                     final picked = await picker.pickImage(
                       source: ImageSource.camera,
                       maxWidth: 1024,
                       maxHeight: 1024,
-                      imageQuality: 85,
+                      imageQuality: 80,
                       requestFullMetadata: false,
                     );
                     if (picked != null) {
-                      Uint8List? bytes;
-                      try {
-                        bytes = await picked.readAsBytes();
-                      } catch (_) {}
-                      onFilesSelected([(picked, bytes)]);
+                      final (normalizedFile, normalizedBytes) =
+                          await normalizeXFile(picked, maxDimension: 1024, quality: 80);
+                      onFilesSelected([(normalizedFile, normalizedBytes)]);
+                    }
+                  } on PlatformException catch (pe) {
+                    debugPrint('[InventoryScreen] Camera PlatformException: ${pe.code} - ${pe.message}');
+                    if (context.mounted) {
+                      final msg = pe.code == 'camera_access_denied'
+                          ? (context.isHindi
+                              ? 'कैमरा परमिशन नहीं मिली। कृपया फोन सेटिंग्स से कैमरा परमिशन चालू करें।'
+                              : 'Camera permission denied. Please enable camera in device settings.')
+                          : (context.isHindi
+                              ? 'कैमरा शुरू नहीं हो सका: ${pe.message ?? pe.code}'
+                              : 'Could not open camera: ${pe.message ?? pe.code}');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(msg),
+                          backgroundColor: AppColors.error,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
                     }
                   } catch (e) {
                     debugPrint('[InventoryScreen] Camera picker error: $e');
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            context.isHindi
+                                ? 'कैमरा से फोटो लेने में समस्या आई। कृपया दोबारा प्रयास करें।'
+                                : 'Failed to capture photo. Please try again.',
+                          ),
+                          backgroundColor: AppColors.error,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   }
                 },
               ),
@@ -793,7 +858,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     final pickedFiles = await picker.pickMultiImage(
                       maxWidth: 1024,
                       maxHeight: 1024,
-                      imageQuality: 85,
+                      imageQuality: 80,
                       requestFullMetadata: false,
                     );
                     if (pickedFiles.isNotEmpty) {
@@ -801,16 +866,45 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       final selected = pickedFiles.take(remaining).toList();
                       final List<(XFile, Uint8List?)> resultList = [];
                       for (final f in selected) {
-                        Uint8List? bytes;
-                        try {
-                          bytes = await f.readAsBytes();
-                        } catch (_) {}
-                        resultList.add((f, bytes));
+                        final (normalizedFile, normalizedBytes) =
+                            await normalizeXFile(f, maxDimension: 1024, quality: 80);
+                        resultList.add((normalizedFile, normalizedBytes));
                       }
                       onFilesSelected(resultList);
                     }
+                  } on PlatformException catch (pe) {
+                    debugPrint('[InventoryScreen] MultiImage PlatformException: ${pe.code} - ${pe.message}');
+                    if (context.mounted) {
+                      final msg = pe.code == 'photo_access_denied'
+                          ? (context.isHindi
+                              ? 'गैलरी परमिशन नहीं मिली। कृपया सेटिंग्स से परमिशन दें।'
+                              : 'Photo permission denied. Please allow photos access.')
+                          : (context.isHindi
+                              ? 'गैलरी खोलने में समस्या आई: ${pe.message ?? pe.code}'
+                              : 'Could not open gallery: ${pe.message ?? pe.code}');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(msg),
+                          backgroundColor: AppColors.error,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   } catch (e) {
                     debugPrint('[InventoryScreen] MultiImage picker error: $e');
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            context.isHindi
+                                ? 'गैलरी से फोटो लोड करने में समस्या आई।'
+                                : 'Failed to select photos from gallery.',
+                          ),
+                          backgroundColor: AppColors.error,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   }
                 },
               ),
@@ -819,7 +913,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   /// Generates a Smart SKU Code based on Product Name & Timestamp
@@ -922,6 +1017,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     bool isDuplicate = false,
     String? initialBarcode,
     String? initialName,
+    List<(XFile, Uint8List?)>? initialImages,
   }) {
     final authController = Provider.of<AuthController>(context, listen: false);
     final currentShop = authController.currentShop;
@@ -1043,6 +1139,22 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     // In-memory bytes cache: fixes Android camera content:// URI display bug
     // where File().existsSync() returns false for content:// paths
     final Map<String, Uint8List> pendingImageBytes = {};
+
+    // Seed recovered lost camera images if activity was destroyed by Android OS
+    if (initialImages != null && initialImages.isNotEmpty) {
+      for (final (f, bytes) in initialImages) {
+        final key = f.path.trim().isNotEmpty
+            ? f.path.trim()
+            : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
+        if (!productImages.contains(key)) {
+          productImages.add(key);
+          pendingXFiles[key] = f;
+          if (bytes != null && bytes.isNotEmpty) {
+            pendingImageBytes[key] = bytes;
+          }
+        }
+      }
+    }
     bool isSaving = false;
     bool isAiScanning = false;
 
@@ -1262,13 +1374,18 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               Uint8List? imageBytes;
               String mimeType = 'image/jpeg';
 
-              if (pendingXFiles.containsKey(imagePathOrKey)) {
+              if (pendingImageBytes.containsKey(imagePathOrKey) && pendingImageBytes[imagePathOrKey]!.isNotEmpty) {
+                imageBytes = pendingImageBytes[imagePathOrKey]!;
+                if (imagePathOrKey.toLowerCase().endsWith('.png')) {
+                  mimeType = 'image/png';
+                }
+              } else if (pendingXFiles.containsKey(imagePathOrKey)) {
                 final xf = pendingXFiles[imagePathOrKey]!;
                 imageBytes = await xf.readAsBytes();
                 if (xf.name.toLowerCase().endsWith('.png')) {
                   mimeType = 'image/png';
                 }
-              } else if (!imagePathOrKey.startsWith('http') && !kIsWeb) {
+              } else if (!imagePathOrKey.startsWith('http') && !imagePathOrKey.startsWith('/images') && !kIsWeb) {
                 final file = File(imagePathOrKey);
                 if (await file.exists()) {
                   imageBytes = await file.readAsBytes();
@@ -1276,6 +1393,18 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     mimeType = 'image/png';
                   }
                 }
+              } else if (imagePathOrKey.startsWith('http') || imagePathOrKey.startsWith('/images')) {
+                final fullUrl = formatImageUrl(imagePathOrKey);
+                try {
+                  final client = Dio();
+                  final res = await client.get<List<int>>(
+                    fullUrl,
+                    options: Options(responseType: ResponseType.bytes, receiveTimeout: const Duration(seconds: 20)),
+                  );
+                  if (res.data != null && res.data!.isNotEmpty) {
+                    imageBytes = Uint8List.fromList(res.data!);
+                  }
+                } catch (_) {}
               }
 
               if (imageBytes == null || imageBytes.isEmpty) {
@@ -1295,11 +1424,38 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
 
               final base64String = base64Encode(imageBytes);
               final aiRepo = AiRepository();
-              final resp = await aiRepo.scanProduct(imageBase64: base64String, mimeType: mimeType);
+
+              // 1. Try Smart Studio Scan first (Cloudflare AI background removal + Studio Compositing + Gemini Vision)
+              var resp = await aiRepo.smartStudioScan(imageBase64: base64String, mimeType: mimeType);
+              if (!resp.success || resp.data == null) {
+                // Seamless fallback to standard scan if studio service had network hiccup
+                resp = await aiRepo.scanProduct(imageBase64: base64String, mimeType: mimeType);
+              }
 
               if (resp.success && resp.data != null) {
-                final data = resp.data!;
+                final rawPayload = resp.data!;
+                final Map<String, dynamic> data = (rawPayload['scan_data'] is Map)
+                    ? Map<String, dynamic>.from(rawPayload['scan_data'] as Map)
+                    : rawPayload;
+
+                final studioImageUrl = rawPayload['studio_image_url']?.toString().trim() ?? '';
+
                 setModalState(() {
+                  // Replace local preview with studio image if generated
+                  if (studioImageUrl.isNotEmpty && (studioImageUrl.startsWith('http') || studioImageUrl.startsWith('/images/'))) {
+                    final idx = productImages.indexOf(imagePathOrKey);
+                    if (idx != -1) {
+                      productImages[idx] = studioImageUrl;
+                      if (imageBytes != null) {
+                        pendingImageBytes[studioImageUrl] = imageBytes;
+                      }
+                    } else if (!productImages.contains(studioImageUrl)) {
+                      productImages.insert(0, studioImageUrl);
+                      if (imageBytes != null) {
+                        pendingImageBytes[studioImageUrl] = imageBytes;
+                      }
+                    }
+                  }
                   // 1. Name
                   final rawName = data['name']?.toString().trim() ?? '';
                   if (rawName.isNotEmpty) {
@@ -1438,9 +1594,13 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              sheetCtx.isHindi
-                                  ? '✨ AI ने उत्पाद के 10+ विवरण लोड किए: ${data['name'] ?? ''}'
-                                  : '✨ AI Auto-Filled 10+ details for: ${data['name'] ?? ''}',
+                              studioImageUrl.isNotEmpty
+                                  ? (sheetCtx.isHindi
+                                      ? '✨ AI स्टूडियो: फोटो तैयार + 10+ विवरण लोड हुए!'
+                                      : '✨ AI Studio: Studio photo ready + 10+ details loaded!')
+                                  : (sheetCtx.isHindi
+                                      ? '✨ AI ने उत्पाद के 10+ विवरण लोड किए: ${data['name'] ?? ''}'
+                                      : '✨ AI Auto-Filled 10+ details for: ${data['name'] ?? ''}'),
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ),
@@ -1743,7 +1903,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                         }
                                       }
                                     }
-                                    if (firstAddedKey != null && (nameCtrl.text.trim().isEmpty || isDuplicate)) {
+                                    if (firstAddedKey != null) {
                                       runAiAutofill(firstAddedKey!);
                                     }
                                   });
@@ -1907,7 +2067,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                             }
                                           }
                                         }
-                                        if (firstAddedKey != null && (nameCtrl.text.trim().isEmpty || isDuplicate)) {
+                                        if (firstAddedKey != null) {
                                           runAiAutofill(firstAddedKey!);
                                         }
                                       });
@@ -1967,11 +2127,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                               child: Text(
                                 isAiScanning
                                     ? (sheetCtx.isHindi
-                                        ? '⚡ AI तस्वीर का विश्लेषण कर रहा है (10+ विवरण)...'
-                                        : '⚡ AI analyzing image (extracting 10+ details)...')
+                                        ? '⚡ AI स्टूडियो: बैकग्राउंड हटा रहा है और 10+ विवरण भर रहा है...'
+                                        : '⚡ AI Studio: Enhancing studio photo & extracting 10+ details...')
                                     : (sheetCtx.isHindi
-                                        ? '✨ AI से 10+ उत्पाद विवरण ऑटो-भरें'
-                                        : '✨ AI Auto-Fill 10+ Details from Image'),
+                                        ? '✨ AI स्टूडियो और ऑटो-भरें (फोटो + 10+ विवरण)'
+                                        : '✨ AI Studio & Auto-Fill (Photo + 10+ Details)'),
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -1981,7 +2141,14 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             ),
                             if (!isAiScanning)
                               InkWell(
-                                onTap: () => runAiAutofill(productImages.first),
+                                onTap: () {
+                                  // Prefer latest added unprocessed/local image, or first image
+                                  final target = productImages.lastWhere(
+                                    (p) => pendingImageBytes.containsKey(p) || pendingXFiles.containsKey(p) || isLocalFilePath(p),
+                                    orElse: () => productImages.first,
+                                  );
+                                  runAiAutofill(target);
+                                },
                                 borderRadius: BorderRadius.circular(6),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -2284,7 +2451,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             controller: floorPriceCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             decoration: const InputDecoration(
-                              labelText: 'Min Bargain Price',
+                              labelText: 'Floor Price (Min Safe Rate)',
+                              hintText: 'Cost shield limit',
                               prefixText: '₹ ',
                             ),
                             onChanged: (_) => setModalState(() {}),
@@ -2301,56 +2469,20 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         runSpacing: 6,
                         children: [
                           if (isMrpInvalid)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: AppColors.error.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.error),
-                              ),
-                              child: Text(
-                                '⚠️ MRP (₹${liveMrp.toStringAsFixed(0)}) Selling Price se kam hai!',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.error),
-                              ),
+                            AppBadge.danger(
+                              '⚠️ MRP (₹${liveMrp.toStringAsFixed(0)}) Selling Price se kam hai!',
                             ),
                           if (isCostInvalid)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: AppColors.warning.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.warning),
-                              ),
-                              child: Text(
-                                '⚠️ Cost Price (₹${liveCost.toStringAsFixed(0)}) Selling Price se zyada hai!',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.warning),
-                              ),
+                            AppBadge.warning(
+                              '⚠️ Cost Price (₹${liveCost.toStringAsFixed(0)}) Selling Price se zyada hai!',
                             ),
                           if (hasProfit)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.success),
-                              ),
-                              child: Text(
-                                'Est. Profit: +₹${(livePrice - liveCost).toStringAsFixed(0)} (${(((livePrice - liveCost) / livePrice) * 100).toStringAsFixed(1)}% Margin)',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
-                              ),
+                            AppBadge.success(
+                              'Est. Profit: +₹${(livePrice - liveCost).toStringAsFixed(0)} (${(((livePrice - liveCost) / livePrice) * 100).toStringAsFixed(1)}% Margin)',
                             ),
                           if (hasDiscount)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.primary),
-                              ),
-                              child: Text(
-                                'Discount: ${(((liveMrp - livePrice) / liveMrp) * 100).toStringAsFixed(0)}% OFF MRP',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                              ),
+                            AppBadge.primary(
+                              'Discount: ${(((liveMrp - livePrice) / liveMrp) * 100).toStringAsFixed(0)}% OFF MRP',
                             ),
                         ],
                       ),
@@ -2755,7 +2887,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         subtitle: Text(
                           isPricePublic
                               ? 'Price is publicly visible online on digital storefront'
-                              : '🔒 Price Hidden online (Shows "Price on Request" - Customers visit or contact you to bargain)',
+                              : '🔒 Price Hidden online (Shows "Mandi Rate / Price on Request" - Best for loose commodities)',
                           style: TextStyle(
                             fontSize: 11,
                             color: isPricePublic ? AppColors.textSecondary : AppColors.primary,
@@ -2772,7 +2904,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       child: SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        title: const Text('Allow Customer Bargain / Negotiate', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                        title: const Text('Daily Mandi Rate / Counter Pricing Item', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                        subtitle: const Text('For loose staples & volatile items confirmed at counter', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                         value: allowBargain,
                         activeThumbColor: AppColors.primary,
                         onChanged: (val) => setModalState(() => allowBargain = val),
@@ -2923,16 +3056,14 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             },
                           ),
                         const Spacer(),
-                        TextButton(
+                        AppButton.outline(
+                          text: sheetCtx.tr('btn_cancel'),
                           onPressed: () => Navigator.pop(sheetCtx),
-                          child: Text(sheetCtx.tr('btn_cancel')),
                         ),
                         const SizedBox(width: 10),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(130, 46),
-                            backgroundColor: AppColors.primary,
-                          ),
+                        AppButton(
+                          text: sheetCtx.tr('btn_save'),
+                          isLoading: isSaving,
                           onPressed: isSaving
                               ? null
                               : () async {
@@ -3124,13 +3255,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     );
                                   }
                                 },
-                          child: isSaving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : Text(sheetCtx.tr('btn_save')),
                         ),
                       ],
                     ),
@@ -3151,12 +3275,14 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         title: const Text('Delete Product'),
         content: const Text('Are you sure you want to delete this product from your catalog?'),
         actions: [
-          TextButton(
+          AppButton.outline(
+            text: 'Cancel',
+            size: AppButtonSize.sm,
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+          AppButton.danger(
+            text: 'Delete',
+            size: AppButtonSize.sm,
             onPressed: () async {
               Navigator.pop(ctx);
               final success = await context.read<ProductController>().deleteProduct(productId);
@@ -3167,7 +3293,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -3720,14 +3845,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           ],
 
                           // SUBMIT BUTTON
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            onPressed: selectedFile == null || fileBytes == null
+                          AppButton(
+                            text: ctx.tr('bulk_import_btn_start'),
+                            isFullWidth: true,
+                            isLoading: isUploading,
+                            onPressed: selectedFile == null || fileBytes == null || isUploading
                                 ? null
                                 : () async {
                                     setModalState(() {
@@ -3752,10 +3874,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                       }
                                     });
                                   },
-                            child: Text(
-                              ctx.tr('bulk_import_btn_start'),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
                           ),
                         ],
                       ],
@@ -3812,16 +3930,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary),
-              tooltip: context.tr('price_checker_title'),
-              onPressed: () => PriceCheckerDialog.show(context),
-            ),
-            IconButton(
-              icon: const Icon(Icons.print_outlined, size: 22),
-              tooltip: context.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio',
-              onPressed: () => BarcodeSheetStudioScreen.show(context),
-            ),
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
               tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',

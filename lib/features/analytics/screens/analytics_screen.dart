@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
@@ -22,6 +23,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     return MerchantShell(
       currentIndex: -1,
+      showBottomNav: false,
       child: Scaffold(
         appBar: AppBar(
           elevation: 0,
@@ -42,7 +44,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             },
           ),
           title: Text(
-            'Profit & Shop Analytics',
+            context.isHindi ? 'दुकान मुनाफा व विश्लेषण' : 'Profit & Shop Analytics',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -50,17 +52,39 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-              tooltip: 'Refresh Analytics',
-              onPressed: () async {
-                await controller.fetchAnalytics();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('✓ Shop Analytics Refreshed'), backgroundColor: AppColors.success, duration: Duration(seconds: 1)),
-                  );
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
+              tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 4,
+              onSelected: (val) async {
+                switch (val) {
+                  case 'refresh':
+                    await controller.fetchAnalytics();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.isHindi ? '✓ एनालिटिक्स डेटा रीफ्रेश हुआ' : '✓ Shop Analytics Refreshed'),
+                          backgroundColor: AppColors.success,
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                    break;
                 }
               },
+              itemBuilder: (ctx) => [
+                PopupMenuItem<String>(
+                  value: 'refresh',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh_rounded, color: ctx.colorTextPrimary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'रिपोर्ट रीफ्रेश करें' : 'Refresh Report'),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(width: 4),
           ],

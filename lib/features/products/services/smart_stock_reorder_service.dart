@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/whatsapp_share_helper.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../procurement/models/procurement_model.dart';
@@ -242,32 +243,10 @@ class SmartStockReorderService {
         ? (cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone)
         : '';
 
-    final urlString = formattedPhone.isNotEmpty
-        ? 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(message)}'
-        : 'https://wa.me/?text=${Uri.encodeComponent(message)}';
-
-    final uri = Uri.parse(urlString);
-
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
-      }
-    } catch (_) {}
-
-    // Fallback: Copy to clipboard
-    await Clipboard.setData(ClipboardData(text: message));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.isHindi
-                ? 'ऑर्डर क्लिपबोर्ड पर कॉपी हो गया!'
-                : 'Purchase order copied to clipboard!',
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-    }
+    await WhatsAppShareHelper.shareToWhatsApp(
+      context: context,
+      phone: formattedPhone,
+      message: message,
+    );
   }
 }

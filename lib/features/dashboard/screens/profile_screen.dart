@@ -66,13 +66,13 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Container(
-        decoration: BoxDecoration(
-          color: sheetCtx.colorSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: SafeArea(
+      builder: (sheetCtx) => Material(
+        color: sheetCtx.colorSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -145,7 +145,8 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
           ),
         ),
       ),
-    );
+    ),
+  );
 
     if (source == null) return;
 
@@ -156,18 +157,25 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
         source: source,
         maxWidth: 1024,
         maxHeight: 1024,
-        imageQuality: 85,
+        imageQuality: 80,
         requestFullMetadata: false,
       );
     } catch (e) {
       debugPrint('[ProfileScreen] Image picker warning: $e');
       try {
         final picker = ImagePicker();
-        picked = await picker.pickImage(source: source, requestFullMetadata: false);
+        picked = await picker.pickImage(source: source, requestFullMetadata: true);
       } catch (_) {}
     }
 
     if (picked == null) return;
+    XFile readyFile = picked;
+    try {
+      final (normalized, _) = await normalizeXFile(picked, maxDimension: 1280);
+      readyFile = normalized;
+    } catch (e) {
+      debugPrint('[ProfileScreen] Normalize image error: $e');
+    }
     if (!mounted) return;
 
     setState(() {
@@ -180,8 +188,8 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
     onStateUpdate?.call();
 
     final success = isStoreLogo
-        ? await authController.uploadShopLogo(picked)
-        : await authController.uploadUserAvatar(picked);
+        ? await authController.uploadShopLogo(readyFile)
+        : await authController.uploadUserAvatar(readyFile);
 
     if (mounted) {
       setState(() {
@@ -1137,13 +1145,13 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Container(
-        decoration: BoxDecoration(
-          color: sheetCtx.colorSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: SafeArea(
+      builder: (sheetCtx) => Material(
+        color: sheetCtx.colorSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1184,22 +1192,32 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                     final pickedFiles = await picker.pickMultiImage(
                       maxWidth: 1024,
                       maxHeight: 1024,
-                      imageQuality: 85,
+                      imageQuality: 80,
                       requestFullMetadata: false,
                     );
                     if (pickedFiles.isNotEmpty) {
                       final remaining = maxAllowed - currentCount;
-                      final selectedPaths = pickedFiles.take(remaining).map((f) => f.path).toList();
-                      onImagesSelected(selectedPaths);
+                      final selected = pickedFiles.take(remaining).toList();
+                      final List<String> paths = [];
+                      for (final f in selected) {
+                        final (normalized, _) = await normalizeXFile(f, maxDimension: 1280);
+                        paths.add(normalized.path);
+                      }
+                      onImagesSelected(paths);
                     }
                   } catch (e) {
                     debugPrint('[ProfileScreen] MultiImage picker warning: $e');
                     try {
-                      final pickedFiles = await picker.pickMultiImage(requestFullMetadata: false);
+                      final pickedFiles = await picker.pickMultiImage(requestFullMetadata: true);
                       if (pickedFiles.isNotEmpty) {
                         final remaining = maxAllowed - currentCount;
-                        final selectedPaths = pickedFiles.take(remaining).map((f) => f.path).toList();
-                        onImagesSelected(selectedPaths);
+                        final selected = pickedFiles.take(remaining).toList();
+                        final List<String> paths = [];
+                        for (final f in selected) {
+                          final (normalized, _) = await normalizeXFile(f, maxDimension: 1280);
+                          paths.add(normalized.path);
+                        }
+                        onImagesSelected(paths);
                       }
                     } catch (_) {}
                   }
@@ -1223,11 +1241,12 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                       source: ImageSource.camera,
                       maxWidth: 1024,
                       maxHeight: 1024,
-                      imageQuality: 85,
+                      imageQuality: 80,
                       requestFullMetadata: false,
                     );
                     if (picked != null) {
-                      onImagesSelected([picked.path]);
+                      final (normalized, _) = await normalizeXFile(picked, maxDimension: 1280);
+                      onImagesSelected([normalized.path]);
                     }
                   } catch (e) {
                     debugPrint('[ProfileScreen] Camera picker warning: $e');
@@ -1239,7 +1258,8 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   // --- EDIT SHOP BANNERS (Up to 4 Max Promotional Banners) ---

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
-import '../../../core/widgets/app_ui_components.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
 

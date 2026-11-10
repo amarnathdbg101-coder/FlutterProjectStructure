@@ -78,7 +78,7 @@ class MasterCatalogService {
     receiveTimeout: const Duration(seconds: 4),
   ));
 
-  /// In-process session memory cache (Map<barcode, item>) — 0ms for repeat scans same session
+  /// In-process session memory cache (`Map<barcode, item>`) — 0ms for repeat scans same session
   static final Map<String, MasterCatalogItem> _sessionCache = {};
 
   static const String _prefKey = 'master_catalog_cache_v1';

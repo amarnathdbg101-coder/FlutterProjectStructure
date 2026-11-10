@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle, ByteData;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -19,11 +21,80 @@ class FloorTokenCardsService {
     );
   }
 
+  static pw.Font? _cachedRegular;
+  static pw.Font? _cachedBold;
+
+  static File? _findFontFile(String filename) {
+    final candidates = [
+      'assets/fonts/$filename',
+      'Frontend/assets/fonts/$filename',
+      '../assets/fonts/$filename',
+      '${Directory.current.path}/assets/fonts/$filename',
+      '${Directory.current.path}/Frontend/assets/fonts/$filename',
+    ];
+    for (final c in candidates) {
+      final f = File(c);
+      if (f.existsSync()) return f;
+    }
+    return null;
+  }
+
+  static Future<pw.ThemeData> _getTheme() async {
+    if (_cachedRegular == null) {
+      try {
+        ByteData regData;
+        try {
+          regData = await rootBundle.load('assets/fonts/NotoSansDevanagari-Regular.ttf');
+        } catch (_) {
+          final f = _findFontFile('NotoSansDevanagari-Regular.ttf');
+          if (f != null) {
+            regData = ByteData.view(f.readAsBytesSync().buffer);
+          } else {
+            rethrow;
+          }
+        }
+        _cachedRegular = pw.Font.ttf(regData);
+      } catch (_) {
+        _cachedRegular = null;
+      }
+    }
+    if (_cachedBold == null) {
+      try {
+        ByteData boldData;
+        try {
+          boldData = await rootBundle.load('assets/fonts/NotoSansDevanagari-Bold.ttf');
+        } catch (_) {
+          final f = _findFontFile('NotoSansDevanagari-Bold.ttf');
+          if (f != null) {
+            boldData = ByteData.view(f.readAsBytesSync().buffer);
+          } else {
+            rethrow;
+          }
+        }
+        _cachedBold = pw.Font.ttf(boldData);
+      } catch (_) {
+        _cachedBold = null;
+      }
+    }
+
+    final devanagariFallback = [
+      if (_cachedRegular != null) _cachedRegular!,
+      if (_cachedBold != null) _cachedBold!,
+    ];
+
+    return pw.ThemeData.withFont(
+      base: pw.Font.helvetica(),
+      bold: pw.Font.helveticaBold(),
+      fontFallback: devanagariFallback,
+    );
+  }
+
   /// Builds A4 PDF containing 20 tokens (4 columns x 5 rows)
   static Future<Uint8List> generateTokensPdf({
     String shopName = 'SHOPSILO STORE',
   }) async {
-    final pdf = pw.Document();
+    final theme = await _getTheme();
+    final pdf = pw.Document(theme: theme);
 
     final cleanShopName = shopName.trim().isNotEmpty ? shopName.trim().toUpperCase() : 'SHOPSILO STORE';
 

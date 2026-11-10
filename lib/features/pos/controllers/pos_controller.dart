@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/base_controller.dart';
@@ -11,12 +9,12 @@ import '../../../core/services/event_bus_service.dart';
 import '../../../core/services/offline_sync_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
-import '../../../core/utils/date_time_utils.dart';
 import '../../products/models/product_model.dart';
 import '../../products/repositories/product_repository.dart';
 import '../models/pos_model.dart';
 import '../repositories/pos_repository.dart';
 import '../services/thermal_receipt_pdf_service.dart';
+import '../services/esc_pos_service.dart';
 
 class PosController extends BaseController {
   final PosRepository _repo = PosRepository();
@@ -61,6 +59,17 @@ class PosController extends BaseController {
 
   SaleModel? _lastCompletedSale;
   SaleModel? get lastCompletedSale => _lastCompletedSale;
+
+  // ⚡ Zero-Click Rush Hour Auto-Print Mode
+  bool _autoPrintEnabled = false;
+  bool get autoPrintEnabled => _autoPrintEnabled;
+
+  /// Toggles Zero-Click auto-print mode and persists state across app sessions
+  Future<void> toggleAutoPrint() async {
+    _autoPrintEnabled = !_autoPrintEnabled;
+    await LocalCacheService.setAutoPrintEnabled(_autoPrintEnabled);
+    notifyListeners();
+  }
 
   int get totalItemCount => _cart.fold(0, (sum, item) => sum + item.quantity);
 
@@ -175,6 +184,112 @@ class PosController extends BaseController {
     return list;
   }
 
+  // --- Speed-Optimized Quick Selling: Frequently Sold & Recent Products ---
+  final List<String> _recentProductIds = [];
+  List<String> get recentProductIds => List.unmodifiable(_recentProductIds);
+
+  void recordRecentProduct(String productId) {
+    if (productId.isEmpty || productId.startsWith('custom_')) return;
+    _recentProductIds.remove(productId);
+    _recentProductIds.insert(0, productId);
+    if (_recentProductIds.length > 20) {
+      _recentProductIds.removeLast();
+    }
+  }
+
+  /// 8-10 Frequently Sold products aggregated from past 24h & confirmed sales
+  List<ProductModel> get frequentlySoldProducts {
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
+    final Map<String, int> qtyMap = {};
+    final Map<String, ProductModel> modelMap = {};
+
+    for (final sale in sales) {
+      for (final item in sale.items) {
+        final p = item.product;
+        if (p.id.isNotEmpty && !p.id.startsWith('custom_')) {
+          qtyMap[p.id] = (qtyMap[p.id] ?? 0) + item.quantity;
+          modelMap[p.id] = p;
+        }
+      }
+    }
+
+    final sortedIds = qtyMap.keys.toList()
+      ..sort((a, b) => (qtyMap[b] ?? 0).compareTo(qtyMap[a] ?? 0));
+
+    final List<ProductModel> results = [];
+    final Set<String> seen = {};
+
+    for (final id in sortedIds) {
+      final catalogMatch = _products.firstWhere(
+        (cp) => cp.id == id,
+        orElse: () => modelMap[id] ?? ProductModel(id: '', name: '', price: 0, stock: 0, category: ''),
+      );
+      if (catalogMatch.id.isNotEmpty && !seen.contains(catalogMatch.id)) {
+        results.add(catalogMatch);
+        seen.add(catalogMatch.id);
+        if (results.length >= 10) break;
+      }
+    }
+
+    // Fallback: If not enough sold items, populate from catalog
+    if (results.length < 10) {
+      for (final p in _products) {
+        if (!seen.contains(p.id)) {
+          results.add(p);
+          seen.add(p.id);
+          if (results.length >= 10) break;
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /// 8-10 Recent Products (last sold or scanned items)
+  List<ProductModel> get recentProducts {
+    final List<ProductModel> results = [];
+    final Set<String> seen = {};
+
+    // 1. In-session recently used products
+    for (final id in _recentProductIds) {
+      final p = _products.firstWhere(
+        (item) => item.id == id,
+        orElse: () => ProductModel(id: '', name: '', price: 0, stock: 0, category: ''),
+      );
+      if (p.id.isNotEmpty && !seen.contains(p.id)) {
+        results.add(p);
+        seen.add(p.id);
+        if (results.length >= 10) return results;
+      }
+    }
+
+    // 2. From recent sales (newest first)
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
+    for (final sale in sales) {
+      for (final item in sale.items) {
+        final id = item.product.id;
+        if (id.isNotEmpty && !id.startsWith('custom_') && !seen.contains(id)) {
+          final catalogMatch = _products.firstWhere(
+            (cp) => cp.id == id,
+            orElse: () => item.product,
+          );
+          if (catalogMatch.id.isNotEmpty && !seen.contains(catalogMatch.id)) {
+            results.add(catalogMatch);
+            seen.add(catalogMatch.id);
+            if (results.length >= 10) return results;
+          }
+        }
+      }
+    }
+
+    // 3. Fallback to catalog if empty
+    if (results.isEmpty) {
+      return _products.take(10).toList();
+    }
+
+    return results;
+  }
+
   StreamSubscription<AppCacheEvent>? _productsSub;
   StreamSubscription<AppCacheEvent>? _inventorySub;
   StreamSubscription<AppCacheEvent>? _reservationSub;
@@ -231,6 +346,7 @@ class PosController extends BaseController {
   }
 
   void _initFromCache() {
+    _autoPrintEnabled = LocalCacheService.getAutoPrintEnabled();
     final cached = LocalCacheService.getProducts();
     if (cached.isNotEmpty) {
       _products = cached;
@@ -307,6 +423,7 @@ class PosController extends BaseController {
   }
 
   void addToCart(ProductModel product, {int quantity = 1}) {
+    recordRecentProduct(product.id);
     final existingIndex = _cart.indexWhere((item) => item.product.id == product.id);
     if (existingIndex >= 0) {
       _cart[existingIndex].quantity += quantity;
@@ -342,6 +459,29 @@ class PosController extends BaseController {
   void updateCartItemPrice(PosCartItem item, double newPrice) {
     if (newPrice >= 0) {
       item.customPrice = newPrice;
+      scheduleAutoSync();
+      notifyListeners();
+    }
+  }
+
+  /// ✂️ Decomposes/Breaks a multi-piece garment set (e.g. 3-pc Kurti Set -> Kurti Only)
+  /// Replaces the cart item with the selected single piece and its custom price.
+  void breakSetCartItem({
+    required PosCartItem item,
+    required String selectedPieceName,
+    required double selectedPiecePrice,
+  }) {
+    final idx = _cart.indexOf(item);
+    if (idx != -1) {
+      final updatedProduct = item.product.copyWith(
+        name: selectedPieceName,
+        price: selectedPiecePrice,
+      );
+      _cart[idx] = PosCartItem(
+        product: updatedProduct,
+        quantity: item.quantity > 0 ? item.quantity : 1,
+        customPrice: selectedPiecePrice,
+      );
       scheduleAutoSync();
       notifyListeners();
     }
@@ -881,6 +1021,35 @@ class PosController extends BaseController {
       shopGstin: shopGstin,
       upiId: upiId,
       width: width,
+    );
+  }
+
+  /// ⚡ Direct ESC/POS High-Speed Thermal Print via Network/IP Socket (10ms, no print preview dialog)
+  Future<bool> printViaEscPosTcp({
+    required SaleModel sale,
+    required String shopName,
+    required String printerIp,
+    int port = 9100,
+    String shopAddress = '',
+    String shopPhone = '',
+    String shopGstin = '',
+    String upiId = '',
+    EscPosRollWidth width = EscPosRollWidth.roll80mm,
+  }) async {
+    final bytes = EscPosService.generateReceiptBytes(
+      sale: sale,
+      shopName: shopName,
+      shopAddress: shopAddress,
+      shopPhone: shopPhone,
+      shopGstin: shopGstin,
+      upiId: upiId,
+      rollWidth: width,
+    );
+
+    return await EscPosService.printViaTcpSocket(
+      printerIp: printerIp,
+      port: port,
+      bytes: bytes,
     );
   }
 

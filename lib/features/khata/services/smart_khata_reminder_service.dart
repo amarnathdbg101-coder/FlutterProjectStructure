@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
+import '../../../core/utils/whatsapp_share_helper.dart';
 import '../models/khata_model.dart';
 
 /// Service for generating rich, transparent Khata payment reminders and WhatsApp statements
@@ -161,26 +161,11 @@ class SmartKhataReminderService {
     }
 
     final formattedPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
-    final urlString = 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(message)}';
-    final uri = Uri.parse(urlString);
-
-    try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (launched) return true;
-    } catch (_) {}
-
-    // Fallback: Copy to clipboard and notify
-    await Clipboard.setData(ClipboardData(text: message));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${context.tr('khata_whatsapp_not_installed')} - ${context.tr('khata_reminder_toast_copied')}'),
-          backgroundColor: AppColors.primary,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-    return false;
+    return await WhatsAppShareHelper.shareToWhatsApp(
+      context: context,
+      phone: formattedPhone,
+      message: message,
+    );
   }
 
   /// Copy reminder statement text to clipboard

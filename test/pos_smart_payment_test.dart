@@ -6,6 +6,8 @@ import 'package:flutter_project_structure/core/storage/local_cache_service.dart'
 import 'package:flutter_project_structure/core/localization/language_controller.dart';
 import 'package:flutter_project_structure/features/auth/controllers/auth_controller.dart';
 import 'package:flutter_project_structure/features/pos/controllers/pos_controller.dart';
+import 'package:flutter_project_structure/features/pos/controllers/cash_drawer_controller.dart';
+import 'package:flutter_project_structure/features/pos/controllers/hotkey_controller.dart';
 import 'package:flutter_project_structure/features/pos/models/pos_model.dart';
 import 'package:flutter_project_structure/features/pos/screens/pos_screen.dart';
 import 'package:flutter_project_structure/features/products/models/product_model.dart';
@@ -120,6 +122,8 @@ void main() {
 
       final langCtrl = LanguageController();
       final authCtrl = AuthController();
+      final drawerCtrl = CashDrawerController();
+      final hotkeyCtrl = HotkeyController();
 
       pos.addToCart(ProductModel(id: '1', name: 'Dove Shampoo', price: 175.0, stock: 20, category: 'Personal Care'));
       pos.setPaymentMethod('cash');
@@ -131,6 +135,8 @@ void main() {
             ChangeNotifierProvider<LanguageController>.value(value: langCtrl),
             ChangeNotifierProvider<AuthController>.value(value: authCtrl),
             ChangeNotifierProvider<PosController>.value(value: pos),
+            ChangeNotifierProvider<CashDrawerController>.value(value: drawerCtrl),
+            ChangeNotifierProvider<HotkeyController>.value(value: hotkeyCtrl),
           ],
           child: const MaterialApp(
             home: PosScreen(),
@@ -160,6 +166,8 @@ void main() {
 
       langCtrl.dispose();
       authCtrl.dispose();
+      drawerCtrl.dispose();
+      hotkeyCtrl.dispose();
     });
   });
 }

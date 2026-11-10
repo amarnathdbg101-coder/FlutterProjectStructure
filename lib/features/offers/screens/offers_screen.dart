@@ -8,6 +8,7 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../controllers/offer_controller.dart';
 import '../models/offer_model.dart';
+import '../widgets/festive_campaign_modal.dart';
 
 class OffersScreen extends StatefulWidget {
   const OffersScreen({super.key});
@@ -24,6 +25,7 @@ class _OffersScreenState extends State<OffersScreen> {
 
     return MerchantShell(
       currentIndex: -1,
+      showBottomNav: false,
       child: Scaffold(
         appBar: AppBar(
           elevation: 0,
@@ -52,6 +54,23 @@ class _OffersScreenState extends State<OffersScreen> {
             ),
           ),
           actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.campaign_rounded, size: 16, color: Colors.white),
+                label: const Text(
+                  'AI Festive Studio',
+                  style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7C3AED),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
+                ),
+                onPressed: () => FestiveCampaignModal.show(context),
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
               tooltip: 'Refresh Deals',
@@ -177,6 +196,78 @@ class _OffersScreenState extends State<OffersScreen> {
                                 offerController,
                               ),
                             ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 1.5 AI FESTIVE MARKETING STUDIO BANNER
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.campaign_rounded, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                '🧠 AI Festive Campaign Studio',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Generate viral WhatsApp broadcasts & digital poster copy for festivals in 1-tap',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF7C3AED),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            elevation: 0,
+                          ),
+                          onPressed: () => FestiveCampaignModal.show(context),
+                          child: const Text(
+                            'Open Studio',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                           ),
                         ),
                       ],

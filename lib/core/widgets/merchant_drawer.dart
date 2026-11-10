@@ -37,10 +37,10 @@ class MerchantDrawer extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-            // Top User Profile Section
+            // Top User & Store Profile Header
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: context.colorSurfaceSubtle,
                 border: Border(
@@ -60,22 +60,23 @@ class MerchantDrawer extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          userName,
+                          shopName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 15,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                             color: context.colorTextPrimary,
+                            letterSpacing: -0.2,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '$shopName • $userEmailPhone',
+                          '$userName • $userEmailPhone',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11.5,
                             color: context.colorTextSecondary,
                           ),
                         ),
@@ -86,114 +87,169 @@ class MerchantDrawer extends StatelessWidget {
               ),
             ),
 
-            // Important Functions Section
+            // Scrollable Categorized Navigation Sections
             Expanded(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-                      child: Text(
-                        context.tr('dash_section_actions'),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: context.colorTextMuted,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                    // 1. OPERATIONS & SALES
+                    _DrawerSectionHeader(
+                      title: context.isHindi ? 'दैनिक व्यापार व बिक्री' : 'Operations & Sales',
                     ),
                     _DrawerTile(
                       icon: Icons.dashboard_rounded,
-                      title: context.tr('nav_home'),
+                      title: context.isHindi ? 'डैशबोर्ड' : 'Dashboard Overview',
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(0);
                         context.go('/merchant');
                       },
                     ),
                     _DrawerTile(
                       icon: Icons.point_of_sale_rounded,
-                      title: context.tr('nav_billing'),
+                      title: context.isHindi ? 'पीओएस बिलिंग काउंटर' : 'POS Billing Counter',
                       onTap: () {
                         Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(1);
                         context.go('/merchant/pos');
                       },
                     ),
                     _DrawerTile(
-                      icon: Icons.history_toggle_off_rounded,
-                      title: context.tr('today_sales_title'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        TokenStorage.saveLastRoute('/merchant/today-sales');
-                        context.go('/merchant/today-sales');
-                      },
-                    ),
-                    _DrawerTile(
-                      icon: Icons.inventory_2_rounded,
-                      title: context.tr('nav_inventory'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        TokenStorage.saveActiveTabIndex(2);
-                        TokenStorage.saveLastRoute('/merchant/inventory');
-                        context.go('/merchant/inventory');
-                      },
-                    ),
-                    _DrawerTile(
-                      icon: Icons.menu_book_rounded,
-                      title: context.tr('nav_khata'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        TokenStorage.saveActiveTabIndex(3);
-                        TokenStorage.saveLastRoute('/merchant/khata');
-                        context.go('/merchant/khata');
-                      },
-                    ),
-                    _DrawerTile(
                       icon: Icons.receipt_long_rounded,
-                      title: context.tr('nav_expenses'),
+                      title: context.isHindi ? 'आज की बिक्री रजिस्टर' : 'Today\'s Sales Register',
                       onTap: () {
                         Navigator.pop(context);
-                        TokenStorage.saveActiveTabIndex(4);
-                        TokenStorage.saveLastRoute('/merchant/expenses');
-                        context.go('/merchant/expenses');
-                      },
-                    ),
-                    _DrawerTile(
-                      icon: Icons.local_offer_rounded,
-                      title: 'Offers & Promotions',
-                      onTap: () {
-                        Navigator.pop(context);
-                        TokenStorage.saveLastRoute('/merchant/offers');
-                        context.go('/merchant/offers');
-                      },
-                    ),
-                    _DrawerTile(
-                      icon: Icons.insights_rounded,
-                      title: 'Munafa & Analytics',
-                      onTap: () {
-                        Navigator.pop(context);
-                        TokenStorage.saveLastRoute('/merchant/analytics');
-                        context.go('/merchant/analytics');
-                      },
-                    ),
-                    _DrawerTile(
-                      icon: Icons.assignment_rounded,
-                      title: 'Mandi Procurement List',
-                      onTap: () {
-                        Navigator.pop(context);
-                        TokenStorage.saveLastRoute('/merchant/procurement');
-                        context.go('/merchant/procurement');
+                        context.push('/merchant/today-sales');
                       },
                     ),
                     _DrawerTile(
                       icon: Icons.shopping_bag_rounded,
-                      title: 'Customer Pickup Orders',
+                      title: context.isHindi ? 'काउंटर पिकअप ऑर्डर' : 'Store Pickup Orders',
                       onTap: () {
                         Navigator.pop(context);
-                        TokenStorage.saveLastRoute('/merchant/reservations');
-                        context.go('/merchant/reservations');
+                        context.push('/merchant/reservations');
                       },
+                    ),
+
+                    _DrawerDivider(color: context.colorBorder),
+
+                    // 2. INVENTORY & CATALOG
+                    _DrawerSectionHeader(
+                      title: context.isHindi ? 'स्टॉक व इन्वेंट्री' : 'Inventory & Stock',
+                    ),
+                    _DrawerTile(
+                      icon: Icons.inventory_2_rounded,
+                      title: context.isHindi ? 'सभी उत्पाद व इन्वेंट्री' : 'Product Inventory',
+                      onTap: () {
+                        Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(2);
+                        context.go('/merchant/inventory');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.price_check_rounded,
+                      title: context.isHindi ? 'भाव व स्टॉक जांच' : 'Price & Stock Lookup',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/price-checker');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.warning_amber_rounded,
+                      title: context.isHindi ? 'कम स्टॉक अलर्ट्स' : 'Low Stock Alerts',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/low-stock');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.qr_code_2_rounded,
+                      title: context.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/barcode-studio');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.local_shipping_rounded,
+                      title: context.isHindi ? 'खरीद व सप्लायर ऑर्डर' : 'Purchase & Procurement',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/procurement');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.hourglass_bottom_rounded,
+                      title: context.isHindi ? 'बैच व एक्सपायरी ट्रैकर' : 'Batch & Expiry Tracker',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/batch-expiry');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.assignment_return_rounded,
+                      title: context.isHindi ? 'डैमेज व रिटर्न क्लेम' : 'Damage & Return Claims',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/damage-claims');
+                      },
+                    ),
+
+                    _DrawerDivider(color: context.colorBorder),
+
+                    // 3. FINANCE & ACCOUNTS
+                    _DrawerSectionHeader(
+                      title: context.isHindi ? 'खाता व हिसाब-किताब' : 'Finance & Accounts',
+                    ),
+                    _DrawerTile(
+                      icon: Icons.menu_book_rounded,
+                      title: context.isHindi ? 'ग्राहक खाता (उधार बही)' : 'Customer Credit Khata',
+                      onTap: () {
+                        Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(3);
+                        context.go('/merchant/khata');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.account_balance_wallet_rounded,
+                      title: context.isHindi ? 'दुकान खर्च प्रबंधन' : 'Expense Management',
+                      onTap: () {
+                        Navigator.pop(context);
+                        TokenStorage.saveActiveTabIndex(4);
+                        context.go('/merchant/expenses');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.insights_rounded,
+                      title: context.isHindi ? 'व्यापार रिपोर्ट व एनालिटिक्स' : 'Business Reports & Analytics',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/analytics');
+                      },
+                    ),
+
+                    _DrawerDivider(color: context.colorBorder),
+
+                    // 4. MARKETING & PROMOTIONS
+                    _DrawerSectionHeader(
+                      title: context.isHindi ? 'ऑफ़र्स व प्रोमोशन' : 'Offers & Promotions',
+                    ),
+                    _DrawerTile(
+                      icon: Icons.local_offer_rounded,
+                      title: context.isHindi ? 'ऑफ़र्स व डिस्काउंट' : 'Discounts & Promotions',
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.push('/merchant/offers');
+                      },
+                    ),
+
+                    _DrawerDivider(color: context.colorBorder),
+
+                    // 5. SYSTEM & SETTINGS
+                    _DrawerSectionHeader(
+                      title: context.isHindi ? 'सिस्टम व सेटिंग्स' : 'System & Settings',
                     ),
                     StreamBuilder<int>(
                       stream: OfflineSyncService.instance.pendingCountStream,
@@ -202,7 +258,7 @@ class MerchantDrawer extends StatelessWidget {
                         final pending = snapshot.data ?? 0;
                         return _DrawerTile(
                           icon: pending > 0 ? Icons.cloud_upload_rounded : Icons.cloud_done_rounded,
-                          title: context.isHindi ? 'ऑफ़लाइन क्लाउड सिंक' : 'Offline Cloud Sync',
+                          title: context.isHindi ? 'क्लाउड डेटा सिंक' : 'Offline Cloud Sync',
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                             decoration: BoxDecoration(
@@ -213,7 +269,7 @@ class MerchantDrawer extends StatelessWidget {
                               pending > 0 ? '$pending' : '✓',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -225,13 +281,9 @@ class MerchantDrawer extends StatelessWidget {
                         );
                       },
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Divider(height: 16, color: context.colorBorder),
-                    ),
                     _DrawerTile(
-                      icon: Icons.settings_outlined,
-                      title: context.tr('nav_settings'),
+                      icon: Icons.storefront_rounded,
+                      title: context.isHindi ? 'दुकान प्रोफ़ाइल व सेटिंग्स' : 'Store Profile & Settings',
                       onTap: () {
                         Navigator.pop(context);
                         TokenStorage.saveActiveTabIndex(5);
@@ -276,6 +328,42 @@ class MerchantDrawer extends StatelessWidget {
   }
 }
 
+class _DrawerSectionHeader extends StatelessWidget {
+  final String title;
+
+  const _DrawerSectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+          color: context.colorTextMuted,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerDivider extends StatelessWidget {
+  final Color color;
+
+  const _DrawerDivider({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Divider(height: 1, thickness: 0.8, color: color),
+    );
+  }
+}
+
 class _DrawerTile extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -291,22 +379,35 @@ class _DrawerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: ListTile(
-        leading: Icon(icon, color: AppColors.primary, size: 22),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: context.colorTextPrimary,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.primary, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: context.colorTextPrimary,
+                    ),
+                  ),
+                ),
+                if (trailing != null) trailing!,
+              ],
+            ),
           ),
         ),
-        trailing: trailing,
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        onTap: onTap,
       ),
     );
   }

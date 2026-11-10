@@ -5,6 +5,7 @@ import '../../../core/network/base_controller.dart';
 import '../../../core/services/counter_websocket_service.dart';
 import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/utils/whatsapp_share_helper.dart';
 import '../../dashboard/repositories/shop_operations_repository.dart';
 import '../models/reservation_model.dart';
 
@@ -247,10 +248,11 @@ class ReservationController extends BaseController {
         '"${reservation.productName}" (Qty: ${reservation.quantity}, Total: ₹${reservation.totalPrice.toStringAsFixed(0)}) '
         'at $shopName. Your order is ready for pickup at our counter!';
 
-    final uri = Uri.parse('https://wa.me/$formattedPhone?text=${Uri.encodeComponent(text)}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    await WhatsAppShareHelper.shareToWhatsApp(
+      context: context,
+      phone: formattedPhone,
+      message: text,
+    );
   }
 
   @override

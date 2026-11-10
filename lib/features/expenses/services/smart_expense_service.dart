@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/localization/language_controller.dart';
+import '../../../core/utils/whatsapp_share_helper.dart';
 import '../models/expense_model.dart';
 
 class DailyProfitSummary {
@@ -178,31 +175,10 @@ class SmartExpenseService {
         ? (cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone)
         : '';
 
-    final urlString = formattedPhone.isNotEmpty
-        ? 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(message)}'
-        : 'https://wa.me/?text=${Uri.encodeComponent(message)}';
-
-    final uri = Uri.parse(urlString);
-
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
-      }
-    } catch (_) {}
-
-    await Clipboard.setData(ClipboardData(text: message));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.isHindi
-                ? 'दैनिक विवरण क्लिपबोर्ड पर कॉपी हो गया!'
-                : 'Daily statement copied to clipboard!',
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-    }
+    await WhatsAppShareHelper.shareToWhatsApp(
+      context: context,
+      phone: formattedPhone,
+      message: message,
+    );
   }
 }

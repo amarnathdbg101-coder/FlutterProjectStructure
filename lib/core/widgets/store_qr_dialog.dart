@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
 import '../widgets/app_ui_components.dart';
+import '../utils/whatsapp_share_helper.dart';
 import '../../features/dashboard/models/shop_model.dart';
 
 void showStoreQrDialog(BuildContext context, ShopModel? shop) {
@@ -205,13 +205,11 @@ void showStoreQrDialog(BuildContext context, ShopModel? shop) {
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                       onPressed: () async {
-                        final shareText = Uri.encodeComponent(
-                          'Visit $shopName online store to order directly: $storefrontUrl',
+                        await WhatsAppShareHelper.shareStorefront(
+                          context: ctx,
+                          shopName: shopName,
+                          shopSlug: shopSlug,
                         );
-                        final waUrl = Uri.parse('https://wa.me/?text=$shareText');
-                        if (await canLaunchUrl(waUrl)) {
-                          await launchUrl(waUrl, mode: LaunchMode.externalApplication);
-                        }
                       },
                     ),
                   ),

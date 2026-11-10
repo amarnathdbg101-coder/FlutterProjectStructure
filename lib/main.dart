@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 import 'package:provider/provider.dart';
 import 'core/constants/app_colors.dart';
 import 'core/localization/language_controller.dart';
@@ -16,9 +17,16 @@ import 'features/auth/controllers/auth_controller.dart';
 import 'features/dashboard/controllers/dashboard_controller.dart';
 import 'features/expenses/controllers/expense_controller.dart';
 import 'features/khata/controllers/khata_controller.dart';
+import 'features/khata/controllers/micro_plan_controller.dart';
 import 'features/offers/controllers/offer_controller.dart';
+import 'features/pos/controllers/ai_features_controller.dart';
+import 'features/pos/controllers/cash_drawer_controller.dart';
+import 'features/pos/controllers/damage_claim_controller.dart';
+import 'features/pos/controllers/hotkey_controller.dart';
 import 'features/pos/controllers/pos_controller.dart';
+import 'features/pos/controllers/scan_and_go_controller.dart';
 import 'features/procurement/controllers/procurement_controller.dart';
+import 'features/products/controllers/batch_expiry_controller.dart';
 import 'features/products/controllers/category_controller.dart';
 import 'features/products/controllers/product_controller.dart';
 import 'features/reservations/controllers/reservation_controller.dart';
@@ -116,23 +124,32 @@ void main() async {
   };
 
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeController()),
-        ChangeNotifierProvider(create: (_) => LanguageController()),
-        ChangeNotifierProvider(create: (_) => AuthController()),
-        ChangeNotifierProvider(create: (_) => DashboardController()),
-        ChangeNotifierProvider(create: (_) => PosController()),
-        ChangeNotifierProvider(create: (_) => ProductController()),
-        ChangeNotifierProvider(create: (_) => CategoryController()),
-        ChangeNotifierProvider(create: (_) => KhataController()),
-        ChangeNotifierProvider(create: (_) => ExpenseController()),
-        ChangeNotifierProvider(create: (_) => OfferController()),
-        ChangeNotifierProvider(create: (_) => AnalyticsController()),
-        ChangeNotifierProvider(create: (_) => ProcurementController()),
-        ChangeNotifierProvider(create: (_) => ReservationController()),
-      ],
-      child: const MyApp(),
+    ProviderScope(
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ThemeController()),
+          ChangeNotifierProvider(create: (_) => LanguageController()),
+          ChangeNotifierProvider(create: (_) => AuthController()),
+          ChangeNotifierProvider(create: (_) => DashboardController()),
+          ChangeNotifierProvider(create: (_) => PosController()),
+          ChangeNotifierProvider(create: (_) => AIFeaturesController()),
+          ChangeNotifierProvider(create: (_) => CashDrawerController()),
+          ChangeNotifierProvider(create: (_) => HotkeyController()),
+          ChangeNotifierProvider(create: (_) => ScanAndGoController()),
+          ChangeNotifierProvider(create: (_) => DamageClaimController()),
+          ChangeNotifierProvider(create: (_) => BatchExpiryController()),
+          ChangeNotifierProvider(create: (_) => ProductController()),
+          ChangeNotifierProvider(create: (_) => CategoryController()),
+          ChangeNotifierProvider(create: (_) => KhataController()),
+          ChangeNotifierProvider(create: (_) => MicroPlanController()),
+          ChangeNotifierProvider(create: (_) => ExpenseController()),
+          ChangeNotifierProvider(create: (_) => OfferController()),
+          ChangeNotifierProvider(create: (_) => AnalyticsController()),
+          ChangeNotifierProvider(create: (_) => ProcurementController()),
+          ChangeNotifierProvider(create: (_) => ReservationController()),
+        ],
+        child: const MyApp(),
+      ),
     ),
   );
 }

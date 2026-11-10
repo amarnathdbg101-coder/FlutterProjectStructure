@@ -114,7 +114,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                         : 'Customer awaiting pickup at your counter',
                     icon: Icons.shopping_bag_rounded,
                     actionLabel: context.isHindi ? 'देखें एवं पैक करें' : 'View & Pack',
-                    onAction: () => context.go('/merchant/reservations'),
+                    onAction: () => context.push('/merchant/reservations'),
                   ),
                   const SizedBox(height: 18),
                 ],
@@ -129,7 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                   builder: (context, constraints) {
                     final width = constraints.maxWidth;
                     final crossAxisCount = width > 900 ? 4 : (width > 500 ? 2 : 2);
-                    final aspectRatio = width < 380 ? 1.25 : (width < 600 ? 1.38 : (width > 900 ? 1.60 : 1.45));
+                    final aspectRatio = width < 360 ? 1.08 : (width < 400 ? 1.20 : (width < 600 ? 1.35 : 1.55));
 
                     return GridView.count(
                       crossAxisCount: crossAxisCount,
@@ -146,7 +146,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           icon: Icons.currency_rupee_rounded,
                           iconColor: AppColors.success,
                           iconBgColor: context.colorSuccessLight,
-                          onTap: () => context.go('/merchant/today-sales'),
+                          onTap: () => context.push('/merchant/today-sales'),
                         ),
                         AppStatCard(
                           title: context.tr('dash_kpi_udhar'),
@@ -174,7 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           iconColor: AppColors.warning,
                           iconBgColor: context.colorWarningLight,
                           isAlert: stats.lowStockCount > 0,
-                          onTap: () => context.go('/merchant/low-stock'),
+                          onTap: () => context.push('/merchant/low-stock'),
                         ),
                       ],
                     );
@@ -188,7 +188,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                   builder: (context, constraints) {
                     final width = constraints.maxWidth;
                     final crossAxisCount = width > 900 ? 3 : (width > 600 ? 2 : 2);
-                    final tileAspectRatio = width < 380 ? 2.15 : (width < 600 ? 2.35 : 2.6);
+                    final tileAspectRatio = width < 360 ? 1.85 : (width < 400 ? 2.05 : (width < 600 ? 2.25 : 2.50));
 
                     return GridView.count(
                       crossAxisCount: crossAxisCount,
@@ -226,13 +226,13 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                           icon: Icons.shopping_bag_rounded,
                           title: context.tr('dash_pickup_title'),
                           subtitle: context.isHindi ? 'काउंटर पिकअप ऑर्डर' : 'Counter Pickup Orders',
-                          onTap: () => context.go('/merchant/reservations'),
+                          onTap: () => context.push('/merchant/reservations'),
                         ),
                         AppActionTile(
                           icon: Icons.analytics_rounded,
                           title: context.tr('dash_profit_title'),
                           subtitle: context.tr('dash_profit_sub'),
-                          onTap: () => context.go('/merchant/analytics'),
+                          onTap: () => context.push('/merchant/analytics'),
                         ),
                       ],
                     );
@@ -248,7 +248,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                         icon: Icons.store_mall_directory_rounded,
                         title: context.tr('dash_mandi_title'),
                         subtitle: context.tr('dash_mandi_sub'),
-                        onTap: () => context.go('/merchant/procurement'),
+                        onTap: () => context.push('/merchant/procurement'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -257,7 +257,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                         icon: Icons.local_offer_rounded,
                         title: context.tr('dash_deals_title'),
                         subtitle: context.tr('dash_deals_sub'),
-                        onTap: () => context.go('/merchant/offers'),
+                        onTap: () => context.push('/merchant/offers'),
                       ),
                     ),
                   ],
