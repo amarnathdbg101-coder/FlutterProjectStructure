@@ -1,17 +1,23 @@
+import 'dart:convert' show base64Encode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../../dashboard/repositories/ai_repository.dart';
+import '../../products/controllers/category_controller.dart';
 import '../../products/controllers/product_controller.dart';
 import '../../products/models/product_model.dart';
-import '../../pos/widgets/supplier_invoice_ocr_modal.dart';
+import '../../products/screens/product_photo_capture_screen.dart';
+import '../../products/widgets/color_shade_selector.dart';
 import '../controllers/procurement_controller.dart';
 import '../models/procurement_model.dart';
 
@@ -39,6 +45,49 @@ class ProcurementListScreen extends StatefulWidget {
 
 class _ProcurementListScreenState extends State<ProcurementListScreen> {
   String _activeFilter = 'ALL'; // 'ALL' | 'PENDING' | 'COMPLETED'
+  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Detects whether an item has an associated Indian textile color shade
+  ColorShadeModel? _detectItemShade(ProcurementItemModel item) {
+    if (!isColorCriticalProduct(category: item.category, name: item.name)) return null;
+    final combined = '${item.name} ${item.notes}'.toLowerCase();
+    for (final shade in kIndianTextileShadeRegistry) {
+      if (combined.contains(shade.shadeName.toLowerCase()) ||
+          (shade.hindiName.isNotEmpty && combined.contains(shade.hindiName.toLowerCase()))) {
+        return shade;
+      }
+    }
+    return null;
+  }
+
+  /// 1-Tap WhatsApp PO direct to a specific wholesaler/dealer
+  Future<void> _messageDealerWhatsApp(BuildContext context, ProcurementItemModel item) async {
+    final clean = item.dealerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.isEmpty) return;
+    final phone = clean.length == 10 ? '91$clean' : clean;
+    final msg = 'Namaste ${item.dealerName.isNotEmpty ? item.dealerName : ""},\n'
+        'Hume yeh wholesale item chahiye:\n'
+        '• *${item.name}*\n'
+        '• Matra (Qty): *${item.qty}*\n'
+        '${item.estimatedPrice > 0 ? "• Target Rate: ₹${item.estimatedPrice.toStringAsFixed(0)}\n" : ""}'
+        '${item.notes.isNotEmpty ? "• Note: ${item.notes}\n" : ""}'
+        'Kripya stock availability aur rate confirm karein. Dhanyawad!';
+    final uri = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(msg)}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.isHindi ? 'व्हाट्सएप नहीं खोला जा सका' : 'Cannot launch WhatsApp')),
+      );
+    }
+  }
 
   /// Share structured wholesale procurement sheet via WhatsApp
   Future<void> _sendWhatsAppOrderSheet(BuildContext context, List<ProcurementItemModel> items, String shopName) async {
@@ -71,7 +120,11 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
         text += '   • Dealer: ${item.dealerName}\n';
       }
       if (item.notes.isNotEmpty) {
-        text += '   • Note: ${item.notes}\n';
+        if (item.notes.toLowerCase().contains('shade')) {
+          text += '   • 🎨 *${item.notes}*\n';
+        } else {
+          text += '   • Note: ${item.notes}\n';
+        }
       }
       text += '\n';
     }
@@ -102,6 +155,759 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     }
+  }
+
+  /// 📸 AI Mandi Sourcing Vision Scanner:
+  /// Captures camera photo of low-stock products, cartons, or shelves and
+  /// automatically infers product identity, commercial wholesale unit, and Mandi market rates.
+  Future<void> _openAiMandiScanner(
+    BuildContext context,
+    ProcurementController controller,
+    ProductController prodController,
+  ) async {
+    final picker = ImagePicker();
+
+    // Source picker sheet
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Material(
+        color: sheetCtx.colorSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: sheetCtx.colorBorder,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF673AB7).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.document_scanner_rounded, color: Color(0xFF673AB7), size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sheetCtx.isHindi ? 'AI मंडी खरीद स्कैन' : 'AI Mandi Sourcing Scan',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: sheetCtx.colorTextPrimary,
+                            ),
+                          ),
+                          Text(
+                            sheetCtx.isHindi
+                                ? 'कम स्टॉक सामान या डिब्बे की फोटो लें'
+                                : 'Snap low-stock item or empty shelf/carton',
+                            style: TextStyle(fontSize: 12, color: sheetCtx.colorTextMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                  ),
+                  title: Text(sheetCtx.isHindi ? 'कैमरा से फोटो लें' : 'Take Photo with Camera',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(sheetCtx.isHindi ? 'दुकान में रखे सामान का सीधा फोटो' : 'Snap product on shelf/counter',
+                      style: TextStyle(fontSize: 11.5, color: sheetCtx.colorTextMuted)),
+                  onTap: () => Navigator.pop(sheetCtx, ImageSource.camera),
+                ),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00B4D8).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.photo_library_rounded, color: Color(0xFF00B4D8)),
+                  ),
+                  title: Text(sheetCtx.isHindi ? 'गैलरी से तस्वीर चुनें' : 'Choose from Gallery',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(sheetCtx.isHindi ? 'पहले से ली गई फोटो से विश्लेषण' : 'Select existing photo',
+                      style: TextStyle(fontSize: 11.5, color: sheetCtx.colorTextMuted)),
+                  onTap: () => Navigator.pop(sheetCtx, ImageSource.gallery),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (source == null || !context.mounted) return;
+
+    try {
+      final XFile? picked = await picker.pickImage(source: source);
+      if (picked == null || !context.mounted) return;
+
+      // Show sleek loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dlgCtx) => Dialog(
+          backgroundColor: dlgCtx.colorSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFF673AB7)),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  dlgCtx.isHindi ? '✨ AI मंडी खरीद स्कैनिंग...' : '✨ AI Mandi Vision Analyzing...',
+                  style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: dlgCtx.colorTextPrimary),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  dlgCtx.isHindi
+                      ? 'थोक खरीदारी मात्रा और मंडी दरों का विश्लेषण हो रहा है...'
+                      : 'Extracting wholesale package sizes & estimated Mandi rates...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: dlgCtx.colorTextMuted),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Fast image compression for fast network upload
+      final (_, normalizedBytes) = await normalizeXFile(picked, maxDimension: 1024, quality: 80);
+      final base64String = base64Encode(normalizedBytes);
+      final mime = picked.path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+
+      final aiRepo = AiRepository();
+      final res = await aiRepo.scanMandiItem(imageBase64: base64String, mimeType: mime);
+
+      // Dismiss loading dialog
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (!context.mounted) return;
+
+      if (!res.success || res.data == null) {
+        debugPrint('Mandi scan failed: ${res.message}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res.message?.isNotEmpty == true
+                ? res.message!
+                : (context.isHindi ? 'AI से सामान का विश्लेषण नहीं हो सका' : 'Could not analyze items from photo')),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      final rawItems = res.data!['items'];
+      if (rawItems is! List || rawItems.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.isHindi
+                ? 'तस्वीर में कोई कम स्टॉक सामान नहीं पहचाना जा सका। कृपया स्पष्ट तस्वीर लें।'
+                : 'No restock items detected in image. Please take a clearer photo.'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+        return;
+      }
+
+      final List<Map<String, dynamic>> detectedItems = rawItems
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
+
+      // Show the AI Sourcing Proposal review sheet
+      if (context.mounted) {
+        _showAiMandiProposalSheet(context, controller, prodController, detectedItems);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${context.isHindi ? "त्रुटि:" : "Error:"} $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Displays the interactive AI Sourcing Proposal review sheet allowing the merchant
+  /// to verify or tweak wholesale quantities, rates, and 1-tap add to Mandi Sheet.
+  void _showAiMandiProposalSheet(
+    BuildContext context,
+    ProcurementController controller,
+    ProductController prodController,
+    List<Map<String, dynamic>> detectedItems,
+  ) {
+    // Wrap detected items into stateful proposal items
+    final List<_AiProposalItemState> proposalStates = detectedItems.map((item) {
+      final String rawName = item['name']?.toString().trim() ?? '';
+      final String rawCategory = item['category']?.toString().trim() ?? 'General Store';
+      final String rawWholesaleQty = item['wholesale_qty']?.toString().trim() ?? '1';
+      final String rawUnit = item['wholesale_unit']?.toString().trim() ?? _kWholesaleUnits.first;
+      final double estRate = double.tryParse(item['estimated_wholesale_rate']?.toString() ?? '0') ?? 0.0;
+      final String rawNotes = item['notes']?.toString().trim() ?? '';
+
+      // Match with inventory products
+      ProductModel? matchedProduct;
+      try {
+        final q = rawName.toLowerCase();
+        matchedProduct = prodController.products.firstWhere(
+          (p) => p.name.toLowerCase().contains(q) || q.contains(p.name.toLowerCase()),
+        );
+      } catch (_) {
+        matchedProduct = null;
+      }
+
+      // Extract numeric qty part from rawWholesaleQty if available
+      String qtyNum = '1';
+      String unitMatch = _kWholesaleUnits.firstWhere(
+        (u) => u.toLowerCase().contains(rawUnit.toLowerCase()) || rawUnit.toLowerCase().contains(u.toLowerCase()),
+        orElse: () => _kWholesaleUnits.first,
+      );
+
+      final parts = rawWholesaleQty.split(RegExp(r'\s+'));
+      if (parts.isNotEmpty && double.tryParse(parts[0]) != null) {
+        qtyNum = parts[0];
+      }
+
+      // Parse color details ONLY if product is a color-critical trade item (Apparel, Textiles, Cosmetics, etc.)
+      final isColorCritical = isColorCriticalProduct(category: rawCategory, name: rawName);
+      ColorShadeModel? colorShade;
+      List<ColorShadeModel> colorAlternatives = [];
+
+      if (isColorCritical) {
+        if (item['color_details'] is Map) {
+          final cd = Map<String, dynamic>.from(item['color_details'] as Map);
+          if (cd['primary_shade'] is Map) {
+            colorShade = ColorShadeModel.fromMap(Map<String, dynamic>.from(cd['primary_shade'] as Map));
+          }
+          if (cd['alternatives'] is List) {
+            colorAlternatives = (cd['alternatives'] as List)
+                .whereType<Map>()
+                .map((m) => ColorShadeModel.fromMap(Map<String, dynamic>.from(m)))
+                .toList();
+          }
+        } else {
+          final lowerN = rawName.toLowerCase();
+          colorShade = kIndianTextileShadeRegistry.firstWhere(
+            (s) => lowerN.contains(s.shadeName.toLowerCase()) || lowerN.contains(s.hindiName.toLowerCase()),
+            orElse: () => kIndianTextileShadeRegistry.first,
+          );
+        }
+      }
+
+      return _AiProposalItemState(
+        nameCtrl: TextEditingController(text: rawName),
+        qtyCtrl: TextEditingController(text: qtyNum),
+        priceCtrl: TextEditingController(text: estRate > 0 ? estRate.toStringAsFixed(0) : ''),
+        notesCtrl: TextEditingController(text: rawNotes),
+        category: CategoryRegistry.canonicalCategories.contains(rawCategory) ? rawCategory : 'General Store',
+        unit: unitMatch,
+        matchedProduct: matchedProduct,
+        isSelected: true,
+        colorShade: colorShade,
+        colorAlternatives: colorAlternatives,
+      );
+    }).toList();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colorSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final double bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+            final selectedCount = proposalStates.where((s) => s.isSelected).length;
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.88),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Drag Handle
+                    Container(
+                      width: 44,
+                      height: 4,
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      decoration: BoxDecoration(
+                        color: ctx.colorBorder,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+
+                    // Sheet Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 16, 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF673AB7).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.auto_awesome_rounded, size: 20, color: Color(0xFF673AB7)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ctx.isHindi ? '✨ AI द्वारा पहचाना गया सामान' : '✨ AI Detected Wholesale Items',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: ctx.colorTextPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  ctx.isHindi
+                                      ? 'समीक्षा करें और 1-टैप में मंडी लिस्ट में जोड़ें'
+                                      : 'Review quantities & add to Mandi sheet in 1-tap',
+                                  style: TextStyle(fontSize: 11.5, color: ctx.colorTextMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () {
+                              final allSelected = proposalStates.every((s) => s.isSelected);
+                              setModalState(() {
+                                for (final s in proposalStates) {
+                                  s.isSelected = !allSelected;
+                                }
+                              });
+                            },
+                            child: Text(
+                              proposalStates.every((s) => s.isSelected)
+                                  ? (ctx.isHindi ? 'सभी हटाएं' : 'Deselect All')
+                                  : (ctx.isHindi ? 'सभी चुनें' : 'Select All'),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF673AB7)),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: Icon(Icons.close_rounded, color: ctx.colorTextMuted, size: 20),
+                            onPressed: () => Navigator.pop(sheetCtx),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // Proposal Items List
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                        itemCount: proposalStates.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        itemBuilder: (itemCtx, index) {
+                          final state = proposalStates[index];
+                          final matched = state.matchedProduct;
+
+                          return Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: state.isSelected
+                                  ? const Color(0xFF673AB7).withValues(alpha: 0.04)
+                                  : ctx.colorSurfaceSubtle,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: state.isSelected
+                                    ? const Color(0xFF673AB7).withValues(alpha: 0.4)
+                                    : ctx.colorBorder,
+                                width: state.isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Item Header with Checkbox
+                                Row(
+                                  children: [
+                                    Checkbox(
+                                      value: state.isSelected,
+                                      activeColor: const Color(0xFF673AB7),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                      onChanged: (val) {
+                                        setModalState(() {
+                                          state.isSelected = val ?? false;
+                                        });
+                                      },
+                                    ),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: state.nameCtrl,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: ctx.colorTextPrimary,
+                                        ),
+                                        decoration: InputDecoration(
+                                          isDense: true,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          hintText: ctx.isHindi ? 'सामान का नाम' : 'Item Name',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                // Matched Inventory Info Banner
+                                if (matched != null) ...[
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: (matched.stock <= 5 ? AppColors.warning : AppColors.primary).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          matched.stock <= 5 ? Icons.warning_amber_rounded : Icons.inventory_2_outlined,
+                                          size: 14,
+                                          color: matched.stock <= 5 ? AppColors.warning : AppColors.primary,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            ctx.isHindi
+                                                ? 'दुकान में स्टॉक: ${matched.stock} ${matched.unit} बचा है'
+                                                : 'Current Shop Stock: ${matched.stock} ${matched.unit} left',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: matched.stock <= 5 ? AppColors.warning : AppColors.primary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+
+                                const SizedBox(height: 10),
+
+                                // Quantity + Unit + Rate Row
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Quantity
+                                    Expanded(
+                                      flex: 2,
+                                      child: TextFormField(
+                                        controller: state.qtyCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                        decoration: InputDecoration(
+                                          labelText: ctx.isHindi ? 'मात्रा' : 'Qty',
+                                          isDense: true,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          suffixIcon: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              InkWell(
+                                                onTap: () {
+                                                  final val = double.tryParse(state.qtyCtrl.text) ?? 1.0;
+                                                  if (val > 1) {
+                                                    state.qtyCtrl.text = (val - 1).toInt().toString();
+                                                    setModalState(() {});
+                                                  }
+                                                },
+                                                child: const Padding(
+                                                  padding: EdgeInsets.symmetric(horizontal: 2),
+                                                  child: Icon(Icons.remove_rounded, size: 16),
+                                                ),
+                                              ),
+                                              InkWell(
+                                                onTap: () {
+                                                  final val = double.tryParse(state.qtyCtrl.text) ?? 1.0;
+                                                  state.qtyCtrl.text = (val + 1).toInt().toString();
+                                                  setModalState(() {});
+                                                },
+                                                child: const Padding(
+                                                  padding: EdgeInsets.symmetric(horizontal: 2),
+                                                  child: Icon(Icons.add_rounded, size: 16, color: Color(0xFF673AB7)),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 2),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+
+                                    // Wholesale Unit Dropdown
+                                    Expanded(
+                                      flex: 3,
+                                      child: DropdownButtonFormField<String>(
+                                        value: _kWholesaleUnits.contains(state.unit) ? state.unit : _kWholesaleUnits.first,
+                                        isExpanded: true,
+                                        style: TextStyle(fontSize: 12, color: ctx.colorTextPrimary, fontWeight: FontWeight.w500),
+                                        decoration: InputDecoration(
+                                          labelText: ctx.isHindi ? 'थोक यूनिट' : 'Unit',
+                                          isDense: true,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                        items: _kWholesaleUnits.map((u) => DropdownMenuItem(
+                                          value: u,
+                                          child: Text(u, overflow: TextOverflow.ellipsis),
+                                        )).toList(),
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setModalState(() => state.unit = val);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+
+                                    // Est Wholesale Rate
+                                    Expanded(
+                                      flex: 3,
+                                      child: TextFormField(
+                                        controller: state.priceCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                        decoration: InputDecoration(
+                                          labelText: ctx.isHindi ? 'अनु. दर (₹)' : 'Est Rate (₹)',
+                                          prefixText: '₹',
+                                          isDense: true,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                // 🎨 Indian Color Shade Calibrator (Only for Color-Critical Products)
+                                if (state.colorShade != null &&
+                                    isColorCriticalProduct(category: state.category, name: state.nameCtrl.text)) ...[
+                                  const SizedBox(height: 10),
+                                  ColorShadeSelector(
+                                    initialShade: state.colorShade!,
+                                    alternatives: state.colorAlternatives,
+                                    compact: true,
+                                    onShadeSelected: (newShade) {
+                                      setModalState(() {
+                                        final oldShade = state.colorShade;
+                                        state.colorShade = newShade;
+                                        // Update name if old shade was in title
+                                        if (oldShade != null && state.nameCtrl.text.contains(oldShade.shadeName)) {
+                                          state.nameCtrl.text = state.nameCtrl.text.replaceAll(oldShade.shadeName, newShade.shadeName);
+                                        }
+                                        // Keep package size/notes intact without erasing it
+                                        final cleanNotes = state.notesCtrl.text
+                                            .replaceAll(RegExp(r'Shade:\s*[^•\n]+(•\s*)?', caseSensitive: false), '')
+                                            .trim();
+                                        if (cleanNotes.isNotEmpty) {
+                                          state.notesCtrl.text = 'Shade: ${newShade.displayName} • $cleanNotes';
+                                        } else {
+                                          state.notesCtrl.text = 'Shade: ${newShade.displayName}';
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ],
+
+                                // Sourcing Notes (if available)
+                                if (state.notesCtrl.text.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '💡 ${state.notesCtrl.text}',
+                                    style: TextStyle(fontSize: 11, color: ctx.colorTextMuted, fontStyle: FontStyle.italic),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    // Bottom Action Bar with Live Budget Calculation
+                    Builder(
+                      builder: (_) {
+                        final totalProposalBudget = proposalStates
+                            .where((s) => s.isSelected)
+                            .fold(0.0, (sum, s) => sum + (double.tryParse(s.priceCtrl.text.trim()) ?? 0.0));
+
+                        return Container(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          decoration: BoxDecoration(
+                            color: ctx.colorSurface,
+                            border: Border(top: BorderSide(color: ctx.colorBorder)),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (totalProposalBudget > 0) ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      ctx.isHindi ? 'चयनित कुल अनुमानित बजट:' : 'Total Estimated Budget:',
+                                      style: TextStyle(fontSize: 12.5, color: ctx.colorTextMuted, fontWeight: FontWeight.w600),
+                                    ),
+                                    Text(
+                                      '₹${totalProposalBudget.toStringAsFixed(0)}',
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF673AB7)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF673AB7),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        elevation: 2,
+                                      ),
+                                      icon: const Icon(Icons.check_circle_rounded, size: 20),
+                                      label: Text(
+                                        ctx.isHindi
+                                            ? '✓ $selectedCount सामान मंडी लिस्ट में जोड़ें'
+                                            : '✓ Add $selectedCount Items to Mandi Sheet',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      ),
+                                      onPressed: selectedCount == 0
+                                          ? null
+                                          : () async {
+                                              final selectedItems = proposalStates.where((s) => s.isSelected).toList();
+                                              for (final s in selectedItems) {
+                                                final name = s.nameCtrl.text.trim();
+                                                if (name.isEmpty) continue;
+                                                final qtyVal = s.qtyCtrl.text.trim().isEmpty ? '1' : s.qtyCtrl.text.trim();
+                                                final combinedQty = '$qtyVal ${s.unit}'.trim();
+                                                final estPrice = double.tryParse(s.priceCtrl.text.trim()) ?? 0.0;
+                                                var notes = s.notesCtrl.text.trim();
+                                                final isColorItem = isColorCriticalProduct(category: s.category, name: name);
+                                                if (isColorItem && s.colorShade != null && !notes.toLowerCase().contains(s.colorShade!.shadeName.toLowerCase())) {
+                                                  if (notes.isNotEmpty) {
+                                                    notes = 'Shade: ${s.colorShade!.displayName} • $notes';
+                                                  } else {
+                                                    notes = 'Shade: ${s.colorShade!.displayName}';
+                                                  }
+                                                } else if (!isColorItem) {
+                                                  // Ensure grocery/commodities do not carry random 'Shade:' notes
+                                                  notes = notes.replaceAll(RegExp(r'Shade:\s*[^•\n]+(•\s*)?', caseSensitive: false), '').trim();
+                                                }
+
+                                                await controller.addItem(
+                                                  name: name,
+                                                  qty: combinedQty,
+                                                  category: s.category,
+                                                  estimatedPrice: estPrice,
+                                                  notes: notes,
+                                                );
+                                              }
+
+                                              if (sheetCtx.mounted) {
+                                                Navigator.pop(sheetCtx);
+                                              }
+
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Row(
+                                                      children: [
+                                                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                                                        const SizedBox(width: 8),
+                                                        Expanded(
+                                                          child: Text(
+                                                            context.isHindi
+                                                                ? '✓ ${selectedItems.length} सामान मंडी खरीद लिस्ट में जुड़ गए!'
+                                                                : '✓ ${selectedItems.length} items added to Mandi Sourcing Sheet!',
+                                                            style: const TextStyle(fontWeight: FontWeight.bold),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    backgroundColor: AppColors.success,
+                                                    behavior: SnackBarBehavior.floating,
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   /// Opens the professional, structured Add/Edit Sourcing Item Sheet
@@ -272,6 +1078,13 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               labelText: context.isHindi ? 'सामान का नाम *' : 'Item Name *',
                               hintText: context.isHindi ? 'उदा. शरबाती गेहूं / फॉर्च्यून तेल' : 'e.g. Sharbati Wheat / Fortune Oil',
                               prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20),
+                              suffixIcon: AppVoiceIconButton(
+                                controller: fieldCtrl,
+                                hint: context.isHindi ? 'सामान का नाम' : 'Item Name',
+                                onSubmitted: (val) {
+                                  nameCtrl.text = val;
+                                },
+                              ),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             ),
@@ -495,6 +1308,10 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                             labelText: context.isHindi ? 'क्वालिटी नोट्स / शर्तें' : 'Quality Notes / Specs',
                             hintText: context.isHindi ? 'उदा. शरबाती ग्रेड-A, नया माल, नकद डिस्काउंट' : 'e.g. Grade A Quality, New Stock',
                             prefixIcon: const Icon(Icons.notes_rounded, size: 18),
+                            suffixIcon: AppVoiceIconButton(
+                              controller: notesCtrl,
+                              hint: context.isHindi ? 'क्वालिटी नोट्स' : 'Quality Notes',
+                            ),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           ),
@@ -587,25 +1404,53 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     // Real Low Stock Products from Store Inventory
     final lowStockProducts = prodController.products.where((p) => p.isLowStock || p.isOutOfStock).toList();
 
-    // Filter items based on active chip
+    // Filter items based on active chip and instant search query
     final filteredItems = items.where((item) {
-      if (_activeFilter == 'PENDING') return !item.isCompleted;
-      if (_activeFilter == 'COMPLETED') return item.isCompleted;
+      if (_activeFilter == 'PENDING' && item.isCompleted) return false;
+      if (_activeFilter == 'COMPLETED' && !item.isCompleted) return false;
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final match = item.name.toLowerCase().contains(q) ||
+            item.category.toLowerCase().contains(q) ||
+            item.dealerName.toLowerCase().contains(q) ||
+            item.notes.toLowerCase().contains(q);
+        if (!match) return false;
+      }
       return true;
     }).toList();
 
     return MerchantShell(
       currentIndex: -1,
       showBottomNav: false,
-      floatingActionButton: FloatingActionButton.extended(
-        elevation: 3,
-        backgroundColor: AppColors.primary,
-        onPressed: () => _showAddEditSourcingItemSheet(context, controller, prodController),
-        icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 20),
-        label: Text(
-          context.isHindi ? 'नया सामान जोड़ें' : 'Add Item',
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13.5),
-        ),
+      floatingActionButton: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. AI Mandi Camera Scan Button
+          FloatingActionButton.extended(
+            heroTag: 'ai_mandi_scan_fab',
+            elevation: 4,
+            backgroundColor: const Color(0xFF673AB7),
+            onPressed: () => _openAiMandiScanner(context, controller, prodController),
+            icon: const Icon(Icons.document_scanner_rounded, color: Colors.white, size: 20),
+            label: Text(
+              context.isHindi ? '📸 AI स्कैन' : '📸 AI Scan',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // 2. Manual Add Sourcing Item Button
+          FloatingActionButton.extended(
+            heroTag: 'add_mandi_item_fab',
+            elevation: 3,
+            backgroundColor: AppColors.primary,
+            onPressed: () => _showAddEditSourcingItemSheet(context, controller, prodController),
+            icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 20),
+            label: Text(
+              context.isHindi ? 'नया सामान' : 'Add Item',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+            ),
+          ),
+        ],
       ),
       appBar: AppBar(
         elevation: 0,
@@ -675,8 +1520,6 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     backgroundColor: AppColors.success,
                   ),
                 );
-              } else if (value == 'ai_invoice') {
-                SupplierInvoiceOcrModal.show(context);
               } else if (value == 'clear') {
                 controller.clearAllCompleted();
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -707,19 +1550,6 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     Text(
                       '${context.tr('mandi_import_low')} (${lowStockProducts.length})',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'ai_invoice',
-                child: Row(
-                  children: [
-                    const Icon(Icons.document_scanner_rounded, size: 18, color: Color(0xFF4F46E5)),
-                    const SizedBox(width: 10),
-                    Text(
-                      context.isHindi ? 'सप्लायर बिल स्कैन' : 'Supplier Invoice Scan',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -835,6 +1665,43 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         ],
                       ),
 
+                      // Visual Procurement Progress Bar
+                      if (controller.totalCount > 0) ...[
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: controller.totalCount > 0 ? (controller.completedCount / controller.totalCount) : 0.0,
+                            minHeight: 6,
+                            backgroundColor: context.colorSurfaceSubtle,
+                            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                context.isHindi
+                                    ? '${controller.completedCount} / ${controller.totalCount} खरीदा (${(controller.completedCount * 100 / (controller.totalCount > 0 ? controller.totalCount : 1)).toInt()}%)'
+                                    : '${controller.completedCount} of ${controller.totalCount} bought (${(controller.completedCount * 100 / (controller.totalCount > 0 ? controller.totalCount : 1)).toInt()}%)',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.colorTextMuted),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (controller.totalEstimatedBudget > 0)
+                              Text(
+                                context.isHindi
+                                    ? '₹${controller.completedPurchasedExpense.toStringAsFixed(0)} खरीदा'
+                                    : '₹${controller.completedPurchasedExpense.toStringAsFixed(0)} bought',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
+                              ),
+                          ],
+                        ),
+                      ],
+
                       // Quick Low-Stock Import Banner (if any)
                       if (lowStockProducts.isNotEmpty) ...[
                         const SizedBox(height: 12),
@@ -886,12 +1753,107 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                           ),
                         ),
                       ],
+
+                      // AI Mandi Vision Quick Scan Banner
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () => _openAiMandiScanner(context, controller, prodController),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF673AB7), Color(0xFF512DA8)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF673AB7).withValues(alpha: 0.25),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.document_scanner_rounded, size: 20, color: Colors.white),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      context.isHindi
+                                          ? '📸 AI मंडी खरीद स्कैनर'
+                                          : '📸 AI Mandi Sourcing Scanner',
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    Text(
+                                      context.isHindi
+                                          ? 'कम सामान या खाली डिब्बे की फोटो लें — AI थोक लिस्ट बना देगा'
+                                          : 'Snap empty cartons or shelves — AI auto-suggests bulk quantities',
+                                      style: const TextStyle(fontSize: 11, color: Colors.white70),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Colors.white70),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
-                // 2. CLEAN FILTER CHIPS STRIP
+                // 2. INSTANT SEARCH BAR
+                if (items.isNotEmpty) ...[
+                  TextField(
+                    controller: _searchCtrl,
+                    onChanged: (val) {
+                      setState(() {
+                        _searchQuery = val.trim();
+                      });
+                    },
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: context.isHindi ? 'सामान, श्रेणी या डीलर खोजें...' : 'Search items, category or wholesaler...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: context.colorSurfaceSubtle,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: context.colorBorder),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: context.colorBorder),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // 3. CLEAN FILTER CHIPS STRIP
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
@@ -907,40 +1869,50 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // 3. MANDI SOURCING CHECKLIST
+                // 4. MANDI SOURCING CHECKLIST
                 if (filteredItems.isEmpty)
                   AppCard(
                     padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
                     child: Column(
                       children: [
-                        Icon(Icons.assignment_outlined, size: 48, color: context.colorTextMuted),
+                        Icon(
+                          _searchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.assignment_outlined,
+                          size: 48,
+                          color: context.colorTextMuted,
+                        ),
                         const SizedBox(height: 12),
                         Text(
-                          context.isHindi ? 'मंडी खरीद लिस्ट खाली है' : 'Sourcing list is empty',
+                          _searchQuery.isNotEmpty
+                              ? (context.isHindi ? 'कोई सामान नहीं मिला' : 'No matching items')
+                              : (context.isHindi ? 'मंडी खरीद लिस्ट खाली है' : 'Sourcing list is empty'),
                           style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          context.isHindi
-                              ? 'निचे दिए गए "+ नया सामान जोड़ें" बटन से सामान जोड़ें!'
-                              : 'Tap "+ Add Item" below to start your sourcing checklist!',
+                          _searchQuery.isNotEmpty
+                              ? (context.isHindi ? '"$_searchQuery" के लिए कोई परिणाम नहीं। दूसरा नाम खोजें।' : 'No results for "$_searchQuery".')
+                              : (context.isHindi
+                                  ? 'निचे दिए गए "+ नया सामान जोड़ें" बटन से सामान जोड़ें!'
+                                  : 'Tap "+ Add Item" below to start your sourcing checklist!'),
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 12.5, color: context.colorTextMuted),
                         ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        if (_searchQuery.isEmpty) ...[
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.add_shopping_cart_rounded, size: 16, color: Colors.white),
+                            label: Text(
+                              context.isHindi ? 'नया सामान जोड़ें' : 'Add Sourcing Item',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                            ),
+                            onPressed: () => _showAddEditSourcingItemSheet(context, controller, prodController),
                           ),
-                          icon: const Icon(Icons.add_shopping_cart_rounded, size: 16, color: Colors.white),
-                          label: Text(
-                            context.isHindi ? 'नया सामान जोड़ें' : 'Add Sourcing Item',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
-                          ),
-                          onPressed: () => _showAddEditSourcingItemSheet(context, controller, prodController),
-                        ),
+                        ],
                       ],
                     ),
                   )
@@ -952,6 +1924,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final item = filteredItems[index];
+                      final detectedShade = _detectItemShade(item);
                       return AppCard(
                         padding: const EdgeInsets.all(12),
                         child: Row(
@@ -976,6 +1949,28 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                 children: [
                                   Row(
                                     children: [
+                                      if (detectedShade != null) ...[
+                                        Tooltip(
+                                          message: detectedShade.displayName,
+                                          child: Container(
+                                            width: 14,
+                                            height: 14,
+                                            margin: const EdgeInsets.only(right: 6),
+                                            decoration: BoxDecoration(
+                                              color: detectedShade.color,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: Colors.white, width: 1.5),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.25),
+                                                  blurRadius: 2.5,
+                                                  offset: const Offset(0, 1),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                       Expanded(
                                         child: Text(
                                           item.name,
@@ -1055,13 +2050,27 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                             // Actions
                             if (item.dealerPhone.isNotEmpty) ...[
                               IconButton(
-                                icon: const Icon(Icons.phone_rounded, size: 18, color: AppColors.primary),
-                                tooltip: 'Call Wholesaler',
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                icon: const Icon(Icons.phone_rounded, size: 17, color: AppColors.primary),
+                                tooltip: context.isHindi ? 'डीलर को कॉल करें' : 'Call Wholesaler',
                                 onPressed: () => _callDealer(item.dealerPhone),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17, color: Color(0xFF128C7E)),
+                                tooltip: context.isHindi ? 'डीलर को व्हाट्सएप भेजें' : 'WhatsApp Wholesaler',
+                                onPressed: () => _messageDealerWhatsApp(context, item),
                               ),
                             ],
                             IconButton(
-                              icon: Icon(Icons.edit_outlined, size: 18, color: context.colorTextMuted),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                              icon: Icon(Icons.edit_outlined, size: 17, color: context.colorTextMuted),
                               tooltip: 'Edit Item',
                               onPressed: () => _showAddEditSourcingItemSheet(
                                 context,
@@ -1071,7 +2080,10 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               ),
                             ),
                             IconButton(
-                              icon: Icon(Icons.delete_outline_rounded, size: 18, color: context.colorTextMuted),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                              icon: Icon(Icons.delete_outline_rounded, size: 17, color: context.colorTextMuted),
                               tooltip: 'Remove Item',
                               onPressed: () => controller.removeItem(item.id),
                             ),
@@ -1105,4 +2117,31 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
       onSelected: (_) => setState(() => _activeFilter = value),
     );
   }
+}
+
+/// Holds interactive state for an AI proposed wholesale sourcing item in the review sheet.
+class _AiProposalItemState {
+  final TextEditingController nameCtrl;
+  final TextEditingController qtyCtrl;
+  final TextEditingController priceCtrl;
+  final TextEditingController notesCtrl;
+  final String category;
+  String unit;
+  final ProductModel? matchedProduct;
+  bool isSelected;
+  ColorShadeModel? colorShade;
+  List<ColorShadeModel> colorAlternatives;
+
+  _AiProposalItemState({
+    required this.nameCtrl,
+    required this.qtyCtrl,
+    required this.priceCtrl,
+    required this.notesCtrl,
+    required this.category,
+    required this.unit,
+    this.matchedProduct,
+    this.isSelected = true,
+    this.colorShade,
+    this.colorAlternatives = const [],
+  });
 }

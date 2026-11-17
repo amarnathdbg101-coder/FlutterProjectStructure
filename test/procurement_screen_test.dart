@@ -57,8 +57,10 @@ void main() {
       await tester.pumpWidget(buildTestScreen());
       await tester.pumpAndSettle();
 
-      // Verify FAB is present
-      expect(find.byType(FloatingActionButton), findsOneWidget);
+      // Verify dual FABs (AI Mandi Scan + Manual Add Item) are present
+      expect(find.byType(FloatingActionButton), findsNWidgets(2));
+      expect(find.text('📸 AI Scan'), findsOneWidget);
+      expect(find.text('Add Item'), findsOneWidget);
 
       // Verify summary banner shows 0 items
       expect(find.text('0 Items'), findsOneWidget);
@@ -129,6 +131,61 @@ void main() {
       // Now marked as bought
       expect(find.text('0 Pending'), findsOneWidget);
       expect(find.text('1 Bought'), findsOneWidget);
+    });
+
+    testWidgets('instant search filters items and shows dealer actions and color dot', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+
+      await LocalCacheService.saveProcurementItems([
+        ProcurementItemModel(
+          id: 'item_textile',
+          name: 'Cotton Petticoat - Sugapankhi',
+          qty: '24 पीस (Pcs)',
+          category: 'Clothing & Fashion',
+          estimatedPrice: 3600,
+          dealerName: 'Gupta Wholesalers',
+          dealerPhone: '9876543210',
+          notes: 'Shade: Sugapankhi (सुगापंखी)',
+        ),
+        ProcurementItemModel(
+          id: 'item_grocery',
+          name: 'Tata Salt 1kg Pouch',
+          qty: '1 कार्टन (Carton)',
+          category: 'Grocery & Staples',
+          estimatedPrice: 650,
+        ),
+      ]);
+
+      procCtrl = ProcurementController();
+
+      await tester.pumpWidget(buildTestScreen());
+      await tester.pumpAndSettle();
+
+      // Verify both items rendered
+      expect(find.text('Cotton Petticoat - Sugapankhi'), findsOneWidget);
+      expect(find.text('Tata Salt 1kg Pouch'), findsOneWidget);
+
+      // Verify dealer actions (Call & WhatsApp) present for item with phone
+      expect(find.byIcon(Icons.phone_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
+
+      // Verify search field exists
+      final searchFieldFinder = find.byType(TextField);
+      expect(searchFieldFinder, findsOneWidget);
+
+      // Search for 'petticoat'
+      await tester.enterText(searchFieldFinder, 'petticoat');
+      await tester.pumpAndSettle();
+
+      // Petticoat should remain, Tata Salt filtered out
+      expect(find.text('Cotton Petticoat - Sugapankhi'), findsOneWidget);
+      expect(find.text('Tata Salt 1kg Pouch'), findsNothing);
+
+      // Search for nonexistent item
+      await tester.enterText(searchFieldFinder, 'Maggi Noodles');
+      await tester.pumpAndSettle();
+
+      expect(find.text('No matching items'), findsOneWidget);
     });
   });
 }
