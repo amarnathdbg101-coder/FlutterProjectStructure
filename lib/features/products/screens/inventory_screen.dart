@@ -1309,8 +1309,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 return;
               }
 
-              // Fast downscale (max 1024px, 80% quality) for quick upload
-              final normalized = await normalizeBytes(rawBytes, maxDimension: 1024, quality: 80);
+              // Fast downscale (max 800px, 75% quality) for quick upload & optimal AI vision tokens
+              final normalized = await normalizeBytes(rawBytes, maxDimension: 800, quality: 75);
               final base64String = base64Encode(normalized);
               final String mimeType = targetKey.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
               final aiRepo = AiRepository();
