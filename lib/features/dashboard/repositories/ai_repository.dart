@@ -2,9 +2,64 @@ import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../products/repositories/product_repository.dart';
 
 class AiRepository {
   final Dio _dio = ApiClient().dio;
+
+  Future<ApiResponse<Map<String, dynamic>>> getMerchantBusinessContext() async {
+    final productsRepository = ProductRepository();
+    final results = await Future.wait([
+      productsRepository.getMonthlyProfit(),
+      productsRepository.getProductMatrix(),
+    ]);
+    final monthlyProfit = results[0];
+    final productMatrix = results[1];
+
+    List<Map<String, dynamic>> compactProducts(dynamic value) {
+      if (value is! List) return const [];
+      return value.whereType<Map>().take(5).map((item) {
+        final product = Map<String, dynamic>.from(item);
+        return <String, dynamic>{
+          'name': product['name'],
+          'total_sold_qty': product['total_sold_qty'],
+          'total_profit': product['total_profit'],
+          'unit_profit': product['unit_profit'],
+          'profit_margin_pct': product['profit_margin_pct'],
+          'current_stock': product['current_stock'],
+        };
+      }).toList();
+    }
+
+    final matrix = productMatrix.data ?? const <String, dynamic>{};
+    return ApiResponse(
+      success: true,
+      data: {
+        'as_of': DateTime.now().toIso8601String(),
+        'metric_definitions': {
+          'total_profit':
+              'Recorded gross product profit from POS bills and completed reservations; before operating expenses.',
+          'unit_profit':
+              'Current selling price minus current cost price; not total sales profit.',
+        },
+        'data_availability': {
+          'monthly_summary': monthlyProfit.success,
+          'product_profit_ranking': productMatrix.success,
+        },
+        'current_month_summary':
+            monthlyProfit.success ? monthlyProfit.data : null,
+        'top_products_by_total_profit': productMatrix.success
+            ? compactProducts(matrix['best_profitable'])
+            : const <Map<String, dynamic>>[],
+        'lowest_margin_products': productMatrix.success
+            ? compactProducts(matrix['worst_profitable'])
+            : const <Map<String, dynamic>>[],
+        'slow_moving_products': productMatrix.success
+            ? compactProducts(matrix['old_dead_stock'])
+            : const <Map<String, dynamic>>[],
+      },
+    );
+  }
 
   // --- Public Categories List ---
   Future<ApiResponse<List<Map<String, dynamic>>>> getCategories() async {
@@ -20,29 +75,6 @@ class AiRepository {
         list = raw['data'];
       }
       return ApiResponse(success: true, data: list.cast<Map<String, dynamic>>());
-    } catch (e) {
-      return ApiResponse.failure(ApiClient.handleError(e));
-    }
-  }
-
-  // --- Merchant AI Copilot (Advisor & Analysis) ---
-  Future<ApiResponse<Map<String, dynamic>>> merchantCopilot({
-    required String prompt,
-    List<Map<String, String>> history = const [],
-    String shopData = '',
-    String? imageBase64,
-  }) async {
-    try {
-      final payload = <String, dynamic>{
-        'prompt': prompt.trim(),
-        'history': history,
-        'shop_data': shopData,
-      };
-      if (imageBase64 != null) payload['image_base64'] = imageBase64;
-
-      final res = await _dio.post(ApiConstants.aiMerchantCopilot, data: payload);
-      final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
-      return ApiResponse(success: true, data: data as Map<String, dynamic>);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
@@ -69,20 +101,15 @@ class AiRepository {
     }
   }
 
-  // --- Smart Studio & Vision Fusion (Cloudflare + Gemini + Dynamic Backdrop) ---
-  Future<ApiResponse<Map<String, dynamic>>> smartStudioScan({
+  // --- Mandi Sourcing & Wholesale Reorder Vision ---
+  Future<ApiResponse<Map<String, dynamic>>> scanMandiItem({
     required String imageBase64,
     String mimeType = 'image/jpeg',
-    String themeHint = 'auto',
   }) async {
     try {
       final res = await _dio.post(
-        ApiConstants.aiSmartStudioScan,
-        data: {
-          'image_base64': imageBase64,
-          'mime_type': mimeType,
-          'theme_hint': themeHint,
-        },
+        ApiConstants.aiMandiScan,
+        data: {'image_base64': imageBase64, 'mime_type': mimeType},
         options: Options(
           receiveTimeout: const Duration(seconds: 60),
           sendTimeout: const Duration(seconds: 45),
@@ -146,29 +173,6 @@ class AiRepository {
           'target_audience': targetAudience.trim(),
         },
       );
-      final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
-      return ApiResponse(success: true, data: data as Map<String, dynamic>);
-    } catch (e) {
-      return ApiResponse.failure(ApiClient.handleError(e));
-    }
-  }
-
-  // --- Bargain Assist (Bottom safe selling price for shopkeeper) ---
-  Future<ApiResponse<Map<String, dynamic>>> bargainAssist({
-    required String productName,
-    required double mrp,
-    required double costPrice,
-    double? askingPrice,
-  }) async {
-    try {
-      final payload = <String, dynamic>{
-        'product_name': productName.trim(),
-        'mrp': mrp,
-        'cost_price': costPrice,
-      };
-      if (askingPrice != null) payload['asking_price'] = askingPrice;
-
-      final res = await _dio.post(ApiConstants.aiBargainAssist, data: payload);
       final data = res.data is Map ? (res.data['data'] ?? res.data) : {};
       return ApiResponse(success: true, data: data as Map<String, dynamic>);
     } catch (e) {

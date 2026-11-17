@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert' show base64Encode;
+import 'dart:convert' show base64Encode, base64Decode;
 import 'dart:io' show File;
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -27,12 +27,14 @@ import '../../auth/controllers/auth_controller.dart';
 import '../controllers/category_controller.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
+import '../utils/pending_product_image.dart';
 import '../widgets/add_category_dialog.dart';
 import '../widgets/manage_categories_sheet.dart';
+import '../widgets/color_shade_selector.dart';
+import 'product_photo_capture_screen.dart';
 import '../../../core/widgets/price_checker_dialog.dart';
 import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../widgets/batch_barcode_pairing_dialog.dart';
-import '../services/smart_barcode_catalog_service.dart';
 import 'product_detail_screen.dart';
 import 'barcode_sheet_studio_screen.dart';
 
@@ -46,7 +48,6 @@ enum InventorySortOption {
   marginHighLow,
   nameAZ,
   nameZA,
-  bargainFirst,
 }
 
 extension InventorySortOptionExt on InventorySortOption {
@@ -68,8 +69,6 @@ extension InventorySortOptionExt on InventorySortOption {
         return context.isHindi ? 'नाम: A से Z' : 'Name: A to Z';
       case InventorySortOption.nameZA:
         return context.isHindi ? 'नाम: Z से A' : 'Name: Z to A';
-      case InventorySortOption.bargainFirst:
-        return context.isHindi ? 'हिडन प्राइस (मोलभाव वाले)' : 'Hidden Price (Bargain Items)';
     }
   }
 
@@ -91,8 +90,6 @@ extension InventorySortOptionExt on InventorySortOption {
         return context.isHindi ? 'वर्णमाला अनुसार सीधा क्रम' : 'Alphabetical order from A to Z';
       case InventorySortOption.nameZA:
         return context.isHindi ? 'उलटे वर्णमाला अनुसार क्रम' : 'Alphabetical reverse order from Z to A';
-      case InventorySortOption.bargainFirst:
-        return context.isHindi ? 'जिनका ऑनलाइन मूल्य छुपा हुआ है' : 'Storefront price hidden products first';
     }
   }
 
@@ -113,8 +110,6 @@ extension InventorySortOptionExt on InventorySortOption {
       case InventorySortOption.nameAZ:
       case InventorySortOption.nameZA:
         return Icons.sort_by_alpha_rounded;
-      case InventorySortOption.bargainFirst:
-        return Icons.lock_outline_rounded;
     }
   }
 
@@ -136,8 +131,6 @@ extension InventorySortOptionExt on InventorySortOption {
         return 'A-Z';
       case InventorySortOption.nameZA:
         return 'Z-A';
-      case InventorySortOption.bargainFirst:
-        return context.isHindi ? 'मोलभाव' : 'Hidden';
     }
   }
 }
@@ -381,13 +374,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
         break;
       case InventorySortOption.nameZA:
         displayList.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
-        break;
-      case InventorySortOption.bargainFirst:
-        displayList.sort((a, b) {
-          final aScore = (!a.isPricePublic || a.allowBargain) ? 1 : 0;
-          final bScore = (!b.isPricePublic || b.allowBargain) ? 1 : 0;
-          return bScore.compareTo(aScore);
-        });
         break;
     }
 
@@ -688,7 +674,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
       if (response.isEmpty) return;
       if (response.file != null) {
         final (normalizedFile, normalizedBytes) =
-            await normalizeXFile(response.file!, maxDimension: 1024, quality: 80);
+            await normalizeXFile(response.file!);
         if (mounted) {
           _showAddProductDialog(
             context,
@@ -698,7 +684,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
       } else if (response.files != null && response.files!.isNotEmpty) {
         final List<(XFile, Uint8List?)> recovered = [];
         for (final f in response.files!) {
-          final (normF, normBytes) = await normalizeXFile(f, maxDimension: 1024, quality: 80);
+          final (normF, normBytes) = await normalizeXFile(f);
           recovered.add((normF, normBytes));
         }
         if (mounted && recovered.isNotEmpty) {
@@ -779,43 +765,25 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                   style: TextStyle(fontWeight: FontWeight.w600, color: sheetCtx.colorTextPrimary),
                 ),
                 subtitle: Text(
-                  sheetCtx.isHindi ? 'बैकग्राउंड हटेगा और 10+ उत्पाद विवरण खुद भर जाएंगे' : 'Auto-removes background & auto-fills product info',
+                  sheetCtx.tr('inv_camera_capture_subtitle'),
                   style: TextStyle(fontSize: 12, color: sheetCtx.colorTextSecondary),
                 ),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   try {
-                    // Optimized for Low-Memory / Mid-range phones (e.g. Vivo T3x 50MP sensor)
-                    // Restricting native hardware capture to 1024x1024 prevents OOM & Android OS process kills!
-                    final picked = await picker.pickImage(
-                      source: ImageSource.camera,
-                      maxWidth: 1024,
-                      maxHeight: 1024,
-                      imageQuality: 80,
-                      requestFullMetadata: false,
-                    );
-                    if (picked != null) {
-                      final (normalizedFile, normalizedBytes) =
-                          await normalizeXFile(picked, maxDimension: 1024, quality: 80);
-                      onFilesSelected([(normalizedFile, normalizedBytes)]);
-                    }
-                  } on PlatformException catch (pe) {
-                    debugPrint('[InventoryScreen] Camera PlatformException: ${pe.code} - ${pe.message}');
-                    if (context.mounted) {
-                      final msg = pe.code == 'camera_access_denied'
-                          ? (context.isHindi
-                              ? 'कैमरा परमिशन नहीं मिली। कृपया फोन सेटिंग्स से कैमरा परमिशन चालू करें।'
-                              : 'Camera permission denied. Please enable camera in device settings.')
-                          : (context.isHindi
-                              ? 'कैमरा शुरू नहीं हो सका: ${pe.message ?? pe.code}'
-                              : 'Could not open camera: ${pe.message ?? pe.code}');
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(msg),
-                          backgroundColor: AppColors.error,
-                          behavior: SnackBarBehavior.floating,
+                    final capturedFiles = await Navigator.of(context).push<
+                      List<(XFile, Uint8List?)>
+                    >(
+                      MaterialPageRoute(
+                        builder: (_) => ProductPhotoCaptureScreen(
+                          maxPhotos: maxAllowed - currentCount,
                         ),
-                      );
+                      ),
+                    );
+                    if (capturedFiles != null &&
+                        capturedFiles.isNotEmpty &&
+                        context.mounted) {
+                      onFilesSelected(capturedFiles);
                     }
                   } catch (e) {
                     debugPrint('[InventoryScreen] Camera picker error: $e');
@@ -856,9 +824,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                   Navigator.pop(sheetCtx);
                   try {
                     final pickedFiles = await picker.pickMultiImage(
-                      maxWidth: 1024,
-                      maxHeight: 1024,
-                      imageQuality: 80,
+                      maxWidth: 1600,
+                      maxHeight: 1600,
                       requestFullMetadata: false,
                     );
                     if (pickedFiles.isNotEmpty) {
@@ -867,7 +834,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       final List<(XFile, Uint8List?)> resultList = [];
                       for (final f in selected) {
                         final (normalizedFile, normalizedBytes) =
-                            await normalizeXFile(f, maxDimension: 1024, quality: 80);
+                            await normalizeXFile(f);
                         resultList.add((normalizedFile, normalizedBytes));
                       }
                       onFilesSelected(resultList);
@@ -949,26 +916,34 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     return '$prefix-$suffix';
   }
 
-  Widget _buildPresetChip(BuildContext context, String label, VoidCallback onTap) {
+  Widget _buildPhotoGuideChip(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
           decoration: BoxDecoration(
-            color: context.colorSurfaceSubtle,
+            color: AppColors.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: context.colorBorder),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: context.colorTextPrimary,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: AppColors.primary),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+              ),
+            ],
           ),
         ),
       ),
@@ -1057,11 +1032,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           ? initialProduct.comparePrice.toStringAsFixed(0)
           : '',
     );
-    final floorPriceCtrl = TextEditingController(
-      text: initialProduct != null && initialProduct.floorPrice > 0
-          ? initialProduct.floorPrice.toStringAsFixed(0)
-          : '',
-    );
     final stockCtrl = TextEditingController(
       text: initialProduct != null ? initialProduct.stock.toString() : '20',
     );
@@ -1088,51 +1058,10 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           : (initialProduct?.attributes['brand']?.toString() ?? ''),
     );
 
-    bool allowBargain = initialProduct?.allowBargain ?? false;
     bool isActive = initialProduct?.isActive ?? true;
     bool isFeatured = initialProduct?.isFeatured ?? false;
     bool isPricePublic = initialProduct?.isPricePublic ?? true;
     String unit = initialProduct?.unit ?? 'g';
-
-    // Instant Master Catalog Pre-fill if initialBarcode was provided (e.g. from Price Checker or external scan)
-    if (initialBarcodeVal.isNotEmpty && (resolvedInitialName.isEmpty || isDuplicate)) {
-      final initialMatch = SmartBarcodeCatalogService.lookupSync(initialBarcodeVal);
-      if (initialMatch != null) {
-        if (nameCtrl.text.trim().isEmpty || isDuplicate) {
-          nameCtrl.text = initialMatch.name;
-        }
-        if (brandCtrl.text.trim().isEmpty) {
-          brandCtrl.text = initialMatch.brand;
-        }
-        if (descriptionCtrl.text.trim().isEmpty && (initialMatch.description?.isNotEmpty ?? false)) {
-          descriptionCtrl.text = initialMatch.description!;
-        }
-        if (comparePriceCtrl.text.trim().isEmpty && initialMatch.mrp > 0) {
-          comparePriceCtrl.text = initialMatch.mrp.toStringAsFixed(0);
-        }
-        if (priceCtrl.text.trim().isEmpty && initialMatch.sellingPrice > 0) {
-          priceCtrl.text = initialMatch.sellingPrice.toStringAsFixed(0);
-        }
-        final canonicalCat = CategoryRegistry.formatCategoryName(initialMatch.category);
-        categoryCtrl.text = canonicalCat;
-        final u = initialMatch.unit.toLowerCase();
-        if (u.contains('kg')) {
-          unit = 'kg';
-        } else if (u.contains('gm') || u.contains('g')) {
-          unit = 'g';
-        } else if (u.contains('ml')) {
-          unit = 'ml';
-        } else if (u.contains('litre') || u.contains('l')) {
-          unit = 'l';
-        } else if (u.contains('packet') || u.contains('pack')) {
-          unit = 'pack';
-        } else if (u.contains('pcs') || u.contains('piece')) {
-          unit = 'pcs';
-        } else {
-          unit = 'g';
-        }
-      }
-    }
 
     List<String> productImages = List<String>.from(initialProduct?.images ?? []);
     final Map<String, XFile> pendingXFiles = {};
@@ -1143,20 +1072,19 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     // Seed recovered lost camera images if activity was destroyed by Android OS
     if (initialImages != null && initialImages.isNotEmpty) {
       for (final (f, bytes) in initialImages) {
-        final key = f.path.trim().isNotEmpty
-            ? f.path.trim()
-            : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
-        if (!productImages.contains(key)) {
-          productImages.add(key);
-          pendingXFiles[key] = f;
-          if (bytes != null && bytes.isNotEmpty) {
-            pendingImageBytes[key] = bytes;
-          }
-        }
+        registerPendingProductImage(
+          images: productImages,
+          files: pendingXFiles,
+          bytesByKey: pendingImageBytes,
+          sourceFile: f,
+          bytes: bytes,
+        );
       }
     }
     bool isSaving = false;
     bool isAiScanning = false;
+    ColorShadeModel? activeColorShade;
+    List<ColorShadeModel> activeColorAlternatives = [];
 
     // Dynamic Custom JSONB Attributes controllers (exclude reserved system keys)
     List<MapEntry<TextEditingController, TextEditingController>> customAttrPairs = [];
@@ -1187,12 +1115,19 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
       categoriesList.insert(0, categoryCtrl.text);
     }
 
+    final boxCostCtrl = TextEditingController();
+    final boxQtyCtrl = TextEditingController();
+    bool showCartonConverter = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (sheetCtx, setModalState) {
+          final boxCostVal = double.tryParse(boxCostCtrl.text.trim()) ?? 0.0;
+          final boxQtyVal = double.tryParse(boxQtyCtrl.text.trim()) ?? 0.0;
+          final calculatedUnitCost = (boxCostVal > 0 && boxQtyVal > 0) ? (boxCostVal / boxQtyVal) : 0.0;
           // Live Pricing Integrity Calculations
           final livePrice = double.tryParse(priceCtrl.text) ?? 0.0;
           final liveCost = double.tryParse(costPriceCtrl.text) ?? 0.0;
@@ -1220,201 +1155,50 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               suggestedTitle.isNotEmpty &&
               suggestedTitle.toLowerCase() != cleanName.toLowerCase();
 
-          String? lastAutofilledBarcode;
+          bool isEnhancingImage = false;
 
-          Future<void> applyMasterCatalogAutofill(String rawBarcode, {bool forceOverwrite = false}) async {
-            final clean = rawBarcode.trim();
-            if (clean.isEmpty) return;
-            final match = await SmartBarcodeCatalogService.lookup(clean);
-            if (match != null) {
-              lastAutofilledBarcode = clean;
-              setModalState(() {
-                barcodeCtrl.text = clean;
-                if (forceOverwrite || nameCtrl.text.trim().isEmpty || nameCtrl.text.trim() == 'New Product') {
-                  nameCtrl.text = match.name;
-                }
-                if (forceOverwrite || brandCtrl.text.trim().isEmpty) {
-                  brandCtrl.text = match.brand;
-                }
-                if (forceOverwrite || descriptionCtrl.text.trim().isEmpty) {
-                  if (match.description?.isNotEmpty ?? false) {
-                    descriptionCtrl.text = match.description!;
-                  }
-                }
-                if (match.mrp > 0 && (forceOverwrite || comparePriceCtrl.text.trim().isEmpty || comparePriceCtrl.text == '0')) {
-                  comparePriceCtrl.text = match.mrp.toStringAsFixed(0);
-                }
-                if (match.sellingPrice > 0 && (forceOverwrite || priceCtrl.text.trim().isEmpty || priceCtrl.text == '0')) {
-                  priceCtrl.text = match.sellingPrice.toStringAsFixed(0);
-                }
-
-                // Canonical category mapping
-                final canonicalCat = CategoryRegistry.formatCategoryName(match.category);
-                if (categoriesList.contains(canonicalCat)) {
-                  categoryCtrl.text = canonicalCat;
-                } else if (categoriesList.contains(match.category)) {
-                  categoryCtrl.text = match.category;
-                } else {
-                  categoriesList.insert(0, canonicalCat);
-                  categoryCtrl.text = canonicalCat;
-                }
-
-                // Unit mapping
-                final u = match.unit.toLowerCase();
-                if (u.contains('kg')) {
-                  unit = 'kg';
-                } else if (u.contains('gm') || u.contains('g')) {
-                  unit = 'gm';
-                } else if (u.contains('l') || u.contains('ml')) {
-                  unit = 'litre';
-                } else if (u.contains('pack')) {
-                  unit = 'packet';
-                } else {
-                  unit = 'piece';
-                }
-
-                if (match.brand.isNotEmpty) {
-                  final brandPair = customAttrPairs.firstWhere(
-                    (p) => p.key.text.trim().toLowerCase() == 'brand',
-                    orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
-                  );
-                  if (brandPair.key.text.isEmpty) {
-                    customAttrPairs.add(MapEntry(
-                      TextEditingController(text: 'Brand'),
-                      TextEditingController(text: match.brand),
-                    ));
-                  } else if (forceOverwrite || brandPair.value.text.trim().isEmpty) {
-                    brandPair.value.text = match.brand;
-                  }
-                }
-
-                // Auto-fill ALL dynamic custom attributes (15+ fields) from Master Catalog
-                if (match.attributes != null && match.attributes!.isNotEmpty) {
-                  match.attributes!.forEach((key, val) {
-                    final cleanKey = key.trim();
-                    final cleanVal = val?.toString().trim() ?? '';
-                    if (cleanKey.isNotEmpty &&
-                        cleanVal.isNotEmpty &&
-                        cleanKey.toLowerCase() != 'barcode' &&
-                        cleanKey.toLowerCase() != 'unit' &&
-                        cleanKey.toLowerCase() != 'brand' &&
-                        cleanKey.toLowerCase() != 'category' &&
-                        cleanKey.toLowerCase() != 'category_name' &&
-                        cleanKey.toLowerCase() != 'is_price_public') {
-                      final existingPair = customAttrPairs.firstWhere(
-                        (p) => p.key.text.trim().toLowerCase() == cleanKey.toLowerCase(),
-                        orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
-                      );
-                      if (existingPair.key.text.isEmpty) {
-                        customAttrPairs.add(MapEntry(
-                          TextEditingController(text: CategoryRegistry.formatCategoryName(cleanKey)),
-                          TextEditingController(text: cleanVal),
-                        ));
-                      } else if (forceOverwrite || existingPair.value.text.trim().isEmpty) {
-                        existingPair.value.text = cleanVal;
-                      }
-                    }
-                  });
-                }
-              });
-
-              if (sheetCtx.mounted) {
-                ScaffoldMessenger.of(sheetCtx).clearSnackBars();
-                ScaffoldMessenger.of(sheetCtx).showSnackBar(
-                  SnackBar(
-                    content: Row(
-                      children: [
-                        const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            sheetCtx.isHindi
-                                ? '⚡ मास्टर कैटलॉग से विवरण लोड हुआ: ${match.name}'
-                                : '⚡ Auto-filled details for: ${match.name}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                    backgroundColor: AppColors.success,
-                    duration: const Duration(seconds: 3),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            } else {
-              setModalState(() {
-                barcodeCtrl.text = clean;
-              });
-              if (sheetCtx.mounted) {
-                ScaffoldMessenger.of(sheetCtx).clearSnackBars();
-                ScaffoldMessenger.of(sheetCtx).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      sheetCtx.isHindi
-                          ? '✓ बारकोड स्कैन हुआ ($clean)'
-                          : '✓ Barcode captured ($clean)',
-                    ),
-                    backgroundColor: AppColors.primary,
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            }
-          }
-
-          Future<void> runAiAutofill(String imagePathOrKey) async {
-            if (isAiScanning) return;
-            setModalState(() {
-              isAiScanning = true;
-            });
-
+          Future<Uint8List?> resolveImageBytes(String imagePathOrKey) async {
             try {
-              Uint8List? imageBytes;
-              String mimeType = 'image/jpeg';
-
               if (pendingImageBytes.containsKey(imagePathOrKey) && pendingImageBytes[imagePathOrKey]!.isNotEmpty) {
-                imageBytes = pendingImageBytes[imagePathOrKey]!;
-                if (imagePathOrKey.toLowerCase().endsWith('.png')) {
-                  mimeType = 'image/png';
-                }
-              } else if (pendingXFiles.containsKey(imagePathOrKey)) {
-                final xf = pendingXFiles[imagePathOrKey]!;
-                imageBytes = await xf.readAsBytes();
-                if (xf.name.toLowerCase().endsWith('.png')) {
-                  mimeType = 'image/png';
-                }
-              } else if (!imagePathOrKey.startsWith('http') && !imagePathOrKey.startsWith('/images') && !kIsWeb) {
+                return pendingImageBytes[imagePathOrKey]!;
+              }
+              if (pendingXFiles.containsKey(imagePathOrKey)) {
+                return await pendingXFiles[imagePathOrKey]!.readAsBytes();
+              }
+              if (!imagePathOrKey.startsWith('http') && !imagePathOrKey.startsWith('/images') && !kIsWeb) {
                 final file = File(imagePathOrKey);
                 if (await file.exists()) {
-                  imageBytes = await file.readAsBytes();
-                  if (imagePathOrKey.toLowerCase().endsWith('.png')) {
-                    mimeType = 'image/png';
-                  }
+                  return await file.readAsBytes();
                 }
-              } else if (imagePathOrKey.startsWith('http') || imagePathOrKey.startsWith('/images')) {
-                final fullUrl = formatImageUrl(imagePathOrKey);
-                try {
-                  final client = Dio();
-                  final res = await client.get<List<int>>(
-                    fullUrl,
-                    options: Options(responseType: ResponseType.bytes, receiveTimeout: const Duration(seconds: 20)),
-                  );
-                  if (res.data != null && res.data!.isNotEmpty) {
-                    imageBytes = Uint8List.fromList(res.data!);
-                  }
-                } catch (_) {}
               }
+              if (imagePathOrKey.startsWith('http') || imagePathOrKey.startsWith('/images')) {
+                final fullUrl = formatImageUrl(imagePathOrKey);
+                final client = Dio();
+                final res = await client.get<List<int>>(
+                  fullUrl,
+                  options: Options(responseType: ResponseType.bytes, receiveTimeout: const Duration(seconds: 15)),
+                );
+                if (res.data != null && res.data!.isNotEmpty) {
+                  return Uint8List.fromList(res.data!);
+                }
+              }
+            } catch (e) {
+              debugPrint('[InventoryScreen] Failed to resolve bytes for $imagePathOrKey: $e');
+            }
+            return null;
+          }
 
-              if (imageBytes == null || imageBytes.isEmpty) {
+          Future<void> enhanceImage(String imageKey, {required String mode}) async {
+            if (isEnhancingImage) return;
+            setModalState(() => isEnhancingImage = true);
+            try {
+              final rawBytes = await resolveImageBytes(imageKey);
+              if (rawBytes == null || rawBytes.isEmpty) {
                 if (sheetCtx.mounted) {
                   ScaffoldMessenger.of(sheetCtx).showSnackBar(
                     SnackBar(
-                      content: Text(sheetCtx.isHindi
-                          ? 'कृपया विश्लेषण के लिए पहले एक तस्वीर चुनें'
-                          : 'Please pick an image first for AI analysis'),
-                      backgroundColor: AppColors.warning,
+                      content: Text(sheetCtx.isHindi ? 'फोटो लोड नहीं हो सकी' : 'Could not load photo'),
+                      backgroundColor: AppColors.error,
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -1422,15 +1206,116 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 return;
               }
 
-              final base64String = base64Encode(imageBytes);
+              Uint8List? enhancedBytes;
+              if (mode == 'bokeh') {
+                final dummyXFile = XFile.fromData(rawBytes, name: 'bokeh.jpg', mimeType: 'image/jpeg');
+                final (_, styledBytes) = await applyPhotoStyle(dummyXFile, rawBytes, ProductPhotoStyle.dslrBokeh);
+                enhancedBytes = styledBytes;
+              } else if (mode == 'studio_white') {
+                try {
+                  final client = Dio();
+                  final res = await client.post(
+                    '${ApiConstants.baseUrl}/api/v1/ai/enhance-product-image',
+                    data: {
+                      'image_base64': base64Encode(rawBytes),
+                      'mode': 'studio_white',
+                    },
+                    options: Options(receiveTimeout: const Duration(seconds: 25)),
+                  );
+                  if (res.statusCode == 200 && res.data != null) {
+                    final data = res.data['data'] ?? res.data;
+                    final b64 = data['image_base64']?.toString() ?? '';
+                    if (b64.isNotEmpty) {
+                      enhancedBytes = base64Decode(b64);
+                    }
+                  }
+                } catch (apiErr) {
+                  debugPrint('[InventoryScreen] Backend studio enhance notice: $apiErr');
+                }
+                if (enhancedBytes == null || enhancedBytes.isEmpty) {
+                  final dummyXFile = XFile.fromData(rawBytes, name: 'hdr.jpg', mimeType: 'image/jpeg');
+                  final (_, styledBytes) = await applyPhotoStyle(dummyXFile, rawBytes, ProductPhotoStyle.studioHdr);
+                  enhancedBytes = styledBytes;
+                }
+              }
+
+              if (enhancedBytes != null && enhancedBytes.isNotEmpty) {
+                setModalState(() {
+                  pendingImageBytes[imageKey] = enhancedBytes!;
+                });
+                if (sheetCtx.mounted) {
+                  ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                    SnackBar(
+                      content: Text(mode == 'bokeh'
+                          ? (sheetCtx.isHindi ? '✨ DSLR बैकग्राउंड ब्लर सफलतापूर्वक लागू हुआ!' : '✨ DSLR Background Blur Applied!')
+                          : (sheetCtx.isHindi ? '🎨 स्टूडियो बैकग्राउंड सफलतापूर्वक लागू हुआ!' : '🎨 Studio Background Applied!')),
+                      backgroundColor: AppColors.success,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            } catch (e) {
+              debugPrint('[InventoryScreen] Enhance image failed: $e');
+            } finally {
+              if (sheetCtx.mounted) {
+                setModalState(() => isEnhancingImage = false);
+              }
+            }
+          }
+
+          Future<void> runAiAutofill([String? primaryTarget]) async {
+            if (isAiScanning) return;
+
+            final targetKey = primaryTarget ??
+                (productImages.isNotEmpty
+                    ? productImages.lastWhere(
+                        (p) => pendingImageBytes.containsKey(p) || pendingXFiles.containsKey(p) || isLocalFilePath(p),
+                        orElse: () => productImages.first,
+                      )
+                    : null);
+
+            if (targetKey == null || targetKey.isEmpty) {
+              if (sheetCtx.mounted) {
+                ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                  SnackBar(
+                    content: Text(sheetCtx.isHindi
+                        ? 'कृपया विश्लेषण के लिए पहले एक तस्वीर चुनें'
+                        : 'Please pick an image first for AI analysis'),
+                    backgroundColor: AppColors.warning,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+              return;
+            }
+
+            setModalState(() {
+              isAiScanning = true;
+            });
+
+            try {
+              final rawBytes = await resolveImageBytes(targetKey);
+              if (rawBytes == null || rawBytes.isEmpty) {
+                if (sheetCtx.mounted) {
+                  ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                    SnackBar(
+                      content: Text(sheetCtx.isHindi ? 'तस्वीर लोड नहीं हो सकी' : 'Could not load photo'),
+                      backgroundColor: AppColors.error,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+                return;
+              }
+
+              // Fast downscale (max 1024px, 80% quality) for quick upload
+              final normalized = await normalizeBytes(rawBytes, maxDimension: 1024, quality: 80);
+              final base64String = base64Encode(normalized);
+              final String mimeType = targetKey.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
               final aiRepo = AiRepository();
 
-              // 1. Try Smart Studio Scan first (Cloudflare AI background removal + Studio Compositing + Gemini Vision)
-              var resp = await aiRepo.smartStudioScan(imageBase64: base64String, mimeType: mimeType);
-              if (!resp.success || resp.data == null) {
-                // Seamless fallback to standard scan if studio service had network hiccup
-                resp = await aiRepo.scanProduct(imageBase64: base64String, mimeType: mimeType);
-              }
+              final resp = await aiRepo.scanProduct(imageBase64: base64String, mimeType: mimeType);
 
               if (resp.success && resp.data != null) {
                 final rawPayload = resp.data!;
@@ -1441,19 +1326,14 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 final studioImageUrl = rawPayload['studio_image_url']?.toString().trim() ?? '';
 
                 setModalState(() {
-                  // Replace local preview with studio image if generated
                   if (studioImageUrl.isNotEmpty && (studioImageUrl.startsWith('http') || studioImageUrl.startsWith('/images/'))) {
-                    final idx = productImages.indexOf(imagePathOrKey);
+                    final idx = productImages.indexOf(targetKey);
                     if (idx != -1) {
                       productImages[idx] = studioImageUrl;
-                      if (imageBytes != null) {
-                        pendingImageBytes[studioImageUrl] = imageBytes;
-                      }
+                      pendingImageBytes[studioImageUrl] = rawBytes;
                     } else if (!productImages.contains(studioImageUrl)) {
                       productImages.insert(0, studioImageUrl);
-                      if (imageBytes != null) {
-                        pendingImageBytes[studioImageUrl] = imageBytes;
-                      }
+                      pendingImageBytes[studioImageUrl] = rawBytes;
                     }
                   }
                   // 1. Name
@@ -1478,7 +1358,14 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     categoryCtrl.text = canonical;
                   }
 
-                  // 4. Weight: Intentionally omitted from AI Auto-Fill per user request
+                  // 4. Weight (populate if detected and empty)
+                  final rawWeight = data['weight'];
+                  if (rawWeight != null && weightCtrl.text.trim().isEmpty) {
+                    final w = double.tryParse(rawWeight.toString()) ?? 0;
+                    if (w > 0) {
+                      weightCtrl.text = (w == w.roundToDouble()) ? w.toStringAsFixed(0) : w.toString();
+                    }
+                  }
 
                   // 5. Unit: Intelligent mapping to valid inventory dropdown values ('g', 'kg', 'ml', 'litre', 'pcs', 'pack', 'box', 'dozen')
                   final rawUnit = data['unit']?.toString().toLowerCase().trim() ?? '';
@@ -1492,7 +1379,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     unit = 'litre';
                   } else if (rawUnit == 'pcs' || rawUnit == 'piece' || rawUnit == 'pieces' || rawUnit == 'pair' || rawUnit == 'meter') {
                     unit = 'pcs';
-                  } else if (rawUnit == 'pack' || rawUnit == 'packet' || rawUnit == 'pouch') {
+                  } else if (rawUnit == 'pack' || rawUnit == 'packet' || rawUnit == 'pouch' || rawUnit == 'bottle') {
                     unit = 'pack';
                   } else if (rawUnit == 'box' || rawUnit == 'peti') {
                     unit = 'box';
@@ -1518,7 +1405,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     }
                   }
 
-                  // 8. Cost Price
+                  // 8. Cost Price (Wholesale Procurement Estimate)
                   final rawCost = data['estimated_cost'];
                   if (rawCost != null) {
                     final cp = double.tryParse(rawCost.toString()) ?? 0;
@@ -1527,13 +1414,35 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     }
                   }
 
-                  // 9. Description
-                  final rawDesc = data['description']?.toString().trim() ?? '';
-                  if (rawDesc.isNotEmpty) {
-                    descriptionCtrl.text = rawDesc;
+                  // 9. Minimum Stock Alert
+                  final rawMinStock = data['min_stock_alert'];
+                  if (rawMinStock != null && (lowStockCtrl.text.trim().isEmpty || lowStockCtrl.text.trim() == '5')) {
+                    final ms = int.tryParse(rawMinStock.toString()) ?? 0;
+                    if (ms > 0) {
+                      lowStockCtrl.text = ms.toString();
+                    }
                   }
 
-                  // 10. Barcode / SKU
+                  // 10. Description & Key Features
+                  var fullDesc = data['description']?.toString().trim() ?? '';
+                  if (data['key_features'] is List && (data['key_features'] as List).isNotEmpty) {
+                    final bullets = (data['key_features'] as List)
+                        .map((e) => '• ${e.toString().trim()}')
+                        .where((s) => s.length > 2)
+                        .join('\n');
+                    if (bullets.isNotEmpty) {
+                      if (fullDesc.isNotEmpty) {
+                        fullDesc = '$fullDesc\n\nKey Highlights:\n$bullets';
+                      } else {
+                        fullDesc = bullets;
+                      }
+                    }
+                  }
+                  if (fullDesc.isNotEmpty) {
+                    descriptionCtrl.text = fullDesc;
+                  }
+
+                  // 11. Barcode / SKU
                   if (barcodeCtrl.text.trim().isEmpty) {
                     final rawBarcode = data['barcode']?.toString().trim() ?? '';
                     final rawSku = data['suggested_sku']?.toString().trim() ?? '';
@@ -1544,44 +1453,147 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     }
                   }
 
-                  // 11. Attributes (Deep specs)
-                  if (data['attributes'] is Map) {
-                    final attrMap = Map<String, dynamic>.from(data['attributes']);
-                    attrMap.forEach((k, v) {
-                      final cleanK = k.toString().trim();
-                      final cleanV = v.toString().trim();
-                      if (cleanK.isNotEmpty && cleanV.isNotEmpty && !cleanK.toLowerCase().contains('specs')) {
-                        final formattedKey = CategoryRegistry.formatCategoryName(cleanK);
-                        final existing = customAttrPairs.firstWhere(
-                          (p) => p.key.text.toLowerCase().trim() == formattedKey.toLowerCase().trim(),
-                          orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
+                  // Helper function to test if an attribute is high-value & required (avoids useless boilerplate)
+                  bool isUsefulAttribute(String k, String v) {
+                    final kClean = k.toLowerCase().trim();
+                    final vClean = v.toLowerCase().trim();
+                    if (kClean.isEmpty || vClean.isEmpty) return false;
+
+                    // 1. Reject placeholder/dummy values
+                    const dummyValues = {
+                      'n/a', 'na', 'none', 'unknown', 'null', 'not specified',
+                      'not applicable', 'standard', 'generic', '-', '--', 'nil',
+                      'undefined', 'default', 'regular', 'general'
+                    };
+                    if (dummyValues.contains(vClean)) return false;
+
+                    // 2. Reject overly long values (> 45 chars) — custom attributes should be concise specs
+                    if (vClean.length > 45) return false;
+
+                    // 3. Reject generic advice, warnings, or storage sentences
+                    if (vClean.contains('store in') ||
+                        vClean.contains('keep away') ||
+                        vClean.contains('keep out') ||
+                        vClean.contains('as directed') ||
+                        vClean.contains('refer pack') ||
+                        vClean.contains('sunlight') ||
+                        vClean.contains('consult')) {
+                      return false;
+                    }
+
+                    // 4. Reject redundant or useless keys
+                    const uselessKeys = {
+                      'storage instructions', 'storage', 'usage', 'how to use',
+                      'instructions', 'directions', 'care instructions', 'wash care',
+                      'warning', 'safety warning', 'caution', 'disclaimer', 'notice',
+                      'country of origin', 'origin',
+                      // Redundant with primary form fields:
+                      'name', 'product name', 'brand', 'category', 'subcategory',
+                      'sub category', 'mrp', 'price', 'selling price', 'cost price',
+                      'weight', 'net weight', 'unit', 'net quantity', 'barcode',
+                      'sku', 'description', 'highlights'
+                    };
+                    if (uselessKeys.contains(kClean)) return false;
+
+                    return true;
+                  }
+
+                  // Helper closure to inject or update custom attribute pair in UI
+                  void setCustomAttr(String key, String val) {
+                    final cleanK = key.trim();
+                    final cleanV = val.trim();
+                    if (!isUsefulAttribute(cleanK, cleanV)) return;
+
+                    final formattedKey = cleanK.contains(' ')
+                        ? cleanK
+                        : cleanK.split(RegExp(r'[\s_]+')).map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '').join(' ');
+
+                    final existing = customAttrPairs.firstWhere(
+                      (p) => p.key.text.toLowerCase().trim() == formattedKey.toLowerCase().trim(),
+                      orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
+                    );
+                    if (existing.key.text.isEmpty) {
+                      if (customAttrPairs.length < 6) { // Max 6 high-value specs to prevent UI bloat
+                        customAttrPairs.add(MapEntry(
+                          TextEditingController(text: formattedKey),
+                          TextEditingController(text: cleanV),
+                        ));
+                      }
+                    } else if (existing.value.text.trim().isEmpty) {
+                      existing.value.text = cleanV;
+                    }
+                  }
+
+                  // 12. Indian Trade Color Details & Calibration (Only for Color-Critical Items)
+                  final isColorCritical = isColorCriticalProduct(
+                    category: categoryCtrl.text,
+                    name: nameCtrl.text,
+                  );
+
+                  if (isColorCritical) {
+                    if (data['color_details'] is Map) {
+                      final cd = Map<String, dynamic>.from(data['color_details'] as Map);
+                      if (cd['primary_shade'] is Map) {
+                        activeColorShade = ColorShadeModel.fromMap(Map<String, dynamic>.from(cd['primary_shade'] as Map));
+                      }
+                      if (cd['alternatives'] is List) {
+                        activeColorAlternatives = (cd['alternatives'] as List)
+                            .whereType<Map>()
+                            .map((m) => ColorShadeModel.fromMap(Map<String, dynamic>.from(m)))
+                            .toList();
+                      }
+                    } else {
+                      final rawColor = data['attributes']?['Color']?.toString() ?? '';
+                      if (rawColor.isNotEmpty) {
+                        activeColorShade = kIndianTextileShadeRegistry.firstWhere(
+                          (s) => rawColor.toLowerCase().contains(s.shadeName.toLowerCase()) || rawColor.toLowerCase().contains(s.hindiName.toLowerCase()),
+                          orElse: () => ColorShadeModel(shadeName: rawColor, hindiName: '', hexCode: '#808080'),
                         );
-                        if (existing.key.text.isEmpty) {
-                          customAttrPairs.add(MapEntry(
-                            TextEditingController(text: formattedKey),
-                            TextEditingController(text: cleanV),
-                          ));
-                        } else if (existing.value.text.trim().isEmpty) {
-                          existing.value.text = cleanV;
-                        }
+                      }
+                    }
+
+                    if (activeColorShade != null) {
+                      setCustomAttr('Color', activeColorShade!.displayName);
+                    }
+                  } else {
+                    // Non-color product (Grocery, FMCG, Medicine, Hardware) -> Never attach color
+                    activeColorShade = null;
+                    activeColorAlternatives = [];
+                    customAttrPairs.removeWhere((p) {
+                      final k = p.key.text.toLowerCase().trim();
+                      return k == 'color' || k == 'colour';
+                    });
+                  }
+
+                  // 13. Specialized Product Attributes from AI (Filtered for high-value specs only)
+                  if (data['attributes'] is Map) {
+                    final attrMap = Map<String, dynamic>.from(data['attributes'] as Map);
+                    attrMap.forEach((k, v) {
+                      if (v != null && v.toString().trim().isNotEmpty) {
+                        setCustomAttr(k.toString(), v.toString());
                       }
                     });
                   }
 
-                  // 12. Ingredients or Material composition specs
+                  // 13. Key Ingredients / Composition (Only if concise, clean, and not boilerplate)
                   final rawIngredients = data['ingredients']?.toString().trim() ?? '';
-                  if (rawIngredients.isNotEmpty && !rawIngredients.toLowerCase().contains('standard')) {
-                    final existing = customAttrPairs.firstWhere(
-                      (p) => p.key.text.toLowerCase().contains('ingredient') || p.key.text.toLowerCase().contains('material'),
-                      orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
-                    );
-                    if (existing.key.text.isEmpty) {
-                      customAttrPairs.add(MapEntry(
-                        TextEditingController(text: 'Key Composition'),
-                        TextEditingController(text: rawIngredients),
-                      ));
+                  if (rawIngredients.isNotEmpty && rawIngredients.length <= 40 && !rawIngredients.toLowerCase().contains('standard')) {
+                    setCustomAttr('Ingredients', rawIngredients);
+                  }
+
+                  // 14. HSN Code & GST Rate (Only if genuine valid values)
+                  final rawHsn = data['hsn_code']?.toString().trim() ?? '';
+                  if (rawHsn.isNotEmpty && rawHsn.length >= 4 && RegExp(r'^\d+$').hasMatch(rawHsn) && rawHsn != '0000') {
+                    setCustomAttr('HSN Code', rawHsn);
+                  }
+                  final rawGst = data['gst_rate'];
+                  if (rawGst != null) {
+                    final g = double.tryParse(rawGst.toString()) ?? 0;
+                    if (g > 0 && g <= 28) {
+                      setCustomAttr('GST Rate', '${g.toStringAsFixed(0)}%');
                     }
                   }
+
                 });
 
                 if (sheetCtx.mounted) {
@@ -1594,13 +1606,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              studioImageUrl.isNotEmpty
-                                  ? (sheetCtx.isHindi
-                                      ? '✨ AI स्टूडियो: फोटो तैयार + 10+ विवरण लोड हुए!'
-                                      : '✨ AI Studio: Studio photo ready + 10+ details loaded!')
-                                  : (sheetCtx.isHindi
-                                      ? '✨ AI ने उत्पाद के 10+ विवरण लोड किए: ${data['name'] ?? ''}'
-                                      : '✨ AI Auto-Filled 10+ details for: ${data['name'] ?? ''}'),
+                              sheetCtx.isHindi
+                                  ? '✨ AI ने प्रोडक्ट विवरण ऑटो-भर दिया: ${data['name'] ?? ''}'
+                                  : '✨ AI Auto-Filled Details: ${data['name'] ?? ''}',
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ),
@@ -1642,6 +1650,24 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                   isAiScanning = false;
                 });
               }
+            }
+          }
+
+          void addProductImages(List<(XFile, Uint8List?)> files) {
+            if (files.isEmpty) return;
+            var addedKeys = <String>[];
+
+            setModalState(() {
+              addedKeys = registerPendingProductImages(
+                images: productImages,
+                files: pendingXFiles,
+                bytesByKey: pendingImageBytes,
+                captures: files,
+              );
+            });
+
+            if (addedKeys.isNotEmpty) {
+              runAiAutofill(addedKeys.first);
             }
           }
 
@@ -1715,149 +1741,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     ),
                     Divider(height: 20, color: sheetCtx.colorBorder),
 
-                    // ⚡ PROMINENT GLOBAL MASTER BARCODE AUTO-FILL BANNER
-                    if (!isEdit) ...[
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 14),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 20),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    sheetCtx.isHindi
-                                        ? '⚡ बारकोड स्कैन करें (ऑटो-फिल)'
-                                        : '⚡ Scan Barcode to Auto-Fill',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: sheetCtx.colorTextPrimary,
-                                    ),
-                                  ),
-                                  Text(
-                                    sheetCtx.isHindi
-                                        ? 'Dove, Maggi, Parle-G आदि का नाम, ब्रांड, MRP स्वतः भरें'
-                                        : 'Auto-fill Name, Brand, Category, MRP for Dove, Maggi, Parle-G...',
-                                    style: TextStyle(fontSize: 11, color: sheetCtx.colorTextMuted),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                elevation: 0,
-                              ),
-                              icon: const Icon(Icons.camera_alt_outlined, size: 16),
-                              label: Text(
-                                sheetCtx.isHindi ? 'स्कैन' : 'Scan',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                              ),
-                              onPressed: () async {
-                                await MobileBarcodeScannerDialog.show(
-                                  sheetCtx,
-                                  title: sheetCtx.isHindi ? 'बारकोड स्कैन करें' : 'Scan Product Barcode',
-                                  autoCloseOnSuccess: true,
-                                  successMessage: sheetCtx.isHindi ? '✓ बारकोड से विवरण लोड हुआ!' : '✓ Product Details Loaded!',
-                                  onBarcodeScanned: (scanned) async {
-                                    final clean = scanned.trim();
-                                    if (clean.isNotEmpty) {
-                                      applyMasterCatalogAutofill(clean, forceOverwrite: true);
-                                      setModalState(() {});
-                                    }
-                                    return true;
-                                  },
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    // ⚡ QUICK PRESET TEMPLATES BAR (For Fast 1-Tap Data Entry)
-                    if (!isEdit) ...[
-                      Row(
-                        children: [
-                          const Icon(Icons.bolt_rounded, size: 16, color: AppColors.primary),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Quick Fill Presets:',
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: sheetCtx.colorTextMuted),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildPresetChip(sheetCtx, '🥛 Dairy / Milk', () {
-                              setModalState(() {
-                                categoryCtrl.text = 'Dairy, Bakery & Frozen';
-                                unit = 'litre';
-                                stockCtrl.text = '20';
-                                lowStockCtrl.text = '5';
-                              });
-                            }),
-                            _buildPresetChip(sheetCtx, '🌾 Grocery / Atta', () {
-                              setModalState(() {
-                                categoryCtrl.text = 'Grocery & Staples';
-                                unit = 'kg';
-                                stockCtrl.text = '50';
-                                lowStockCtrl.text = '10';
-                              });
-                            }),
-                            _buildPresetChip(sheetCtx, '🥤 Drinks / Snacks', () {
-                              setModalState(() {
-                                categoryCtrl.text = 'Snacks & Munchies';
-                                unit = 'packet';
-                                stockCtrl.text = '30';
-                                lowStockCtrl.text = '5';
-                              });
-                            }),
-                            _buildPresetChip(sheetCtx, '📱 Mobile Acc.', () {
-                              setModalState(() {
-                                categoryCtrl.text = 'Mobile & Accessories';
-                                unit = 'piece';
-                                allowBargain = true;
-                                stockCtrl.text = '15';
-                                lowStockCtrl.text = '3';
-                              });
-                            }),
-                            _buildPresetChip(sheetCtx, '🧼 Personal Care', () {
-                              setModalState(() {
-                                categoryCtrl.text = 'Personal Care & Beauty';
-                                unit = 'piece';
-                                stockCtrl.text = '25';
-                                lowStockCtrl.text = '5';
-                              });
-                            }),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-
                     // SECTION 1: PRODUCT IMAGES (Max 10 Images)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1884,35 +1767,56 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                 sheetCtx,
                                 maxAllowed: 10,
                                 currentCount: productImages.length,
-                                onFilesSelected: (files) {
-                                  if (files.isEmpty) return;
-                                  String? firstAddedKey;
-                                  setModalState(() {
-                                    for (final (f, bytes) in files) {
-                                      if (productImages.length < 10) {
-                                        final key = f.path.trim().isNotEmpty
-                                            ? f.path.trim()
-                                            : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
-                                        if (!productImages.contains(key)) {
-                                          productImages.add(key);
-                                          pendingXFiles[key] = f;
-                                          if (bytes != null && bytes.isNotEmpty) {
-                                            pendingImageBytes[key] = bytes;
-                                          }
-                                          firstAddedKey ??= key;
-                                        }
-                                      }
-                                    }
-                                    if (firstAddedKey != null) {
-                                      runAiAutofill(firstAddedKey!);
-                                    }
-                                  });
-                                },
+                                onFilesSelected: addProductImages,
                               );
                             },
                           ),
                       ],
                     ),
+                    // Proposal 5: Guided Photo Angle Chips
+                    if (productImages.length < 3) ...[
+                      const SizedBox(height: 6),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildPhotoGuideChip(
+                              sheetCtx,
+                              icon: Icons.camera_alt_outlined,
+                              label: sheetCtx.isHindi ? '📷 1. मुख्य फोटो (Front)' : '📷 1. Front Pack',
+                              onTap: () => _showProductImageSourceSheet(
+                                sheetCtx,
+                                maxAllowed: 10,
+                                currentCount: productImages.length,
+                                onFilesSelected: addProductImages,
+                              ),
+                            ),
+                            _buildPhotoGuideChip(
+                              sheetCtx,
+                              icon: Icons.photo_library_outlined,
+                              label: sheetCtx.isHindi ? '📷 2. सामग्री / MRP (Back)' : '📷 2. Back / Ingredients',
+                              onTap: () => _showProductImageSourceSheet(
+                                sheetCtx,
+                                maxAllowed: 10,
+                                currentCount: productImages.length,
+                                onFilesSelected: addProductImages,
+                              ),
+                            ),
+                            _buildPhotoGuideChip(
+                              sheetCtx,
+                              icon: Icons.qr_code_scanner_rounded,
+                              label: sheetCtx.isHindi ? '📷 3. बारकोड (Barcode Tag)' : '📷 3. Barcode Tag',
+                              onTap: () => _showProductImageSourceSheet(
+                                sheetCtx,
+                                maxAllowed: 10,
+                                currentCount: productImages.length,
+                                onFilesSelected: addProductImages,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Container(
                       height: 80,
@@ -2048,30 +1952,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     sheetCtx,
                                     maxAllowed: 10,
                                     currentCount: productImages.length,
-                                    onFilesSelected: (files) {
-                                      if (files.isEmpty) return;
-                                      String? firstAddedKey;
-                                      setModalState(() {
-                                        for (final (f, bytes) in files) {
-                                          if (productImages.length < 10) {
-                                            final key = f.path.trim().isNotEmpty
-                                                ? f.path.trim()
-                                                : 'upload_${DateTime.now().microsecondsSinceEpoch}_${f.name}';
-                                            if (!productImages.contains(key)) {
-                                              productImages.add(key);
-                                              pendingXFiles[key] = f;
-                                              if (bytes != null && bytes.isNotEmpty) {
-                                                pendingImageBytes[key] = bytes;
-                                              }
-                                              firstAddedKey ??= key;
-                                            }
-                                          }
-                                        }
-                                        if (firstAddedKey != null) {
-                                          runAiAutofill(firstAddedKey!);
-                                        }
-                                      });
-                                    },
+                                    onFilesSelected: addProductImages,
                                   );
                                 },
                                 borderRadius: BorderRadius.circular(10),
@@ -2169,6 +2050,97 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           ],
                         ),
                       ),
+
+                      // DSLR & STUDIO PHOTO ENHANCE CONTROLS
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: sheetCtx.colorSurface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.amber.shade700.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            if (isEnhancingImage)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber),
+                              )
+                            else
+                              const Icon(Icons.camera_enhance_rounded, color: Colors.amber, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    sheetCtx.isHindi ? 'DSLR फोटो पॉलिश' : 'DSLR Studio Polish',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    isEnhancingImage
+                                        ? (sheetCtx.isHindi ? 'बैकग्राउंड को प्रोसेस कर रहा है...' : 'Processing background...')
+                                        : (sheetCtx.isHindi ? 'बैकग्राउंड ब्लर करें या स्टूडियो लुक दें' : 'Blur BG or Studio White'),
+                                    style: TextStyle(fontSize: 10, color: sheetCtx.colorTextMuted),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!isEnhancingImage) ...[
+                              InkWell(
+                                onTap: () => enhanceImage(productImages.first, mode: 'bokeh'),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade700,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.blur_on_rounded, color: Colors.white, size: 13),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        sheetCtx.isHindi ? 'DSLR ब्लर' : 'DSLR Blur',
+                                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                onTap: () => enhanceImage(productImages.first, mode: 'studio_white'),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepPurple,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.auto_fix_high_rounded, color: Colors.white, size: 13),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        sheetCtx.isHindi ? 'स्टूडियो व्हाइट' : 'Studio White',
+                                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 16),
 
@@ -2182,6 +2154,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             decoration: InputDecoration(
                               labelText: sheetCtx.isHindi ? 'ब्रांड (Brand)' : 'Brand / Company',
                               hintText: 'e.g. Fortune, Amul, Tata',
+                              suffixIcon: AppVoiceIconButton(
+                                controller: brandCtrl,
+                                hint: sheetCtx.isHindi ? 'ब्रांड' : 'Brand',
+                                onSubmitted: (_) => setModalState(() {}),
+                              ),
                             ),
                             onChanged: (_) => setModalState(() {}),
                           ),
@@ -2305,6 +2282,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         hintText: sheetCtx.isHindi
                             ? 'उदा. Fortune Refined Sunflower Oil 1L'
                             : 'e.g. Fortune Refined Sunflower Oil 1L',
+                        suffixIcon: AppVoiceIconButton(
+                          controller: nameCtrl,
+                          hint: sheetCtx.tr('inv_field_name'),
+                          onSubmitted: (_) => setModalState(() {}),
+                        ),
                       ),
                       onChanged: (_) => setModalState(() {}),
                     ),
@@ -2385,6 +2367,129 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     ),
                     const SizedBox(height: 12),
 
+                    // 📦 PROPOSAL 3: WHOLESALE CARTON / BOX PACK RATIO CONVERTER
+                    InkWell(
+                      onTap: () {
+                        setModalState(() {
+                          showCartonConverter = !showCartonConverter;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: sheetCtx.colorSurfaceSubtle,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: sheetCtx.colorBorder),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.primary),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sheetCtx.isHindi
+                                      ? '📦 थोक पेटी/बॉक्स मूल्य कैलकुलेटर'
+                                      : '📦 Wholesale Box/Peti Pack Ratio Converter',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: sheetCtx.colorTextPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Icon(
+                              showCartonConverter ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                              size: 18,
+                              color: sheetCtx.colorTextMuted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (showCartonConverter) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: sheetCtx.colorPrimaryLight,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: boxCostCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: InputDecoration(
+                                      labelText: sheetCtx.isHindi ? 'पेटी की कुल खरीद (₹)' : 'Box Cost (₹)',
+                                      hintText: 'e.g. 240',
+                                      prefixText: '₹ ',
+                                      isDense: true,
+                                    ),
+                                    onChanged: (_) => setModalState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: boxQtyCtrl,
+                                    keyboardType: TextInputType.number,
+                                    decoration: InputDecoration(
+                                      labelText: sheetCtx.isHindi ? 'एक पेटी में कुल पीस' : 'Items in Box',
+                                      hintText: 'e.g. 24',
+                                      isDense: true,
+                                    ),
+                                    onChanged: (_) => setModalState(() {}),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (calculatedUnitCost > 0) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    sheetCtx.isHindi
+                                        ? 'एक पीस की खरीद: ₹${calculatedUnitCost.toStringAsFixed(2)}'
+                                        : 'Unit Cost: ₹${calculatedUnitCost.toStringAsFixed(2)}',
+                                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                  ),
+                                  InkWell(
+                                    onTap: () {
+                                      setModalState(() {
+                                        costPriceCtrl.text = calculatedUnitCost.toStringAsFixed(2);
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        sheetCtx.isHindi ? 'लागू करें' : 'Apply',
+                                        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+
                     // 🧮 1-TAP PROFIT MARGIN AUTO-CALCULATOR CHIPS
                     if (liveCost > 0) ...[
                       Row(
@@ -2432,33 +2537,14 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       const SizedBox(height: 12),
                     ],
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: comparePriceCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: 'MRP / Compare Price',
-                              prefixText: '₹ ',
-                            ),
-                            onChanged: (_) => setModalState(() {}),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: floorPriceCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: 'Floor Price (Min Safe Rate)',
-                              hintText: 'Cost shield limit',
-                              prefixText: '₹ ',
-                            ),
-                            onChanged: (_) => setModalState(() {}),
-                          ),
-                        ),
-                      ],
+                    TextField(
+                      controller: comparePriceCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'MRP / Compare Price',
+                        prefixText: '₹ ',
+                      ),
+                      onChanged: (_) => setModalState(() {}),
                     ),
 
                     // LIVE PRICING DATA INTEGRITY FEEDBACK BADGES
@@ -2632,10 +2718,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           child: TextField(
                             controller: barcodeCtrl,
                             onChanged: (val) {
-                              final clean = val.trim();
-                              if (clean.length >= 8) {
-                                applyMasterCatalogAutofill(clean, forceOverwrite: nameCtrl.text.trim().isEmpty || nameCtrl.text.trim() == 'New Product');
-                              }
                               setModalState(() {});
                             },
                             decoration: InputDecoration(
@@ -2653,7 +2735,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     onBarcodeScanned: (scanned) async {
                                       final clean = scanned.trim();
                                       if (clean.isNotEmpty) {
-                                        applyMasterCatalogAutofill(clean, forceOverwrite: true);
+                                        barcodeCtrl.text = clean;
                                         setModalState(() {});
                                       }
                                       return true;
@@ -2684,82 +2766,34 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         ),
                       ],
                     ),
-                    () {
-                      final currentBarcode = barcodeCtrl.text.trim();
-                      if (lastAutofilledBarcode != currentBarcode && lastAutofilledBarcode != null) {
-                        // Tracking manual barcode edits
-                      }
-                      final masterMatch = currentBarcode.length >= 8
-                          ? SmartBarcodeCatalogService.lookupSync(currentBarcode)
-                          : null;
-                      if (masterMatch == null) return const SizedBox.shrink();
-
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.verified_rounded, size: 16, color: AppColors.success),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${masterMatch.brand}: ${masterMatch.name}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.success,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      sheetCtx.isHindi
-                                          ? 'मास्टर कैटलॉग: ${masterMatch.category} • MRP ₹${masterMatch.mrp.toStringAsFixed(0)}'
-                                          : 'Master Catalog: ${masterMatch.category} • MRP ₹${masterMatch.mrp.toStringAsFixed(0)}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: sheetCtx.colorTextMuted,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                ),
-                                onPressed: () {
-                                  lastAutofilledBarcode = null;
-                                  applyMasterCatalogAutofill(currentBarcode);
-                                },
-                                child: Text(
-                                  sheetCtx.isHindi ? 'पुनः भरें' : 'Refill',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.success,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }(),
                     const SizedBox(height: 12),
+
+                    // 🎨 INDIAN TRADE COLOR SHADE CALIBRATOR (Only for Color-Critical Products)
+                    if (activeColorShade != null &&
+                        isColorCriticalProduct(category: categoryCtrl.text, name: nameCtrl.text)) ...[
+                      ColorShadeSelector(
+                        initialShade: activeColorShade!,
+                        alternatives: activeColorAlternatives,
+                        onShadeSelected: (newShade) {
+                          setModalState(() {
+                            activeColorShade = newShade;
+                            final existing = customAttrPairs.firstWhere(
+                              (p) => p.key.text.toLowerCase().trim() == 'color',
+                              orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
+                            );
+                            if (existing.key.text.isEmpty) {
+                              customAttrPairs.add(MapEntry(
+                                TextEditingController(text: 'Color'),
+                                TextEditingController(text: newShade.displayName),
+                              ));
+                            } else {
+                              existing.value.text = newShade.displayName;
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
 
                     // SECTION 5: DYNAMIC CUSTOM SPECIFICATIONS & ATTRIBUTES
                     Row(
@@ -2877,7 +2911,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     ),
                     const SizedBox(height: 12),
 
-                    // TOGGLES ROW (Allow Bargain, Show Price Online, Featured)
+                    // TOGGLES ROW (Show Price Online, Featured)
                     Material(
                       color: Colors.transparent,
                       child: SwitchListTile.adaptive(
@@ -2897,18 +2931,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         value: isPricePublic,
                         activeThumbColor: AppColors.primary,
                         onChanged: (val) => setModalState(() => isPricePublic = val),
-                      ),
-                    ),
-                    Material(
-                      color: Colors.transparent,
-                      child: SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        title: const Text('Daily Mandi Rate / Counter Pricing Item', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-                        subtitle: const Text('For loose staples & volatile items confirmed at counter', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                        value: allowBargain,
-                        activeThumbColor: AppColors.primary,
-                        onChanged: (val) => setModalState(() => allowBargain = val),
                       ),
                     ),
                     Material(
@@ -3071,7 +3093,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                   final price = double.tryParse(priceCtrl.text) ?? 0.0;
                                   final costPrice = double.tryParse(costPriceCtrl.text) ?? 0.0;
                                   final comparePrice = double.tryParse(comparePriceCtrl.text) ?? 0.0;
-                                  final floorPrice = double.tryParse(floorPriceCtrl.text) ?? 0.0;
                                   final stock = int.tryParse(stockCtrl.text) ?? 0;
                                   final lowStock = int.tryParse(lowStockCtrl.text) ?? 5;
                                   final weight = double.tryParse(weightCtrl.text) ?? 0.0;
@@ -3120,19 +3141,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     return;
                                   }
 
-                                  // Constraint 5: Floor Price Constraint
-                                  if (floorPrice > price) {
-                                    ScaffoldMessenger.of(sheetCtx).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '${sheetCtx.tr('inv_val_floor_more')} (₹${floorPrice.toStringAsFixed(0)} > ₹${price.toStringAsFixed(0)})',
-                                        ),
-                                        backgroundColor: AppColors.error,
-                                        duration: const Duration(seconds: 4),
-                                      ),
-                                    );
-                                    return;
-                                  }
 
                                   // Constraint 6: Stock Validation
                                   if (stock < 0) {
@@ -3213,8 +3221,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                         'price': price,
                                         'cost_price': costPrice,
                                         'compare_price': comparePrice,
-                                        'floor_price': floorPrice,
-                                        'allow_bargain': allowBargain,
                                         'stock': stock,
                                         'stock_quantity': stock,
                                         'unit': unit,
@@ -3238,8 +3244,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                       price: price,
                                       costPrice: costPrice,
                                       comparePrice: comparePrice,
-                                      floorPrice: floorPrice,
-                                      allowBargain: allowBargain,
                                       stock: stock,
                                       unit: unit,
                                       category: categoryCtrl.text.trim(),
@@ -3912,7 +3916,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           elevation: 0,
           backgroundColor: context.colorSurface,
           surfaceTintColor: Colors.transparent,
-          automaticallyImplyLeading: false,
+          leading: const AppBackButton(fallbackRoute: '/merchant'),
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(1.0),
             child: Container(

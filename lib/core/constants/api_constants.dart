@@ -1,15 +1,22 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../storage/token_storage.dart';
 
 class ApiConstants {
-  // ⚡ Environment Switcher:
-  // Set isProduction to false for local Go backend testing (http://localhost:8080)
-  // Set isProduction to true for live production deployment
-  static const bool isProduction = true;
+  // Use the deployed API by default; local development can be explicitly enabled.
+  static const bool defaultIsProduction = bool.fromEnvironment(
+    'SHOP_SILO_PRODUCTION',
+    defaultValue: true,
+  );
+  static bool get isProduction => TokenStorage.getUseProduction(defaultValue: defaultIsProduction);
   static const String productionUrl = 'https://shopsiloapi.shopsilo.in';
   static const String localUrl = 'http://localhost:8080';
 
   static String get baseUrl {
+    final custom = TokenStorage.getCustomServerUrl();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
     if (isProduction) {
       return productionUrl;
     }
@@ -38,6 +45,7 @@ class ApiConstants {
   static const String health = '/health';
   static const String reports = '/reports';
   static const String telemetryError = '/reports/telemetry-error';
+  static const String appVersionCheck = '/api/v1/app/version-check';
 
   // --- 2. Auth Routes (Both & Shop) ---
   static const String sendOtp = '/auth/send-otp';
@@ -55,11 +63,10 @@ class ApiConstants {
   static const String shopCategories = '/shops/me/categories';
   static const String merchantCategories = '/api/v1/merchant/categories';
   static const String aiScanProduct = '/ai/scan-product';
-  static const String aiSmartStudioScan = '/ai/smart-studio-scan';
+  static const String aiMandiScan = '/ai/mandi-scan';
   static const String aiParseParchi = '/ai/parse-parchi';
   static const String aiVoiceBill = '/api/ai/voice-bill';
   static const String aiMarketingCampaign = '/api/ai/marketing-campaign';
-  static const String aiBargainAssist = '/ai/bargain-assist';
   static const String aiMerchantCopilot = '/ai/merchant-copilot';
   static const String aiSupplierInvoice = '/api/ai/supplier-invoice';
   static const String aiCrossSell = '/api/ai/cross-sell';
@@ -128,14 +135,12 @@ class ApiConstants {
   static const String posGstReport = '/shops/me/pos/gst-report';
   static const String posPark = '/shops/me/pos/park';
   static String posParkById(String id) => '/shops/me/pos/park/$id';
-  static const String posBargainAssist = '/shops/me/pos/bargain-assist';
   static const String posParseParchi = '/shops/me/pos/parse-parchi';
   static const String posWeeklyScorecard = '/shops/me/pos/weekly-scorecard';
   static String posCustomerRecentBasket(String phone) => '/shops/me/pos/customers/$phone/recent-basket';
   static const String posReturns = '/shops/me/pos/returns';
 
-  // --- 10A. Live Margin Floor Check & Touch Counter Hotkeys ---
-  static const String posMarginCheck = '/api/pos/margin-check';
+  // --- 10A. Touch Counter Hotkeys ---
   static const String posHotkeys = '/api/pos/hotkeys';
   static const String posHotkeysAutoPopulate = '/api/pos/hotkeys/auto-populate';
   static String posHotkeyById(String id) => '/api/pos/hotkeys/$id';
