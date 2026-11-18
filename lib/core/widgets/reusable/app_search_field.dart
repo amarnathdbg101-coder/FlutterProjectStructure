@@ -1,17 +1,23 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
+import '../../localization/language_controller.dart';
+import '../../services/voice_input_service.dart';
+import 'app_voice_icon_button.dart';
 
 /// Universal Production-Grade Search Input Field for ShopSilo.
 /// Features built-in debouncing, clear button, optional barcode scanner button,
-/// and consistent styling across POS, Inventory, Khata, and Procurement screens.
+/// speech-to-text voice search button, and consistent styling across screens.
 class AppSearchField extends StatefulWidget {
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
   final VoidCallback? onClear;
   final VoidCallback? onBarcodeTap;
   final String hintText;
   final bool autofocus;
+  final bool enableVoice;
+  final bool showSubmitButton;
   final Duration debounceDuration;
   final FocusNode? focusNode;
 
@@ -19,10 +25,13 @@ class AppSearchField extends StatefulWidget {
     super.key,
     this.controller,
     this.onChanged,
+    this.onSubmitted,
     this.onClear,
     this.onBarcodeTap,
     this.hintText = 'Search items by name, brand, or SKU...',
     this.autofocus = false,
+    this.enableVoice = true,
+    this.showSubmitButton = false,
     this.debounceDuration = const Duration(milliseconds: 250),
     this.focusNode,
   });
@@ -33,11 +42,15 @@ class AppSearchField extends StatefulWidget {
 
 class _AppSearchFieldState extends State<AppSearchField> {
   late final TextEditingController _internalController;
+  FocusNode? _internalFocusNode;
   Timer? _debounceTimer;
   bool _hasText = false;
 
   TextEditingController get _effectiveController =>
       widget.controller ?? _internalController;
+
+  FocusNode get _effectiveFocusNode =>
+      widget.focusNode ?? (_internalFocusNode ??= FocusNode());
 
   @override
   void initState() {
@@ -47,6 +60,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
     }
     _hasText = _effectiveController.text.isNotEmpty;
     _effectiveController.addListener(_onTextChange);
+    _effectiveFocusNode.addListener(_onFocusChange);
   }
 
   void _onTextChange() {
@@ -54,6 +68,10 @@ class _AppSearchFieldState extends State<AppSearchField> {
     if (_hasText != hasText) {
       setState(() => _hasText = hasText);
     }
+  }
+
+  void _onFocusChange() {
+    if (mounted) setState(() {});
   }
 
   void _handleChanged(String value) {
@@ -75,6 +93,8 @@ class _AppSearchFieldState extends State<AppSearchField> {
   @override
   void dispose() {
     _effectiveController.removeListener(_onTextChange);
+    _effectiveFocusNode.removeListener(_onFocusChange);
+    _internalFocusNode?.dispose();
     if (widget.controller == null) {
       _internalController.dispose();
     }
@@ -84,64 +104,179 @@ class _AppSearchFieldState extends State<AppSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 46,
-      decoration: BoxDecoration(
-        color: context.colorSurfaceSubtle,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colorBorder, width: 1.0),
-      ),
-      child: TextField(
-        controller: _effectiveController,
-        focusNode: widget.focusNode,
-        autofocus: widget.autofocus,
-        onChanged: _handleChanged,
-        textAlignVertical: TextAlignVertical.center,
-        style: TextStyle(
-          fontSize: 14,
-          color: context.colorTextPrimary,
-          fontWeight: FontWeight.w500,
-        ),
-        decoration: InputDecoration(
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          border: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          hintText: widget.hintText,
-          hintStyle: TextStyle(
-            fontSize: 13.5,
-            color: context.colorTextMuted,
-            fontWeight: FontWeight.normal,
-          ),
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            size: 20,
-            color: context.colorTextMuted,
-          ),
-          suffixIcon: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_hasText)
-                IconButton(
-                  icon: const Icon(Icons.cancel_rounded, size: 18),
-                  color: context.colorTextMuted,
-                  tooltip: 'Clear',
-                  splashRadius: 18,
-                  onPressed: _handleClear,
-                ),
-              if (widget.onBarcodeTap != null)
-                IconButton(
-                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-                  color: AppColors.primary,
-                  tooltip: 'Scan Barcode',
-                  splashRadius: 18,
-                  onPressed: widget.onBarcodeTap,
-                ),
+    final voiceService = AppVoiceInputService.instance;
+
+    return ListenableBuilder(
+      listenable: voiceService,
+      builder: (context, _) {
+        final isListening = voiceService.isListeningTo(_effectiveController);
+        final isFocused = _effectiveFocusNode.hasFocus;
+        bool isHindi = false;
+        try {
+          isHindi = context.isHindi;
+        } catch (_) {
+          isHindi = false;
+        }
+
+        final dynamicHint = isListening
+            ? (isHindi ? 'सुन रहे हैं... बोलिए' : 'Listening... speak now')
+            : widget.hintText;
+
+        return Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: context.colorSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isListening
+                  ? AppColors.error
+                  : (isFocused ? AppColors.primary : context.colorBorder),
+              width: isListening || isFocused ? 1.5 : 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isListening
+                    ? AppColors.error.withValues(alpha: 0.18)
+                    : Colors.black.withValues(alpha: context.isDark ? 0.25 : 0.04),
+                blurRadius: isListening ? 10 : 8,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
-        ),
-      ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(
+                isListening ? Icons.graphic_eq_rounded : Icons.search_rounded,
+                size: 20,
+                color: isListening
+                    ? AppColors.error
+                    : (isFocused
+                        ? AppColors.primary
+                        : (context.isDark ? Colors.white70 : const Color(0xFF0F172A))),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _effectiveController,
+                  focusNode: _effectiveFocusNode,
+                  autofocus: widget.autofocus,
+                  onChanged: _handleChanged,
+                  onSubmitted: (val) {
+                    _debounceTimer?.cancel();
+                    widget.onChanged?.call(val);
+                    widget.onSubmitted?.call(val);
+                  },
+                  textAlignVertical: TextAlignVertical.center,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    color: context.colorTextPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    border: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    hintText: dynamicHint,
+                    hintStyle: TextStyle(
+                      fontSize: 14,
+                      color: isListening ? AppColors.error : context.colorTextMuted,
+                      fontWeight: isListening ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+              if (_hasText)
+                GestureDetector(
+                  onTap: _handleClear,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: context.colorSurfaceSubtle,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.close_rounded, size: 14, color: context.colorTextMuted),
+                  ),
+                ),
+              if (widget.enableVoice) ...[
+                const SizedBox(width: 4),
+                AppVoiceIconButton(
+                  controller: _effectiveController,
+                  hint: widget.hintText,
+                  size: 19,
+                  styledButton: true,
+                  onChanged: (val) {
+                    _handleChanged(val);
+                  },
+                  onSubmitted: (val) {
+                    _handleChanged(val);
+                    widget.onSubmitted?.call(val);
+                  },
+                ),
+              ],
+              if (widget.onBarcodeTap != null) ...[
+                const SizedBox(width: 6),
+                Material(
+                  color: context.colorSurfaceSubtle,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: widget.onBarcodeTap,
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: context.colorBorder),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        size: 19,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (widget.showSubmitButton) ...[
+                const SizedBox(width: 8),
+                Material(
+                  color: context.isDark ? const Color(0xFF334155) : const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      _debounceTimer?.cancel();
+                      widget.onChanged?.call(_effectiveController.text.trim());
+                      widget.onSubmitted?.call(_effectiveController.text.trim());
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.search_rounded, size: 15, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            isHindi ? 'सर्च' : 'Search',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

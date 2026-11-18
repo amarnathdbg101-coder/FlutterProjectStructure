@@ -4072,21 +4072,28 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       color: _sortOption != InventorySortOption.newest
                           ? context.colorPrimaryLight
                           : context.colorSurface,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(14),
                       child: InkWell(
                         onTap: () => _showSortBottomSheet(context),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(14),
                         child: Container(
-                          height: 42,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          height: 50,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: _sortOption != InventorySortOption.newest
                                   ? AppColors.primary
                                   : context.colorBorder,
-                              width: _sortOption != InventorySortOption.newest ? 1.5 : 1.0,
+                              width: _sortOption != InventorySortOption.newest ? 1.5 : 1.2,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: context.isDark ? 0.25 : 0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,

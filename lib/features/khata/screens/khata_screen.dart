@@ -8,13 +8,13 @@ import '../../../core/storage/local_cache_service.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../../core/widgets/reusable/app_search_field.dart';
 import '../../../core/utils/whatsapp_share_helper.dart';
 import '../controllers/khata_controller.dart';
 import '../models/khata_model.dart';
 import '../repositories/khata_repository.dart';
 import '../services/smart_khata_reminder_service.dart';
 import '../widgets/khata_micro_plan_card.dart';
-import '../widgets/smart_recovery_nudge_modal.dart';
 
 class KhataScreen extends StatefulWidget {
   const KhataScreen({super.key});
@@ -375,6 +375,10 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                       decoration: InputDecoration(
                         labelText: context.tr('khata_field_customer_name'),
                         prefixIcon: const Icon(Icons.person_outline_rounded),
+                        suffixIcon: AppVoiceIconButton(
+                          controller: nameCtrl,
+                          hint: context.tr('khata_field_customer_name'),
+                        ),
                       ),
                       onChanged: (_) {
                         if (selectedCustomer != null) {
@@ -389,6 +393,10 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                       decoration: InputDecoration(
                         labelText: context.tr('khata_field_customer_phone'),
                         prefixIcon: const Icon(Icons.phone_outlined),
+                        suffixIcon: AppVoiceIconButton(
+                          controller: phoneCtrl,
+                          hint: context.tr('khata_field_customer_phone'),
+                        ),
                       ),
                       onChanged: (val) {
                         final clean = KhataRepository.normalizePhone(val);
@@ -551,6 +559,10 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                     decoration: InputDecoration(
                       labelText: context.tr('khata_field_bill_no'),
                       prefixIcon: const Icon(Icons.receipt_long_outlined),
+                      suffixIcon: AppVoiceIconButton(
+                        controller: billNoCtrl,
+                        hint: context.tr('khata_field_bill_no'),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -561,6 +573,10 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                     decoration: InputDecoration(
                       labelText: context.tr('khata_field_notes'),
                       prefixIcon: const Icon(Icons.notes_rounded),
+                      suffixIcon: AppVoiceIconButton(
+                        controller: notesCtrl,
+                        hint: context.tr('khata_field_notes'),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -2142,48 +2158,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                   ],
                                 ),
                                 const SizedBox(height: 10),
-
-                                if (liveCustomer.balance > 0) ...[
-                                  InkWell(
-                                    onTap: () {
-                                      SmartRecoveryNudgeModal.show(
-                                        context: context,
-                                        customerName: liveCustomer.name,
-                                        customerPhone: liveCustomer.mobile,
-                                        totalDebt: liveCustomer.balance,
-                                        daysOverdue: liveCustomer.overdueDays,
-                                      );
-                                    },
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(Icons.auto_awesome_rounded, color: Color(0xFF7C3AED), size: 16),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            context.isHindi
-                                                ? '🧠 AI स्मार्ट रिकवरी मैसेज (WhatsApp + Dynamic UPI)'
-                                                : '🧠 AI Smart Recovery Nudge (WhatsApp + Dynamic UPI)',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF7C3AED),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                ],
                                 // 4. Secondary Utilities Toolbar (PDF, WhatsApp, Copy)
                                 Row(
                                   children: [
@@ -2700,9 +2674,25 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
       currentIndex: 3,
       child: Scaffold(
         appBar: AppBar(
+          elevation: 0,
+          backgroundColor: context.colorSurface,
+          surfaceTintColor: Colors.transparent,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1.0),
+            child: Container(color: context.colorBorder, height: 1.0),
+          ),
+          leading: AppBackButton(
+            color: isDark ? Colors.white : AppColors.textPrimary,
+            fallbackRoute: '/merchant',
+          ),
           title: Text(
             context.tr('khata_title'),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 17,
+              color: isDark ? Colors.white : AppColors.textPrimary,
+              letterSpacing: -0.2,
+            ),
           ),
           actions: [
             PopupMenuButton<String>(
@@ -2893,26 +2883,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                   ),
                 ),
 
-                // Search Input
+                // Search Input (Customer Style Spacious Search & Speech-to-Text)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: TextField(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: AppSearchField(
                     controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: context.tr('khata_search_hint'),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                khata.setSearchQuery('');
-                              },
-                            )
-                          : null,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
+                    hintText: context.tr('khata_search_hint'),
                     onChanged: (query) => khata.setSearchQuery(query),
+                    onSubmitted: (query) => khata.setSearchQuery(query),
+                    onClear: () => khata.setSearchQuery(''),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -3392,44 +3371,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                     ),
                   ),
                 ),
-              if (hasDues)
-                InkWell(
-                  onTap: () => SmartRecoveryNudgeModal.show(
-                    context: context,
-                    customerName: c.name,
-                    customerPhone: c.mobile,
-                    totalDebt: c.balance,
-                    daysOverdue: c.overdueDays,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.25),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.auto_awesome_rounded, size: 13, color: Color(0xFF7C3AED)),
-                        SizedBox(width: 4),
-                        Text(
-                          'AI Nudge',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF7C3AED),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
 
               Row(
                 mainAxisSize: MainAxisSize.min,

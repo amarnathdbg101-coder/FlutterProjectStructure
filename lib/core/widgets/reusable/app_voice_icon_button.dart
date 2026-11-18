@@ -16,6 +16,7 @@ class AppVoiceIconButton extends StatefulWidget {
   final Color? color;
   final Color? activeColor;
   final bool useModal;
+  final bool styledButton;
 
   const AppVoiceIconButton({
     super.key,
@@ -27,6 +28,7 @@ class AppVoiceIconButton extends StatefulWidget {
     this.color,
     this.activeColor,
     this.useModal = false,
+    this.styledButton = true,
   });
 
   @override
@@ -94,7 +96,71 @@ class _AppVoiceIconButtonState extends State<AppVoiceIconButton>
         }
 
         final activeCol = widget.activeColor ?? AppColors.error;
-        final idleCol = widget.color ?? AppColors.primary;
+        final idleCol = widget.color ?? (context.isDark ? Colors.white70 : const Color(0xFF475569));
+
+        if (widget.styledButton) {
+          return Tooltip(
+            message: isListening
+                ? (isHindi ? 'सुन रहे हैं... (रोकने के लिए टैप करें)' : 'Listening... (tap to stop)')
+                : (isHindi ? 'बोलकर खोजें / लिखें' : 'Voice Search / Dictation'),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onLongPress: () => _openDictationSheet(context),
+                onTap: () {
+                  if (widget.useModal) {
+                    _openDictationSheet(context);
+                  } else {
+                    voiceService.listenAndFill(
+                      context: context,
+                      controller: widget.controller,
+                      onChanged: widget.onChanged,
+                      onSubmitted: widget.onSubmitted,
+                    );
+                  }
+                },
+                child: AnimatedBuilder(
+                  animation: _scaleAnimation,
+                  builder: (context, child) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isListening
+                            ? AppColors.error.withValues(alpha: 0.12)
+                            : context.colorSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isListening
+                              ? AppColors.error.withValues(alpha: 0.45)
+                              : context.colorBorder,
+                          width: 1.0,
+                        ),
+                        boxShadow: isListening
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.error.withValues(alpha: 0.25),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Transform.scale(
+                        scale: isListening ? _scaleAnimation.value : 1.0,
+                        child: Icon(
+                          isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
+                          size: widget.size,
+                          color: isListening ? activeCol : idleCol,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        }
 
         return Tooltip(
           message: isListening

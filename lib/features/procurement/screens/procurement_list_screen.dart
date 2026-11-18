@@ -11,6 +11,7 @@ import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../../core/widgets/reusable/app_search_field.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../dashboard/repositories/ai_repository.dart';
 import '../../products/controllers/category_controller.dart';
@@ -1809,46 +1810,29 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // 2. INSTANT SEARCH BAR
+                // 2. INSTANT SEARCH BAR (Customer Style Spacious & Speech-to-Text)
                 if (items.isNotEmpty) ...[
-                  TextField(
+                  AppSearchField(
                     controller: _searchCtrl,
+                    hintText: context.isHindi
+                        ? 'सामान, श्रेणी या डीलर खोजें...'
+                        : 'Search items, category or wholesaler...',
                     onChanged: (val) {
                       setState(() {
                         _searchQuery = val.trim();
                       });
                     },
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: context.isHindi ? 'सामान, श्रेणी या डीलर खोजें...' : 'Search items, category or wholesaler...',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() {
-                                  _searchQuery = '';
-                                });
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: context.colorSurfaceSubtle,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: context.colorBorder),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: context.colorBorder),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                      ),
-                    ),
+                    onSubmitted: (val) {
+                      setState(() {
+                        _searchQuery = val.trim();
+                      });
+                    },
+                    onClear: () {
+                      _searchCtrl.clear();
+                      setState(() {
+                        _searchQuery = '';
+                      });
+                    },
                   ),
                   const SizedBox(height: 10),
                 ],

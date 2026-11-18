@@ -9,6 +9,7 @@ import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_drawer.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../../core/widgets/reusable/app_search_field.dart';
 import '../../../core/widgets/store_qr_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../controllers/reservation_controller.dart';
@@ -376,23 +377,15 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // Search Bar
-                TextField(
+                // Search Bar (Customer Style Spacious & Speech-to-Text)
+                AppSearchField(
                   controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: context.isHindi ? 'ग्राहक नाम, मोबाइल या कोड (#582914) से खोजें...' : 'Search by Customer Name, Mobile, Code (#582914)...',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              resCtrl.setSearchQuery('');
-                            },
-                          )
-                        : null,
-                  ),
+                  hintText: context.isHindi
+                      ? 'ग्राहक नाम, मोबाइल या कोड (#582914) से खोजें...'
+                      : 'Search by Customer Name, Mobile, Code (#582914)...',
                   onChanged: (query) => resCtrl.setSearchQuery(query),
+                  onSubmitted: (query) => resCtrl.setSearchQuery(query),
+                  onClear: () => resCtrl.setSearchQuery(''),
                 ),
                 const SizedBox(height: 10),
 

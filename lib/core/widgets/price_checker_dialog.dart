@@ -5,12 +5,12 @@ import '../../features/pos/repositories/pos_repository.dart';
 import '../../features/products/controllers/product_controller.dart';
 import '../../features/products/models/product_model.dart';
 import '../../features/products/repositories/product_repository.dart';
-import '../../features/products/services/smart_barcode_catalog_service.dart';
 import '../../features/products/screens/inventory_screen.dart';
 import '../../features/products/widgets/barcode_sticker_dialog.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
 import 'app_product_image.dart';
+import 'reusable/app_voice_icon_button.dart';
 
 /// Instant Product Finder & Price Checker Dialog.
 /// Allows cashiers & merchants to scan any barcode via hardware gun or camera,
@@ -44,7 +44,6 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
 
   ProductModel? _matchedProduct;
   List<ProductModel> _similarProducts = [];
-  SmartCatalogItem? _masterCatalogMatch;
   bool _hasSearched = false;
   int _posQuantity = 1;
   bool _showCostMargin = false;
@@ -119,7 +118,6 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
       setState(() {
         _matchedProduct = exact;
         _similarProducts = [];
-        _masterCatalogMatch = null;
         _hasSearched = true;
         _posQuantity = 1;
         _isSearchingDatabase = false;
@@ -136,13 +134,9 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
       return name.contains(clean) || barcode.contains(clean) || sku.contains(clean) || cat.contains(clean);
     }).take(6).toList();
 
-    // Check Global Master Catalog for barcode match
-    final masterMatch = await SmartBarcodeCatalogService.lookup(query.trim());
-
     setState(() {
       _matchedProduct = suggestions.length == 1 ? suggestions.first : null;
       _similarProducts = suggestions;
-      _masterCatalogMatch = masterMatch;
       _hasSearched = true;
       _posQuantity = 1;
     });
@@ -244,7 +238,6 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
     setState(() {
       _matchedProduct = null;
       _similarProducts = [];
-      _masterCatalogMatch = null;
       _hasSearched = false;
       _isSearchingDatabase = false;
       _posQuantity = 1;
@@ -576,13 +569,23 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
           ),
           const SizedBox(height: 12),
 
-          // 1. FAST SCANNER & SEARCH INPUT BAR
+          // 1. FAST SCANNER & SEARCH INPUT BAR (Customer Style Spacious & Speech-to-Text)
           Container(
-            height: 46,
+            height: 50,
             decoration: BoxDecoration(
-              color: context.colorSurfaceSubtle,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.colorBorder),
+              color: context.colorSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _focusNode.hasFocus ? AppColors.primary : context.colorBorder,
+                width: _focusNode.hasFocus ? 1.5 : 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: context.isDark ? 0.25 : 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -594,10 +597,10 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
                     controller: _searchController,
                     focusNode: _focusNode,
                     autofocus: true,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colorTextPrimary),
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: context.colorTextPrimary),
                     decoration: InputDecoration(
                       hintText: context.tr('price_checker_input_hint'),
-                      hintStyle: TextStyle(fontSize: 12.5, color: context.colorTextMuted),
+                      hintStyle: TextStyle(fontSize: 14, color: context.colorTextMuted),
                       border: InputBorder.none,
                       isDense: true,
                     ),
@@ -610,6 +613,7 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
                     onTap: _resetForNextScan,
                     child: Container(
                       padding: const EdgeInsets.all(4),
+                      margin: const EdgeInsets.only(right: 4),
                       decoration: BoxDecoration(
                         color: context.colorBorder,
                         shape: BoxShape.circle,
@@ -617,6 +621,13 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
                       child: Icon(Icons.close_rounded, size: 14, color: context.colorTextMuted),
                     ),
                   ),
+                AppVoiceIconButton(
+                  controller: _searchController,
+                  size: 19,
+                  styledButton: true,
+                  hint: context.tr('price_checker_input_hint'),
+                  onSubmitted: _resolveProduct,
+                ),
               ],
             ),
           ),
@@ -738,156 +749,6 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
 
   Widget _buildNotFoundState(BuildContext context) {
     final queryCode = _searchController.text.trim();
-    if (_masterCatalogMatch != null) {
-      final m = _masterCatalogMatch!;
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: context.colorSurfaceSubtle,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 22),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.isHindi ? '⚡ ग्लोबल मास्टर कैटलॉग में मिला' : '⚡ Found in Global Master Catalog',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        Text(
-                          '${context.isHindi ? "बारकोड" : "Barcode"}: $queryCode',
-                          style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontFamily: 'monospace'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                m.name,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: context.colorTextPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  if (m.brand.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: context.colorSurface,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: context.colorBorder),
-                      ),
-                      child: Text(
-                        'Brand: ${m.brand}',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.colorTextPrimary),
-                      ),
-                    ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: context.colorSurface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: context.colorBorder),
-                    ),
-                    child: Text(
-                      'Category: ${m.category}',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.colorTextPrimary),
-                    ),
-                  ),
-                  if (m.unit.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: context.colorSurface,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: context.colorBorder),
-                      ),
-                      child: Text(
-                        'Unit: ${m.unit}',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.colorTextPrimary),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  if (m.mrp > 0) ...[
-                    Text(
-                      'MRP: ₹${m.mrp.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        decoration: TextDecoration.lineThrough,
-                        color: context.colorTextMuted,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-                  if (m.sellingPrice > 0)
-                    Text(
-                      'Price: ₹${m.sellingPrice.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.success,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                label: Text(
-                  context.isHindi ? '+ स्टोर इन्वेंटरी में जोड़ें (ऑटो-फिल)' : '+ Add to Store Inventory (Auto-Fill)',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  showAddProductDialog(context, initialBarcode: queryCode);
-                },
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
       child: Column(

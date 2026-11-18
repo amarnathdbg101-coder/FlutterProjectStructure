@@ -16,7 +16,6 @@ import '../../auth/controllers/auth_controller.dart';
 import '../../pos/controllers/pos_controller.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
-import '../services/smart_barcode_catalog_service.dart';
 import 'product_detail_screen.dart';
 
 /// Clean, Fast, High-Performance Instant Price & Stock Checker Screen.
@@ -47,7 +46,6 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
 
   ProductModel? _selectedProduct;
   List<ProductModel> _matchingProducts = [];
-  SmartCatalogItem? _masterCatalogMatch;
   bool _hasSearched = false;
 
   String _selectedCategory = 'All';
@@ -85,7 +83,6 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
       setState(() {
         _selectedProduct = null;
         _matchingProducts = [];
-        _masterCatalogMatch = null;
         _hasSearched = false;
       });
       return;
@@ -148,15 +145,8 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
           sku.contains(token));
     }).toList();
 
-    // 4. Fallback: Search in Master Catalog if numeric barcode-like and 0 local matches
-    SmartCatalogItem? master;
-    if (matches.isEmpty && RegExp(r'^\d{4,14}$').hasMatch(clean)) {
-      master = SmartBarcodeCatalogService.lookupSync(clean);
-    }
-
     setState(() {
       _hasSearched = true;
-      _masterCatalogMatch = master;
       _matchingProducts = matches;
       _selectedProduct = matches.isNotEmpty ? matches.first : null;
       if (_selectedProduct != null) {
@@ -169,7 +159,6 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
     setState(() {
       _selectedProduct = p;
       _matchingProducts = [p];
-      _masterCatalogMatch = null;
       _hasSearched = true;
     });
     _addToRecentHistory(p);
@@ -196,7 +185,6 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
     setState(() {
       _selectedProduct = null;
       _matchingProducts = [];
-      _masterCatalogMatch = null;
       _hasSearched = false;
     });
     _searchFocusNode.requestFocus();
@@ -391,16 +379,16 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                   Container(
                     height: 50,
                     decoration: BoxDecoration(
-                      color: context.colorSurfaceSubtle,
+                      color: context.colorSurface,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: _searchFocusNode.hasFocus ? AppColors.primary : context.colorBorder,
-                        width: _searchFocusNode.hasFocus ? 1.5 : 1.0,
+                        width: _searchFocusNode.hasFocus ? 1.5 : 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.03),
-                          blurRadius: 6,
+                          color: Colors.black.withValues(alpha: context.isDark ? 0.25 : 0.04),
+                          blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
                       ],
@@ -410,8 +398,10 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                       children: [
                         Icon(
                           Icons.search_rounded,
-                          size: 22,
-                          color: _searchFocusNode.hasFocus ? AppColors.primary : context.colorTextMuted,
+                          size: 20,
+                          color: _searchFocusNode.hasFocus
+                              ? AppColors.primary
+                              : (context.isDark ? Colors.white70 : const Color(0xFF0F172A)),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -428,13 +418,13 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                                   ? 'नाम, बारकोड, SKU या ब्रांड से खोजें (उदा. Parle, Oil)...'
                                   : 'Search by Name, Barcode, SKU, Brand (e.g. Parle, Oil)...',
                               hintStyle: TextStyle(
-                                fontSize: 13,
+                                fontSize: 14,
                                 color: context.colorTextMuted,
                                 fontWeight: FontWeight.normal,
                               ),
                               border: InputBorder.none,
                               isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onChanged: _onQueryChanged,
                           ),
@@ -446,6 +436,18 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                             tooltip: isHindi ? 'हटाएं' : 'Clear',
                             onPressed: _clearSearch,
                           ),
+                        AppVoiceIconButton(
+                          controller: _searchController,
+                          hint: isHindi
+                              ? 'सामान का नाम बोलें...'
+                              : 'Speak product name...',
+                          styledButton: true,
+                          onChanged: _onQueryChanged,
+                          onSubmitted: (val) {
+                            _onQueryChanged(val);
+                            _lookupProduct(val);
+                          },
+                        ),
                         const SizedBox(width: 4),
                         // Quick Camera Scan Pill
                         InkWell(
@@ -616,14 +618,8 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                       const SizedBox(height: 16),
                     ],
 
-                    // C. MASTER CATALOG FALLBACK (If not in store catalog, but found in 10k FMCG database)
-                    if (_masterCatalogMatch != null && p == null) ...[
-                      _buildMasterCatalogFallbackCard(context, _masterCatalogMatch!, isHindi),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // D. NO PRODUCT FOUND STATE
-                    if (_hasSearched && p == null && _masterCatalogMatch == null) ...[
+                    // C. NO PRODUCT FOUND STATE
+                    if (_hasSearched && p == null) ...[
                       _buildNotFoundCard(context, isHindi),
                       const SizedBox(height: 16),
                     ],
@@ -1136,81 +1132,6 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
     );
   }
 
-  // --------------------------------------------------------------------------
-  // MASTER CATALOG FALLBACK CARD
-  // --------------------------------------------------------------------------
-  Widget _buildMasterCatalogFallbackCard(BuildContext context, SmartCatalogItem item, bool isHindi) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.colorSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: context.colorPrimaryLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.cloud_done_rounded, color: AppColors.primary, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isHindi ? 'मास्टर कैटलॉग में मिला!' : 'Found in Master FMCG Catalog!',
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.bold,
-                        color: context.colorTextPrimary,
-                      ),
-                    ),
-                    Text(
-                      isHindi
-                          ? 'यह उत्पाद आपकी दुकान में अभी नहीं है'
-                          : 'This product is not yet in your store inventory',
-                      style: TextStyle(fontSize: 11.5, color: context.colorTextMuted),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            item.name,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: context.colorTextPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'MRP: ₹${item.mrp.toStringAsFixed(0)} | ${item.brand.isNotEmpty ? "Brand: ${item.brand} | " : ""}Barcode: ${item.barcode}',
-            style: TextStyle(fontSize: 12, color: context.colorTextMuted),
-          ),
-          const SizedBox(height: 14),
-          AppButton.primary(
-            text: isHindi ? 'दुकान कैटलॉग में जोड़ें' : 'Add to Store Catalog',
-            icon: Icons.add_rounded,
-            size: AppButtonSize.md,
-            onPressed: () {
-              context.go('/merchant/inventory');
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
   // --------------------------------------------------------------------------
   // NOT FOUND CARD

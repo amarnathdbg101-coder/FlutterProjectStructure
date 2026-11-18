@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/widgets/app_product_image.dart';
+import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/custom_snackbar.dart';
+import '../../../core/widgets/reusable/app_search_field.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
@@ -50,7 +52,7 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
   final Map<String, int> _quantities = {};
 
   bool _showShopName = true;
-  bool _showPrice = false; // Bargaining protection: keep price off sticker by default
+  bool _showPrice = false; // Keep price off sticker by default
   bool _showPkd = false;
   bool _isProcessing = false;
   int _activePreviewPage = 1;
@@ -314,43 +316,22 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Search Bar to add products to queue
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: context.colorSurface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.colorBorder),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.search_rounded, color: AppColors.primary, size: 22),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: isHindi
-                          ? 'सामान खोजें (नाम, बारकोड या SKU)...'
-                          : 'Search product to add (Name, Barcode, SKU)...',
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
-                    onChanged: (val) {
-                      setState(() => _searchFilter = val);
-                    },
-                  ),
-                ),
-                if (_searchFilter.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _searchFilter = '');
-                    },
-                  ),
-              ],
-            ),
+          // 1. Search Bar to add products to queue (Customer Style Spacious & Speech-to-Text)
+          AppSearchField(
+            controller: _searchController,
+            hintText: isHindi
+                ? 'सामान खोजें (नाम, बारकोड या SKU)...'
+                : 'Search product to add (Name, Barcode, SKU)...',
+            onChanged: (val) {
+              setState(() => _searchFilter = val);
+            },
+            onSubmitted: (val) {
+              setState(() => _searchFilter = val);
+            },
+            onClear: () {
+              _searchController.clear();
+              setState(() => _searchFilter = '');
+            },
           ),
           const SizedBox(height: 10),
 
@@ -594,42 +575,6 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // BARGAINING SAFETY BANNER (Retail negotiation protection)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.amber.shade400, width: 1),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.shield_rounded, color: Colors.amber, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isHindi ? '🛡️ बारगेनिंग सेफ लेआउट (मूल्य छुपा हुआ)' : '🛡️ Bargaining-Safe Layout (Price Hidden)',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.brown),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        isHindi
-                            ? 'स्टीकर पर मूल्य (Price) नहीं छापा जाता ताकि ग्राहक मोलभाव में न उलझें। काउंटर पर स्कैनर से स्कैन करते ही स्क्रीन पर तुरंत सही दाम दिख जाएगा।'
-                            : 'Price is hidden from sticker labels to prevent customer bargaining friction. Scan at counter to instantly ring up the correct selling price.',
-                        style: TextStyle(fontSize: 10.5, color: Colors.brown.shade800),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
           // 1. Format Selection Header
           Text(
             isHindi ? '1. स्टीकर शीट फॉर्मेट चुनें' : '1. Select Sticker Sheet Format',

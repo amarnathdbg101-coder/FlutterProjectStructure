@@ -1,8 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../constants/app_colors.dart';
+import '../localization/language_controller.dart';
+import '../services/voice_input_service.dart';
 import '../utils/image_utils.dart';
+import 'reusable/app_voice_icon_button.dart';
 
 export 'reusable/app_reusable.dart';
 
@@ -194,18 +198,62 @@ class AppSectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: context.colorTextPrimary,
-              letterSpacing: -0.2,
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: context.colorTextPrimary,
+                letterSpacing: -0.2,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing != null) trailing!,
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Standard, unified Back Arrow Button for AppBars.
+/// Smartly pops Navigator if stack exists; otherwise falls back to [fallbackRoute] (default: '/merchant').
+class AppBackButton extends StatelessWidget {
+  final Color? color;
+  final String fallbackRoute;
+  final VoidCallback? onCustomBack;
+
+  const AppBackButton({
+    super.key,
+    this.color,
+    this.fallbackRoute = '/merchant',
+    this.onCustomBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(
+        Icons.arrow_back_rounded,
+        color: color ?? context.colorTextPrimary,
+        size: 22,
+      ),
+      tooltip: context.isHindi ? 'वापस जाएं' : 'Back',
+      onPressed: () {
+        if (onCustomBack != null) {
+          onCustomBack!();
+          return;
+        }
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          context.go(fallbackRoute);
+        }
+      },
     );
   }
 }
@@ -217,6 +265,8 @@ class AppActionTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final Color? iconColor;
+  final Color? iconBgColor;
 
   const AppActionTile({
     super.key,
@@ -224,10 +274,15 @@ class AppActionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.iconColor,
+    this.iconBgColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveIconBg = iconBgColor ?? context.colorPrimaryLight;
+    final effectiveIconColor = iconColor ?? AppColors.primary;
+
     return AppCard(
       padding: const EdgeInsets.all(14),
       onTap: onTap,
@@ -236,10 +291,10 @@ class AppActionTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: context.colorPrimaryLight,
+              color: effectiveIconBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: AppColors.primary, size: 20),
+            child: Icon(icon, color: effectiveIconColor, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -579,6 +634,7 @@ class AppProductSearchBar extends StatefulWidget {
   final VoidCallback? onBarcodeScan;
   final bool showBarcodeScanner;
   final bool autoFocus;
+  final bool enableVoice;
   final FocusNode? focusNode;
   final ValueChanged<String>? onSubmitted;
 
@@ -591,6 +647,7 @@ class AppProductSearchBar extends StatefulWidget {
     this.onBarcodeScan,
     this.showBarcodeScanner = false,
     this.autoFocus = false,
+    this.enableVoice = true,
     this.focusNode,
     this.onSubmitted,
   });
@@ -619,79 +676,138 @@ class _AppProductSearchBarState extends State<AppProductSearchBar> {
   @override
   Widget build(BuildContext context) {
     final hasText = widget.controller.text.isNotEmpty;
+    final voiceService = AppVoiceInputService.instance;
 
-    return Container(
-      height: 42,
-      decoration: BoxDecoration(
-        color: context.colorSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.colorBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: context.isDark ? 0.15 : 0.02),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Icon(Icons.search_rounded, size: 19, color: context.colorTextMuted),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: widget.controller,
-              focusNode: widget.focusNode,
-              autofocus: widget.autoFocus,
-              onSubmitted: widget.onSubmitted,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: context.colorTextPrimary,
-              ),
-              decoration: InputDecoration(
-                hintText: widget.hintText ?? 'Search products...',
-                hintStyle: TextStyle(
-                  fontSize: 12.5,
-                  color: context.colorTextMuted,
-                  fontWeight: FontWeight.normal,
-                ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-              onChanged: widget.onChanged,
+    return ListenableBuilder(
+      listenable: voiceService,
+      builder: (context, _) {
+        final isListening = voiceService.isListeningTo(widget.controller);
+        bool isHindi = false;
+        try {
+          isHindi = context.isHindi;
+        } catch (_) {
+          isHindi = false;
+        }
+
+        final dynamicHint = isListening
+            ? (isHindi ? 'सुन रहे हैं... बोलिए' : 'Listening... speak now')
+            : (widget.hintText ?? (isHindi ? 'सामान खोजें...' : 'Search products...'));
+
+        return Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: context.colorSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isListening
+                  ? AppColors.error
+                  : (widget.focusNode?.hasFocus == true ? AppColors.primary : context.colorBorder),
+              width: isListening || widget.focusNode?.hasFocus == true ? 1.5 : 1.2,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: isListening
+                    ? AppColors.error.withValues(alpha: 0.18)
+                    : Colors.black.withValues(alpha: context.isDark ? 0.25 : 0.04),
+                blurRadius: isListening ? 10 : 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          if (hasText)
-            GestureDetector(
-              onTap: () {
-                widget.controller.clear();
-                if (widget.onChanged != null) widget.onChanged!('');
-                if (widget.onClear != null) widget.onClear!();
-              },
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(
+                isListening ? Icons.graphic_eq_rounded : Icons.search_rounded,
+                size: 20,
+                color: isListening
+                    ? AppColors.error
+                    : (widget.focusNode?.hasFocus == true
+                        ? AppColors.primary
+                        : (context.isDark ? Colors.white70 : const Color(0xFF0F172A))),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: widget.focusNode,
+                  autofocus: widget.autoFocus,
+                  onSubmitted: widget.onSubmitted,
+                  textAlignVertical: TextAlignVertical.center,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.colorTextPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: dynamicHint,
+                    hintStyle: TextStyle(
+                      fontSize: 14,
+                      color: isListening ? AppColors.error : context.colorTextMuted,
+                      fontWeight: isListening ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onChanged: widget.onChanged,
+                ),
+              ),
+              if (hasText)
+                GestureDetector(
+                  onTap: () {
+                    widget.controller.clear();
+                    if (widget.onChanged != null) widget.onChanged!('');
+                    if (widget.onClear != null) widget.onClear!();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: context.colorSurfaceSubtle,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.close_rounded, size: 14, color: context.colorTextMuted),
+                  ),
+                ),
+              if (widget.enableVoice) ...[
+                const SizedBox(width: 4),
+                AppVoiceIconButton(
+                  controller: widget.controller,
+                  hint: widget.hintText,
+                  size: 19,
+                  styledButton: true,
+                  onChanged: widget.onChanged,
+                  onSubmitted: widget.onSubmitted,
+                ),
+              ],
+              if (widget.showBarcodeScanner && widget.onBarcodeScan != null) ...[
+                const SizedBox(width: 6),
+                Material(
                   color: context.colorSurfaceSubtle,
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: widget.onBarcodeScan,
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: context.colorBorder),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        size: 19,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
                 ),
-                child: Icon(Icons.close_rounded, size: 14, color: context.colorTextMuted),
-              ),
-            ),
-          if (widget.showBarcodeScanner && widget.onBarcodeScan != null) ...[
-            if (hasText) const SizedBox(width: 6),
-            GestureDetector(
-              onTap: widget.onBarcodeScan,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: const Icon(Icons.qr_code_scanner_rounded, size: 19, color: AppColors.primary),
-              ),
-            ),
-          ],
-        ],
-      ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
