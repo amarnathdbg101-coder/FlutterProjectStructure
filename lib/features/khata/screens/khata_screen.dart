@@ -4,11 +4,12 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
+import '../../../core/services/audio_haptic_service.dart';
 import '../../../core/storage/local_cache_service.dart';
+import '../../../core/utils/date_time_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
-import '../../../core/widgets/reusable/app_search_field.dart';
 import '../../../core/utils/whatsapp_share_helper.dart';
 import '../controllers/khata_controller.dart';
 import '../models/khata_model.dart';
@@ -486,6 +487,29 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                           ),
                         ),
                         const SizedBox(width: 8),
+                        if (!currentIsCredit && ((selectedCustomer?.balance ?? customer?.balance ?? 0) > 0)) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ActionChip(
+                              avatar: const Icon(Icons.check_circle_rounded, size: 13, color: AppColors.success),
+                              label: Text(
+                                context.isHindi
+                                    ? 'पूरा चुकता (₹${(selectedCustomer?.balance ?? customer?.balance ?? 0).toStringAsFixed(0)})'
+                                    : 'Full Settle (₹${(selectedCustomer?.balance ?? customer?.balance ?? 0).toStringAsFixed(0)})',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
+                              ),
+                              backgroundColor: AppColors.success.withValues(alpha: 0.12),
+                              side: BorderSide(color: AppColors.success.withValues(alpha: 0.3)),
+                              padding: EdgeInsets.zero,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              onPressed: () {
+                                setModalState(() {
+                                  amountCtrl.text = (selectedCustomer?.balance ?? customer?.balance ?? 0).toStringAsFixed(0);
+                                });
+                              },
+                            ),
+                          ),
+                        ],
                         for (final preset in [100.0, 200.0, 500.0, 1000.0, 2000.0])
                           Padding(
                             padding: const EdgeInsets.only(right: 6),
@@ -671,6 +695,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                           if (ctx.mounted) {
                             setModalState(() => isSaving = false);
                             if (success) {
+                              AppAudioHapticFeedback.success();
                               Navigator.pop(ctx);
 
                               final remainingBal = khataController.getCustomerBalance(cleanPhone);
@@ -2790,88 +2815,131 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                   child: AppCard(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: context.colorPrimaryLight,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.account_balance_wallet_rounded,
-                            color: AppColors.primary,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                context.tr('khata_banner_title'),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.colorTextSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '₹${khata.totalMarketDebt.toStringAsFixed(0)}',
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w900,
-                                    color: context.colorTextPrimary,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${khata.debtorsCount} ${context.tr('khata_kpi_debtors')}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: context.colorTextMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
+                        // Metric Header Row
+                        Row(
                           children: [
-                            ElevatedButton.icon(
-                              onPressed: () => _showAddTransactionModal(context, isCredit: true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.error,
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size(100, 34),
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                                textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: context.colorPrimaryLight,
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              icon: const Icon(Icons.remove_circle_outline, size: 14),
-                              label: Text(context.isHindi ? 'दिए (उधारी)' : '+ Give Credit'),
+                              child: const Icon(
+                                Icons.account_balance_wallet_rounded,
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
                             ),
-                            const SizedBox(height: 6),
-                            OutlinedButton.icon(
-                              onPressed: () => _showAddTransactionModal(context, isCredit: false),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.success,
-                                side: const BorderSide(color: AppColors.success, width: 1.2),
-                                minimumSize: const Size(100, 34),
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                                textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    context.tr('khata_banner_title'),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.colorTextSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      '₹${khata.totalMarketDebt.toStringAsFixed(0)}',
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w900,
+                                        color: context.colorTextPrimary,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${khata.debtorsCount} ${context.tr('khata_kpi_debtors')}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: context.colorTextMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              icon: const Icon(Icons.add_circle_outline, size: 14),
-                              label: Text(context.isHindi ? 'मिले (जमा)' : '+ Settle Cash'),
+                            ),
+                            if (khata.overdueCount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, size: 13, color: AppColors.error),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${khata.overdueCount} ${context.isHindi ? "समय पार" : "Overdue"}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.error,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Divider(height: 1, color: context.colorBorder),
+                        const SizedBox(height: 12),
+                        // Quick Action Buttons
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showAddTransactionModal(context, isCredit: true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error.withValues(alpha: 0.1),
+                                  foregroundColor: AppColors.error,
+                                  elevation: 0,
+                                  minimumSize: const Size.fromHeight(40),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
+                                  ),
+                                  textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                ),
+                                icon: const Icon(Icons.arrow_outward_rounded, size: 16),
+                                label: Text(context.isHindi ? 'दिए (उधार)' : '+ Give Credit'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showAddTransactionModal(context, isCredit: false),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.success.withValues(alpha: 0.1),
+                                  foregroundColor: AppColors.success,
+                                  elevation: 0,
+                                  minimumSize: const Size.fromHeight(40),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    side: BorderSide(color: AppColors.success.withValues(alpha: 0.3)),
+                                  ),
+                                  textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                ),
+                                icon: const Icon(Icons.arrow_downward_rounded, size: 16),
+                                label: Text(context.isHindi ? 'मिले (जमा)' : '+ Settle Cash'),
+                              ),
                             ),
                           ],
                         ),
@@ -3198,16 +3266,16 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
               CircleAvatar(
                 radius: 20,
                 backgroundColor: hasDues
-                    ? AppColors.error.withValues(alpha: 0.12)
+                    ? AppColors.error.withValues(alpha: 0.1)
                     : (isAdvance
-                        ? AppColors.primary.withValues(alpha: 0.12)
-                        : AppColors.success.withValues(alpha: 0.12)),
+                        ? AppColors.primary.withValues(alpha: 0.1)
+                        : context.colorSurfaceSubtle),
                 child: Text(
                   c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
                   style: TextStyle(
                     color: hasDues
                         ? AppColors.error
-                        : (isAdvance ? AppColors.primary : AppColors.success),
+                        : (isAdvance ? AppColors.primary : context.colorTextPrimary),
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -3222,19 +3290,42 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                       c.name,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                        fontSize: 15.5,
                         color: isDark ? Colors.white : AppColors.textPrimary,
+                        letterSpacing: -0.2,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      c.mobile,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            c.mobile,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (c.lastTransactionAt != null) ...[
+                          Flexible(
+                            child: Text(
+                              ' • ${AppDateTimeUtils.formatRelativeDate(c.lastTransactionAt!)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -3248,10 +3339,11 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                       '₹${c.balance.abs().toStringAsFixed(0)}',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
-                        fontSize: 17,
+                        fontSize: 18,
                         color: hasDues
                             ? AppColors.error
                             : (isAdvance ? AppColors.primary : AppColors.success),
+                        letterSpacing: -0.4,
                       ),
                     ),
                   ),
@@ -3280,20 +3372,22 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
               children: [
                 if (c.isOverdue)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.12),
+                      color: AppColors.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.warning_amber_rounded, size: 11, color: AppColors.error),
-                        const SizedBox(width: 3),
+                        const Icon(Icons.warning_amber_rounded, size: 12, color: AppColors.error),
+                        const SizedBox(width: 4),
                         Text(
-                          context.tr('khata_tab_overdue'),
+                          c.overdueDays > 0
+                              ? '${c.overdueDays} ${context.isHindi ? "दिन लेट (समय पार)" : "days overdue"}'
+                              : (context.isHindi ? 'समय सीमा पार (Overdue)' : 'Payment overdue'),
                           style: const TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: AppColors.error,
                           ),
@@ -3303,20 +3397,20 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                   ),
                 if (c.promiseDate != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
+                      color: AppColors.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.event_outlined, size: 11, color: AppColors.primary),
-                        const SizedBox(width: 3),
+                        const Icon(Icons.event_outlined, size: 12, color: AppColors.primary),
+                        const SizedBox(width: 4),
                         Text(
-                          'Promise: ${DateFormat('dd MMM').format(c.promiseDate!)}',
+                          '${context.isHindi ? "वादा" : "Promise"}: ${DateFormat('dd MMM').format(c.promiseDate!)}',
                           style: const TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: AppColors.primary,
                           ),
@@ -3330,113 +3424,123 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
 
           const SizedBox(height: 12),
 
-          // Bottom Action Row (WhatsApp Reminder, +Udhar, +Jama)
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 6,
-            runSpacing: 6,
+          // Clean Action Row
+          Row(
             children: [
-              if (hasDues)
-                InkWell(
-                  onTap: () => khata.sendWhatsAppReminder(context, c),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF25D366).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF25D366).withValues(alpha: 0.25),
-                        width: 0.8,
+              if (hasDues) ...[
+                Expanded(
+                  flex: 3,
+                  child: InkWell(
+                    onTap: () => khata.sendWhatsAppReminder(context, c),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      height: 38,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF25D366).withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.chat_bubble_outline_rounded, size: 14, color: Color(0xFF1EBE5D)),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              context.isHindi ? 'तगादा भेजें' : 'WhatsApp',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1EBE5D),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                flex: 2,
+                child: InkWell(
+                  onTap: () => _showAddTransactionModal(context, customer: c, isCredit: true),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.error.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.chat_bubble_outline_rounded, size: 13, color: Color(0xFF25D366)),
-                        SizedBox(width: 4),
-                        Text(
-                          'WhatsApp',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1EBE5D),
+                        const Icon(Icons.arrow_outward_rounded, size: 13, color: AppColors.error),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            context.tr('khata_give_credit_short'),
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.error,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Quick + Udhar
-                  InkWell(
-                    onTap: () => _showAddTransactionModal(context, customer: c, isCredit: true),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.error.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.error.withValues(alpha: 0.2),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.arrow_outward_rounded, size: 11, color: AppColors.error),
-                          const SizedBox(width: 3),
-                          Text(
-                            context.tr('khata_give_credit_short'),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.error,
-                            ),
-                          ),
-                        ],
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: InkWell(
+                  onTap: () => _showAddTransactionModal(context, customer: c, isCredit: false),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.success.withValues(alpha: 0.25),
+                        width: 1,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-
-                  // Quick + Jama
-                  InkWell(
-                    onTap: () => _showAddTransactionModal(context, customer: c, isCredit: false),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.success.withValues(alpha: 0.2),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.arrow_downward_rounded, size: 11, color: AppColors.success),
-                          const SizedBox(width: 3),
-                          Text(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.arrow_downward_rounded, size: 13, color: AppColors.success),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
                             context.tr('khata_receive_payment_short'),
                             style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
                               color: AppColors.success,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ),

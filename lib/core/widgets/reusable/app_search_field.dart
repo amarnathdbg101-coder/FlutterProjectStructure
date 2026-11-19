@@ -21,6 +21,7 @@ class AppSearchField extends StatefulWidget {
   final bool showSubmitButton;
   final Duration debounceDuration;
   final FocusNode? focusNode;
+  final VoidCallback? onBarcodeTap;
 
   const AppSearchField({
     super.key,
@@ -34,6 +35,7 @@ class AppSearchField extends StatefulWidget {
     this.showSubmitButton = false,
     this.debounceDuration = const Duration(milliseconds: 250),
     this.focusNode,
+    this.onBarcodeTap,
   });
 
   @override
@@ -207,6 +209,23 @@ class _AppSearchFieldState extends State<AppSearchField> {
                     color: context.colorTextMuted,
                   ),
                 ),
+              if (widget.onBarcodeTap != null) ...[
+                const SizedBox(width: 2),
+                IconButton(
+                  tooltip: isHindi ? 'बारकोड स्कैन करें' : 'Scan barcode',
+                  constraints: const BoxConstraints.tightFor(
+                    width: 44,
+                    height: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: widget.onBarcodeTap,
+                  icon: const Icon(
+                    Icons.qr_code_scanner_rounded,
+                    size: 20,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
               if (widget.enableVoice) ...[
                 const SizedBox(width: 2),
                 AppVoiceIconButton(
