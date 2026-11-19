@@ -30,7 +30,7 @@ class TodaySalesScreen extends StatefulWidget {
 class _TodaySalesScreenState extends State<TodaySalesScreen> {
   bool _isDownloadingPdf = false;
   int _selectedWindowDays = 1; // 1 = Today (24 Hours), 10 = Last 10 Days Rolling Record
-  int _activeTabIndex = 0; // 0 = Sold Items, 1 = Bills, 2 = Top Ranking
+  int _activeTabIndex = 0; // 0 = Bills (Priority Default), 1 = Sold Items, 2 = Top Ranking
   bool _showProfitBreakdown = false; // Toggle P&L breakdown
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -198,6 +198,30 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
     return MerchantShell(
       currentIndex: -1,
       showBottomNav: false,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shadowColor: Colors.black.withValues(alpha: 0.25),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            icon: _isDownloadingPdf
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.share_rounded, size: 18, color: Colors.white),
+            label: Text(
+              context.isHindi ? '📤 आज की बिक्री रिपोर्ट शेयर करें (PDF)' : '📤 Share Daily Sales Report (PDF)',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            onPressed: _isDownloadingPdf ? null : _downloadEodPdf,
+          ),
+        ),
+      ),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: context.colorSurface,
@@ -229,21 +253,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
           ),
         ),
         actions: [
-          // Quick Universal Native Share
-          IconButton(
-            icon: const Icon(Icons.share_rounded, color: AppColors.primary, size: 21),
-            tooltip: context.isHindi ? 'सेल रिपोर्ट शेयर करें (WhatsApp, Bluetooth...)' : 'Share Sales PDF (WhatsApp, Bluetooth...)',
-            onPressed: _isDownloadingPdf ? null : _downloadEodPdf,
-          ),
-          // Quick PDF Download & Print Layout
-          IconButton(
-            icon: _isDownloadingPdf
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFDC2626)))
-                : const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 22),
-            tooltip: context.isHindi ? 'P&L PDF डाउनलोड / प्रिंट करें' : 'Download Executive P&L PDF',
-            onPressed: _isDownloadingPdf ? null : _downloadEodPdf,
-          ),
-          // Quick Refresh
+          // 🔄 Quick Refresh
           IconButton(
             icon: Icon(Icons.refresh_rounded, color: context.colorTextPrimary, size: 21),
             tooltip: context.isHindi ? 'डेटा रीफ्रेश करें' : 'Refresh Sales',
@@ -266,7 +276,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               }
             },
           ),
-          // More Menu
+          // ⋯ Clean Progressive Disclosure Menu
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
             tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
@@ -274,6 +284,12 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
             elevation: 4,
             onSelected: (val) async {
               switch (val) {
+                case 'share_pdf':
+                  _downloadEodPdf();
+                  break;
+                case 'ranking':
+                  setState(() => _activeTabIndex = 2);
+                  break;
                 case 'analytics':
                   context.push('/merchant/analytics');
                   break;
@@ -287,12 +303,22 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
             },
             itemBuilder: (ctx) => [
               PopupMenuItem(
-                value: 'analytics',
+                value: 'share_pdf',
                 child: Row(
                   children: [
-                    const Icon(Icons.analytics_rounded, color: AppColors.primary, size: 18),
+                    const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 18),
                     const SizedBox(width: 10),
-                    Text(ctx.isHindi ? 'व्यापार व मुनाफा रिपोर्ट (Analytics)' : 'Profit & Shop Analytics'),
+                    Text(ctx.isHindi ? 'सेल रिपोर्ट PDF डाउनलोड / शेयर' : 'Download Sales PDF'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'ranking',
+                child: Row(
+                  children: [
+                    const Icon(Icons.leaderboard_rounded, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 10),
+                    Text(ctx.isHindi ? 'सामान बिक्री रैंकिंग (Leaderboard)' : 'Top Selling Products'),
                   ],
                 ),
               ),
@@ -306,6 +332,16 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                   ],
                 ),
               ),
+              PopupMenuItem(
+                value: 'analytics',
+                child: Row(
+                  children: [
+                    const Icon(Icons.analytics_rounded, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 10),
+                    Text(ctx.isHindi ? 'व्यापार व मुनाफा रिपोर्ट (Analytics)' : 'Profit & Shop Analytics'),
+                  ],
+                ),
+              ),
               const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'pos',
@@ -313,7 +349,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                   children: [
                     const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 18),
                     const SizedBox(width: 10),
-                    Text(ctx.isHindi ? 'बिलिंग काउंटर पर जाएं' : 'Go to POS Terminal'),
+                    Text(ctx.isHindi ? 'पीओएस काउंटर पर जाएं' : 'Go to POS Terminal'),
                   ],
                 ),
               ),
@@ -486,68 +522,35 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                 Divider(height: 1, color: context.colorBorder),
                                 const SizedBox(height: 10),
 
-                                // Bottom Row: Quick P&L math link + PDF Report
+                                // Bottom Row: Quick P&L math toggle link
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Flexible(
-                                      child: InkWell(
-                                        onTap: () => setState(() => _showProfitBreakdown = !_showProfitBreakdown),
-                                        borderRadius: BorderRadius.circular(6),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                                          child: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            alignment: Alignment.centerLeft,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  _showProfitBreakdown ? Icons.keyboard_arrow_up_rounded : Icons.calculate_outlined,
-                                                  size: 16,
-                                                  color: AppColors.primary,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  context.isHindi ? 'मुनाफा हिसाब' : 'P&L Details',
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppColors.primary,
-                                                  ),
-                                                ),
-                                              ],
+                                    InkWell(
+                                      onTap: () => setState(() => _showProfitBreakdown = !_showProfitBreakdown),
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              _showProfitBreakdown ? Icons.keyboard_arrow_up_rounded : Icons.calculate_outlined,
+                                              size: 16,
+                                              color: AppColors.primary,
                                             ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: InkWell(
-                                        onTap: _isDownloadingPdf ? null : _downloadEodPdf,
-                                        borderRadius: BorderRadius.circular(6),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                                          child: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            alignment: Alignment.centerRight,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(Icons.picture_as_pdf_rounded, size: 15, color: Color(0xFFDC2626)),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  context.isHindi ? 'सेल रिपोर्ट PDF' : 'Sales PDF',
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: Color(0xFFDC2626),
-                                                  ),
-                                                ),
-                                              ],
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              context.isHindi
+                                                  ? (_showProfitBreakdown ? 'दुकानदार मुनाफा गणित छिपाएं' : 'दुकानदार मुनाफा गणित देखें ▾')
+                                                  : (_showProfitBreakdown ? 'Hide P&L math' : 'View P&L details ▾'),
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primary,
+                                              ),
                                             ),
-                                          ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -647,7 +650,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
                           const SizedBox(height: 12),
 
-                          // D. Sleek 3-Tab View Switcher (Bills First by Default)
+                          // D. Clean Segmented Tabs (Bills First by Default)
                           Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -659,18 +662,18 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                               children: [
                                 Expanded(
                                   child: _SegmentTab(
-                                    icon: Icons.shopping_bag_outlined,
-                                    label: context.isHindi ? 'बिके उत्पाद' : 'Sold Items',
-                                    count: allTimeSortedItems.length,
+                                    icon: Icons.receipt_long_rounded,
+                                    label: context.isHindi ? 'कटे हुए बिल' : 'Bills',
+                                    count: recentSales.length,
                                     isSelected: _activeTabIndex == 0,
                                     onTap: () => setState(() => _activeTabIndex = 0),
                                   ),
                                 ),
                                 Expanded(
                                   child: _SegmentTab(
-                                    icon: Icons.receipt_long_rounded,
-                                    label: context.isHindi ? 'बिल रसीद' : 'Bills',
-                                    count: recentSales.length,
+                                    icon: Icons.shopping_bag_outlined,
+                                    label: context.isHindi ? 'बिके सामान' : 'Sold Items',
+                                    count: allTimeSortedItems.length,
                                     isSelected: _activeTabIndex == 1,
                                     onTap: () => setState(() => _activeTabIndex = 1),
                                   ),
@@ -678,7 +681,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                 Expanded(
                                   child: _SegmentTab(
                                     icon: Icons.leaderboard_rounded,
-                                    label: context.isHindi ? 'रैंकिंग' : 'Top Ranking',
+                                    label: context.isHindi ? 'रैंकिंग' : 'Ranking',
                                     count: allSoldRanking.length,
                                     isSelected: _activeTabIndex == 2,
                                     onTap: () => setState(() => _activeTabIndex = 2),
@@ -690,14 +693,14 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
                           const SizedBox(height: 10),
 
-                          // E. Customer Style Spacious Search Bar
+                          // E. Responsive Search Bar
                           AppSearchField(
                             controller: _searchController,
                             hintText: _activeTabIndex == 0
-                                ? (context.isHindi ? 'उत्पाद या बिल नंबर खोजें...' : 'Search item or bill #...')
+                                ? (context.isHindi ? 'बिल नंबर या ग्राहक फोन खोजें...' : 'Search bill # or customer phone...')
                                 : (_activeTabIndex == 1
-                                    ? (context.isHindi ? 'बिल नंबर या फोन नंबर खोजें...' : 'Search bill # or customer phone...')
-                                    : (context.isHindi ? 'उत्पाद का नाम खोजें...' : 'Search product name...')),
+                                    ? (context.isHindi ? 'सामान या बिल नंबर खोजें...' : 'Search item or bill #...')
+                                    : (context.isHindi ? 'सामान का नाम खोजें...' : 'Search product name...')),
                             onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase()),
                             onSubmitted: (val) => setState(() => _searchQuery = val.trim().toLowerCase()),
                             onClear: () => setState(() => _searchQuery = ''),
@@ -708,34 +711,8 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                   ),
 
                   // 2. High-Performance Virtualized Slivers (120 FPS Buttery-Smooth Scrolling)
-                  // Tab 0: Time-Sorted Sold Products Timeline
+                  // Tab 0: Completed Sales Bills with Direct 1-Tap Actions (Priority View)
                   if (_activeTabIndex == 0) ...[
-                    if (filteredSoldItems.isEmpty)
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        sliver: SliverToBoxAdapter(
-                          child: _buildEmptyState(
-                            context,
-                            message: _searchQuery.isNotEmpty
-                                ? (context.isHindi ? 'कोई मेल खाता उत्पाद नहीं मिला' : 'No matching sold products found')
-                                : (context.isHindi ? 'इस अवधि में कोई उत्पाद नहीं बिका' : 'No products sold in this period'),
-                          ),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        sliver: SliverList.builder(
-                          itemCount: filteredSoldItems.length,
-                          itemBuilder: (context, index) {
-                            return _buildSoldProductTimelineTile(context, filteredSoldItems[index]);
-                          },
-                        ),
-                      ),
-                  ],
-
-                  // Tab 1: Completed Sales Bills with Direct 1-Tap Actions
-                  if (_activeTabIndex == 1) ...[
                     if (filteredBills.isEmpty)
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -755,6 +732,32 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                           itemCount: filteredBills.length,
                           itemBuilder: (context, index) {
                             return _buildSaleBillTile(context, filteredBills[index]);
+                          },
+                        ),
+                      ),
+                  ],
+
+                  // Tab 1: Time-Sorted Sold Products Timeline
+                  if (_activeTabIndex == 1) ...[
+                    if (filteredSoldItems.isEmpty)
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        sliver: SliverToBoxAdapter(
+                          child: _buildEmptyState(
+                            context,
+                            message: _searchQuery.isNotEmpty
+                                ? (context.isHindi ? 'कोई मेल खाता सामान नहीं मिला' : 'No matching sold products found')
+                                : (context.isHindi ? 'इस अवधि में कोई सामान नहीं बिका' : 'No products sold in this period'),
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        sliver: SliverList.builder(
+                          itemCount: filteredSoldItems.length,
+                          itemBuilder: (context, index) {
+                            return _buildSoldProductTimelineTile(context, filteredSoldItems[index]);
                           },
                         ),
                       ),
@@ -788,7 +791,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
                   // 3. Subtle 10-Day Retention Footer Note
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 84),
                     sliver: SliverToBoxAdapter(
                       child: Center(
                         child: Row(
