@@ -5242,321 +5242,769 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
           ],
 
           // COMPLETE SALE & PRINT BILL BUTTON
-
           AppButton(
-
             text: context.isHindi
-
                 ? '⚡ बिक्री पूर्ण करें और बिल बनाएं (₹${pos.grandTotal.toStringAsFixed(0)})'
-
                 : '⚡ Complete Sale & Print Bill (₹${pos.grandTotal.toStringAsFixed(0)})',
-
             icon: Icons.bolt_rounded,
-
             size: AppButtonSize.lg,
-
             isFullWidth: true,
-
             isLoading: pos.isCompletingSale,
-
             borderRadius: 14,
-
             onPressed: (pos.cart.isEmpty || pos.isCompletingSale)
-
                 ? null
-
-                : () async {
-
-                    final sale = await pos.completeSale();
-
-                    if (sale != null && context.mounted) {
-
-                      _cashController.clear();
-
-                      if (pos.autoPrintEnabled) {
-
-                        // ⚡ Zero-Click Instant Print Mode: Send print job & show non-blocking HUD toast
-
-                        final shop = context.read<AuthController>().currentShop;
-
-                        final shopName = shop?.name ?? 'ShopSilo Retail Store';
-
-                        pos.generateThermalReceiptPdf(
-
-                          context,
-
-                          sale,
-
-                          shopName,
-
-                          shopAddress: shop?.address ?? '',
-
-                          shopPhone: shop?.phone ?? '',
-
-                          shopGstin: shop?.gstin ?? '',
-
-                          upiId: shop?.upiId ?? '',
-
-                        );
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-
-                          SnackBar(
-
-                            content: Row(
-
-                              children: [
-
-                                const Icon(Icons.bolt_rounded, color: Colors.amber, size: 20),
-
-                                const SizedBox(width: 8),
-
-                                Expanded(
-
-                                  child: Text(
-
-                                    context.isHindi
-
-                                        ? '⚡ बिल #${sale.billNumber ?? ""} प्रिंट हो रहा है (₹${sale.totalAmount.toStringAsFixed(0)})'
-
-                                        : '⚡ Bill #${sale.billNumber ?? ""} Printing (₹${sale.totalAmount.toStringAsFixed(0)})',
-
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-
-                                  ),
-
-                                ),
-
-                              ],
-
-                            ),
-
-                            backgroundColor: AppColors.success,
-
-                            duration: const Duration(seconds: 2),
-
-                          ),
-
-                        );
-
-                      } else {
-
-                        _showSuccessReceipt(context, sale);
-
-                      }
-
-                    } else if (context.mounted && pos.hasError) {
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-
-                        SnackBar(
-
-                          content: Text(pos.errorMessage ?? (context.isHindi ? 'बिक्री असफल रही' : 'Sale generation failed')),
-
-                          backgroundColor: AppColors.error,
-
-                          duration: const Duration(seconds: 4),
-
-                        ),
-
-                      );
-
-                    }
-
-                  },
-
+                : () => _handleCompleteSale(context, pos),
           ),
-
         ],
-
       ),
-
     );
-
   }
 
   Widget _buildCashChip(BuildContext context, String label, double amount, PosController pos) {
-
     final isSelected = (pos.cashTendered - amount).abs() < 0.01;
-
     return Padding(
-
       padding: const EdgeInsets.only(right: 6),
-
       child: InkWell(
-
         onTap: () {
-
           _cashController.text = amount.toStringAsFixed(0);
-
           pos.setCashTendered(amount);
-
         },
-
         borderRadius: BorderRadius.circular(8),
-
         child: Container(
-
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-
           decoration: BoxDecoration(
-
             color: isSelected ? AppColors.primary : context.colorSurface,
-
             borderRadius: BorderRadius.circular(8),
-
             border: Border.all(
-
               color: isSelected ? AppColors.primary : context.colorBorder,
-
               width: isSelected ? 1.5 : 1,
-
             ),
-
           ),
-
           child: Text(
-
             label,
-
             style: TextStyle(
-
               fontSize: 11.5,
-
               fontWeight: FontWeight.bold,
-
               color: isSelected ? Colors.white : context.colorTextPrimary,
-
             ),
-
           ),
-
         ),
-
       ),
-
     );
-
   }
 
-  /// Mobile Bottom Checkout Bar with Zero Flex Overflow Protection
+  /// ⚡ Reusable Sale Completion & Instant Receipt Flow
+  Future<void> _handleCompleteSale(BuildContext context, PosController pos) async {
+    if (pos.cart.isEmpty || pos.isCompletingSale) return;
 
+    final sale = await pos.completeSale();
+    if (!context.mounted) return;
+
+    if (sale != null) {
+      _cashController.clear();
+      if (pos.autoPrintEnabled) {
+        final shop = context.read<AuthController>().currentShop;
+        final shopName = shop?.name ?? 'ShopSilo Retail Store';
+        pos.generateThermalReceiptPdf(
+          context,
+          sale,
+          shopName,
+          shopAddress: shop?.address ?? '',
+          shopPhone: shop?.phone ?? '',
+          shopGstin: shop?.gstin ?? '',
+          upiId: shop?.upiId ?? '',
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.bolt_rounded, color: Colors.amber, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    context.isHindi
+                        ? '⚡ बिल #${sale.billNumber ?? ""} प्रिंट हो रहा है (₹${sale.totalAmount.toStringAsFixed(0)})'
+                        : '⚡ Bill #${sale.billNumber ?? ""} Printing (₹${sale.totalAmount.toStringAsFixed(0)})',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        _showSuccessReceipt(context, sale);
+      }
+    } else if (pos.hasError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(pos.errorMessage ?? (context.isHindi ? 'बिक्री असफल रही' : 'Sale generation failed')),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  /// 🟢 High-Contrast Fast Cash Billing Modal (Village Shopkeeper & Family Friendly)
+  void _openFastCashCheckoutModal(BuildContext context, PosController pos) {
+    pos.setPaymentMethod('cash');
+    if (pos.cashTendered <= 0 || pos.cashTendered < pos.grandTotal) {
+      pos.setCashTendered(pos.grandTotal);
+    }
+    _cashController.text = pos.cashTendered.toStringAsFixed(0);
+
+    AppModalSheet.show(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final isHindi = modalCtx.isHindi;
+            final total = pos.grandTotal;
+            final tendered = pos.cashTendered;
+            final changeDue = (tendered - total) > 0 ? (tendered - total) : 0.0;
+
+            final notes = <double>{total};
+            for (final note in [100.0, 200.0, 500.0, 2000.0]) {
+              if (note > total) notes.add(note);
+            }
+            final sortedNotes = notes.toList()..sort();
+
+            return Container(
+              decoration: BoxDecoration(
+                color: modalCtx.colorSurface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 20,
+                top: 20,
+                left: 20,
+                right: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.payments_rounded, color: AppColors.success, size: 24),
+                            const SizedBox(width: 8),
+                            Text(
+                              isHindi ? 'नकद बिलिंग (Cash Bill)' : 'Cash Billing',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.of(modalCtx).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isHindi ? 'कुल बिल राशि:' : 'Total Amount:',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: modalCtx.colorTextMuted),
+                          ),
+                          Text(
+                            '₹${total.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppColors.success),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isHindi ? 'ग्राहक से प्राप्त नकद (Tendered Cash):' : 'Cash Received from Customer:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: modalCtx.colorTextMuted),
+                    ),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: sortedNotes.map((amt) {
+                          final isSelected = (pos.cashTendered - amt).abs() < 0.5;
+                          final isExact = (amt - total).abs() < 0.5;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: InkWell(
+                              onTap: () {
+                                pos.setCashTendered(amt);
+                                _cashController.text = amt.toStringAsFixed(0);
+                                setModalState(() {});
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppColors.success : modalCtx.colorSurfaceSubtle,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected ? AppColors.success : modalCtx.colorBorder,
+                                    width: isSelected ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  isExact ? (isHindi ? 'पूरे ₹${amt.toStringAsFixed(0)}' : 'Exact ₹${amt.toStringAsFixed(0)}') : '₹${amt.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected ? Colors.white : modalCtx.colorTextPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _cashController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        prefixText: '₹ ',
+                        prefixStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        hintText: total.toStringAsFixed(0),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      onChanged: (val) {
+                        final c = double.tryParse(val) ?? 0.0;
+                        pos.setCashTendered(c);
+                        setModalState(() {});
+                      },
+                    ),
+                    if (changeDue > 0) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              isHindi ? '🟢 ग्राहक को वापस करें (Change):' : '🟢 Return to Customer (Change):',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.success),
+                            ),
+                            Text(
+                              '₹${changeDue.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.success),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    AppButton(
+                      text: isHindi
+                          ? '⚡ बिल बनाएं और पर्ची दें (₹${total.toStringAsFixed(0)})'
+                          : '⚡ Complete Cash Bill (₹${total.toStringAsFixed(0)})',
+                      icon: Icons.bolt_rounded,
+                      size: AppButtonSize.lg,
+                      isFullWidth: true,
+                      borderRadius: 14,
+                      isLoading: pos.isCompletingSale,
+                      onPressed: pos.isCompletingSale
+                          ? null
+                          : () async {
+                              Navigator.of(modalCtx).pop();
+                              await _handleCompleteSale(context, pos);
+                            },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// 🟠 High-Contrast Fast Khata / Udhar Billing Modal
+  void _openFastKhataCheckoutModal(BuildContext context, PosController pos) {
+    pos.setPaymentMethod('khata');
+    if (_phoneController.text != pos.customerPhone) {
+      _phoneController.value = TextEditingValue(
+        text: pos.customerPhone,
+        selection: TextSelection.collapsed(offset: pos.customerPhone.length),
+      );
+    }
+
+    AppModalSheet.show(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final isHindi = modalCtx.isHindi;
+            final total = pos.grandTotal;
+            final khataCustomers = LocalCacheService.getKhataCustomers();
+            final cleanPhone = pos.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+
+            KhataCustomerModel? matchedCustomer;
+            if (cleanPhone.length >= 10) {
+              final last10 = cleanPhone.substring(cleanPhone.length - 10);
+              for (final c in khataCustomers) {
+                final cPhone = c.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+                if (cPhone.endsWith(last10)) {
+                  matchedCustomer = c;
+                  break;
+                }
+              }
+            }
+
+            final suggestions = cleanPhone.length >= 2
+                ? khataCustomers.where((c) {
+                    final cPhone = c.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+                    return cPhone.contains(cleanPhone) ||
+                        c.customerName.toLowerCase().contains(pos.customerPhone.trim().toLowerCase());
+                  }).take(4).toList()
+                : <KhataCustomerModel>[];
+
+            final currentBal = matchedCustomer?.currentBalance ?? 0.0;
+            final creditLimit = matchedCustomer?.creditLimit ?? 0.0;
+            final newBal = currentBal + total;
+            final isOverLimit = creditLimit > 0 && newBal > creditLimit;
+
+            return Container(
+              decoration: BoxDecoration(
+                color: modalCtx.colorSurface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 20,
+                top: 20,
+                left: 20,
+                right: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.menu_book_rounded, color: Color(0xFFD97706), size: 24),
+                            const SizedBox(width: 8),
+                            Text(
+                              isHindi ? 'खाता उधार बिलिंग (Khata Udhar)' : 'Khata Udhar Billing',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.of(modalCtx).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD97706).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isHindi ? 'उधार बिल राशि:' : 'Khata Bill Amount:',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: modalCtx.colorTextMuted),
+                          ),
+                          Text(
+                            '₹${total.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFFD97706)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isHindi ? 'ग्राहक का 10-अंकों का मोबाइल नंबर:' : 'Customer 10-digit Mobile:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: modalCtx.colorTextMuted),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        hintText: isHindi ? 'उदा. 9876543210' : 'e.g. 9876543210',
+                        prefixIcon: const Icon(Icons.phone_outlined, size: 18),
+                        suffixIcon: AppVoiceIconButton(
+                          controller: _phoneController,
+                          hint: isHindi ? 'ग्राहक मोबाइल' : 'Customer Phone',
+                          onSubmitted: (val) {
+                            _onCustomerPhoneChanged(val, pos);
+                            setModalState(() {});
+                          },
+                        ),
+                      ),
+                      onChanged: (val) {
+                        _onCustomerPhoneChanged(val, pos);
+                        setModalState(() {});
+                      },
+                    ),
+                    if (suggestions.isNotEmpty && matchedCustomer == null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: modalCtx.colorSurfaceSubtle,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: modalCtx.colorBorder),
+                        ),
+                        child: Column(
+                          children: suggestions.map((c) {
+                            return ListTile(
+                              dense: true,
+                              visualDensity: VisualDensity.compact,
+                              leading: const Icon(Icons.person_outline_rounded, size: 18, color: Color(0xFFD97706)),
+                              title: Text(c.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              subtitle: Text(c.customerPhone, style: TextStyle(fontSize: 11, color: modalCtx.colorTextMuted)),
+                              trailing: Text(
+                                '₹${c.currentBalance.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: c.currentBalance > 0 ? AppColors.error : AppColors.success,
+                                ),
+                              ),
+                              onTap: () {
+                                _phoneController.text = c.customerPhone;
+                                _onCustomerPhoneChanged(c.customerPhone, pos);
+                                setModalState(() {});
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                    if (matchedCustomer != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isOverLimit
+                              ? AppColors.error.withValues(alpha: 0.08)
+                              : AppColors.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isOverLimit ? AppColors.error : AppColors.primary.withValues(alpha: 0.3),
+                            width: isOverLimit ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.person_rounded, size: 16, color: AppColors.primary),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      matchedCustomer.customerName.isNotEmpty ? matchedCustomer.customerName : (isHindi ? 'खाता ग्राहक' : 'Khata Customer'),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  '${isHindi ? "पुराना बकाया" : "Old Due"}: ₹${currentBal.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                    color: currentBal > 0 ? AppColors.error : AppColors.success,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  creditLimit > 0
+                                      ? '${isHindi ? "उधार सीमा" : "Credit Limit"}: ₹${creditLimit.toStringAsFixed(0)}'
+                                      : (isHindi ? 'उधार सीमा: असीमित' : 'Credit Limit: Open'),
+                                  style: TextStyle(fontSize: 11, color: modalCtx.colorTextMuted),
+                                ),
+                                Text(
+                                  '${isHindi ? "नया कुल बकाया" : "New Total Due"}: ₹${newBal.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: isOverLimit ? AppColors.error : modalCtx.colorTextPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (isOverLimit) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                isHindi
+                                    ? '⚠️ चेतावनी: यह बिल तय उधार सीमा (₹${creditLimit.toStringAsFixed(0)}) को पार कर देगा!'
+                                    : '⚠️ Warning: Exceeds credit limit of ₹${creditLimit.toStringAsFixed(0)}!',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.error),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ] else if (cleanPhone.length >= 10) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: Text(
+                          isHindi ? 'नया खाता ग्राहक: बिल बनते ही यह नंबर खाते में स्वतः जुड़ जाएगा।' : 'New Khata Customer: Account will be linked upon billing.',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD97706),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 1,
+                      ),
+                      icon: const Icon(Icons.menu_book_rounded, size: 20),
+                      label: Text(
+                        isHindi ? '📖 खाते में दर्ज करें (₹${total.toStringAsFixed(0)})' : '📖 Add to Khata (₹${total.toStringAsFixed(0)})',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      ),
+                      onPressed: (pos.isCompletingSale || cleanPhone.length < 10)
+                          ? null
+                          : () async {
+                              Navigator.of(modalCtx).pop();
+                              await _handleCompleteSale(context, pos);
+                            },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// 📱 Clean Mobile Bottom Checkout Bar with High-Contrast Dual Primary Actions
   Widget _buildMobileBottomCheckoutBar(BuildContext context, PosController pos) {
-
     if (pos.cart.isEmpty) return const SizedBox.shrink();
+    final isHindi = context.isHindi;
 
     return Container(
-
-      padding: const EdgeInsets.all(14),
-
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
       decoration: BoxDecoration(
-
         color: context.colorSurface,
-
         border: Border(top: BorderSide(color: context.colorBorder)),
-
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, -3))],
-
-      ),
-
-      child: Row(
-
-        children: [
-
-          Expanded(
-
-            child: Column(
-
-              mainAxisSize: MainAxisSize.min,
-
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-
-                Text(
-
-                  '${pos.totalItemCount} ${context.isHindi ? "वस्तुएं बिल में" : "Items in Bill"}',
-
-                  style: TextStyle(fontSize: 11, color: context.colorTextMuted),
-
-                  overflow: TextOverflow.ellipsis,
-
-                ),
-
-                FittedBox(
-
-                  fit: BoxFit.scaleDown,
-
-                  alignment: Alignment.centerLeft,
-
-                  child: Text(
-
-                    '₹${pos.grandTotal.toStringAsFixed(2)}',
-
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.success, letterSpacing: -0.4),
-
-                  ),
-
-                ),
-
-              ],
-
-            ),
-
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
           ),
-
-          const SizedBox(width: 12),
-
-          AppButton(
-
-            text: context.isHindi ? 'बिल चेकआउट' : 'Checkout Bill',
-
-            onPressed: () {
-
-              AppModalSheet.show(
-
-                context: context,
-
-                builder: (ctx) => Container(
-
-                  decoration: BoxDecoration(
-
-                    color: ctx.colorSurface,
-
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-
-                  ),
-
-                  padding: EdgeInsets.only(
-
-                    bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-
-                    top: 20,
-
-                    left: 20,
-
-                    right: 20,
-
-                  ),
-
-                  child: _buildCheckoutPanel(ctx, pos),
-
-                ),
-
-              );
-
-            },
-
-          ),
-
         ],
-
       ),
-
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Row 1: Item count & Grand Total
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: context.colorSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: context.colorBorder),
+                      ),
+                      child: Text(
+                        '${pos.totalItemCount} ${isHindi ? "सामान" : "Items"}',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (pos.discount > 0)
+                      InkWell(
+                        onTap: () => _showDiscountDialog(context, pos),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '-₹${pos.discount.toStringAsFixed(0)} ${isHindi ? "छूट" : "Off"}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    children: [
+                      Text(
+                        '${isHindi ? "कुल" : "Total"}: ',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colorTextMuted),
+                      ),
+                      Text(
+                        '₹${pos.grandTotal.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.success,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Row 2: 2 Big High-Contrast Touch Targets
+            Row(
+              children: [
+                Expanded(
+                  flex: 6,
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        foregroundColor: Colors.white,
+                        elevation: 1,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      icon: const Icon(Icons.bolt_rounded, size: 20),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          isHindi ? '⚡ नकद मिला' : '⚡ Cash Bill',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      onPressed: pos.isCompletingSale ? null : () => _openFastCashCheckoutModal(context, pos),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 5,
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD97706),
+                        foregroundColor: Colors.white,
+                        elevation: 1,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      icon: const Icon(Icons.menu_book_rounded, size: 18),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          isHindi ? '📖 उधार / खाता' : '📖 Khata Udhar',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      onPressed: pos.isCompletingSale ? null : () => _openFastKhataCheckoutModal(context, pos),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Row 3: Progressive Disclosure Trigger for UPI QR & Split
+            InkWell(
+              onTap: () {
+                AppModalSheet.show(
+                  context: context,
+                  builder: (ctx) => Container(
+                    decoration: BoxDecoration(
+                      color: ctx.colorSurface,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+                      top: 20,
+                      left: 20,
+                      right: 20,
+                    ),
+                    child: _buildCheckoutPanel(ctx, pos),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.qr_code_2_rounded, size: 15, color: context.colorTextMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      isHindi ? 'UPI QR / स्प्लिट / अन्य विकल्प ▾' : 'UPI QR / Split / All Options ▾',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: context.colorTextMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
-
   }
-
 }
 
 /// 🛒 Dedicated POS Cart Item Tile with 0ms Tactile Steppers & Zero Repaint Cascading
