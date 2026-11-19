@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
@@ -30,7 +31,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
   bool _isDownloadingPdf = false;
   int _selectedWindowDays = 1; // 1 = Today (24 Hours), 10 = Last 10 Days Rolling Record
   int _activeTabIndex = 0; // 0 = Sold Items, 1 = Bills, 2 = Top Ranking
-  bool _showProfitBreakdown = false; // Toggle P&L breakdown drawer
+  bool _showProfitBreakdown = false; // Toggle P&L breakdown
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -152,9 +153,20 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
     final totalCogs = metrics.totalCogs;
     final netProfit = metrics.netProfit;
     final marginPct = metrics.marginPct;
-    final recentSales = metrics.recentSales;
     final allTimeSortedItems = metrics.timeSortedItems;
     final allSoldRanking = metrics.productRanking;
+
+    // Strict in-memory deduplication of bills by billNumber so duplicate records NEVER display
+    final Map<String, SaleModel> deduplicatedBillsMap = {};
+    for (final sale in metrics.recentSales) {
+      final billNum = sale.billNumber?.trim() ?? '';
+      final key = billNum.isNotEmpty
+          ? billNum
+          : 's_${sale.createdAt.millisecondsSinceEpoch}_${sale.totalAmount}';
+      deduplicatedBillsMap[key] = sale;
+    }
+    final recentSales = deduplicatedBillsMap.values.toList();
+    recentSales.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     final is10Days = _selectedWindowDays == 10;
 
@@ -212,7 +224,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
           ),
         ),
         actions: [
-          // Quick Universal Native Share (Bluetooth, WhatsApp, Instagram, etc.)
+          // Quick Universal Native Share
           IconButton(
             icon: const Icon(Icons.share_rounded, color: AppColors.primary, size: 21),
             tooltip: context.isHindi ? 'सेल रिपोर्ट शेयर करें (WhatsApp, Bluetooth...)' : 'Share Sales PDF (WhatsApp, Bluetooth...)',
@@ -323,91 +335,68 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                 slivers: [
-                  // 1. Sticky Header Section: Consolidated Executive Hero Card, Segments & Search
+                  // 1. Clean, Calm & Non-Cluttered Header Section
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     sliver: SliverToBoxAdapter(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // 1. Consolidated Executive Hero Card
+                          // A. Clean Duration Filter Switcher
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: context.colorSurfaceSubtle,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: context.colorBorder),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _PeriodTab(
+                                    label: context.isHindi ? 'आज (24 घंटे)' : 'Today (24h)',
+                                    isSelected: !is10Days,
+                                    onTap: () => setState(() => _selectedWindowDays = 1),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: _PeriodTab(
+                                    label: context.isHindi ? 'पिछले 10 दिन का हिसाब' : 'Last 10 Days Record',
+                                    isSelected: is10Days,
+                                    onTap: () => setState(() => _selectedWindowDays = 10),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // B. Calm & Clear Financial Hero Card (Spacious, No Cramping)
                           AppCard(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Card Header: Live indicator & Duration Pill Switcher
+                                // Top row: Sales on left, Net Profit on right
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: AppColors.success,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          is10Days
-                                              ? (context.isHindi ? '10-दिवसीय बिक्री व मुनाफा' : '10-DAY TOTAL SALES')
-                                              : (context.isHindi ? 'आज की कुल बिक्री व मुनाफा' : "TODAY'S TOTAL SALES"),
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.8,
-                                            color: context.colorTextMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    // Compact Duration Switcher Pill
-                                    Container(
-                                      padding: const EdgeInsets.all(2.5),
-                                      decoration: BoxDecoration(
-                                        color: context.colorSurfaceSubtle,
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(color: context.colorBorder),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _MiniPill(
-                                            label: context.isHindi ? 'आज (24h)' : 'Today',
-                                            isSelected: !is10Days,
-                                            onTap: () => setState(() => _selectedWindowDays = 1),
-                                          ),
-                                          _MiniPill(
-                                            label: context.isHindi ? '10 दिन' : '10 Days',
-                                            isSelected: is10Days,
-                                            onTap: () => setState(() => _selectedWindowDays = 10),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-
-                                // Prominent Revenue & Profit Metrics
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final isNarrow = constraints.maxWidth < 420;
-                                    final salesCol = Column(
+                                    // Left: Total Sales
+                                    Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           context.isHindi ? 'कुल बिक्री (Sales)' : 'Total Sales',
                                           style: TextStyle(
-                                            fontSize: 11,
+                                            fontSize: 12,
                                             fontWeight: FontWeight.w600,
                                             color: context.colorTextSecondary,
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
+                                        const SizedBox(height: 4),
                                         Text(
                                           '₹${totalRevenue.toStringAsFixed(0)}',
                                           style: TextStyle(
@@ -422,14 +411,15 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                           '$totalBills ${context.isHindi ? 'बिल' : 'bills'} • $totalUnitsSold ${context.isHindi ? 'सामान' : 'items'}',
                                           style: TextStyle(
                                             fontSize: 12,
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight: FontWeight.w500,
                                             color: context.colorTextMuted,
                                           ),
                                         ),
                                       ],
-                                    );
+                                    ),
 
-                                    final profitCol = Container(
+                                    // Right: Net Pocket Profit
+                                    Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                       decoration: BoxDecoration(
                                         color: AppColors.success.withValues(alpha: 0.08),
@@ -437,22 +427,15 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                         border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.trending_up_rounded, size: 14, color: AppColors.success),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                context.isHindi ? 'शुद्ध मुनाफा' : 'Net Profit',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: AppColors.success,
-                                                ),
-                                              ),
-                                            ],
+                                          Text(
+                                            context.isHindi ? 'शुद्ध जेब मुनाफा' : 'Net Profit',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.success,
+                                            ),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
@@ -461,7 +444,6 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                               fontSize: 20,
                                               fontWeight: FontWeight.w900,
                                               color: netProfit >= 0 ? AppColors.success : AppColors.error,
-                                              letterSpacing: -0.3,
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -471,134 +453,71 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                           ),
                                         ],
                                       ),
-                                    );
-
-                                    if (isNarrow) {
-                                      return Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          salesCol,
-                                          const SizedBox(height: 12),
-                                          profitCol,
-                                        ],
-                                      );
-                                    }
-
-                                    return Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(child: salesCol),
-                                        const SizedBox(width: 12),
-                                        profitCol,
-                                      ],
-                                    );
-                                  },
+                                    ),
+                                  ],
                                 ),
 
-                                const SizedBox(height: 14),
-                                Divider(height: 1, color: context.colorBorder),
                                 const SizedBox(height: 12),
+                                Divider(height: 1, color: context.colorBorder),
+                                const SizedBox(height: 10),
 
-                                // Cash, UPI, Khata breakdown bar & Interactive Profit Toggle
-                                SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  physics: const BouncingScrollPhysics(),
-                                  child: Row(
-                                    children: [
-                                      _MiniMetric(
-                                        label: context.isHindi ? 'नकद' : 'Cash',
-                                        amount: cashRevenue,
-                                        color: AppColors.success,
-                                        icon: Icons.payments_rounded,
-                                      ),
-                                      Container(width: 1, height: 18, color: context.colorBorder, margin: const EdgeInsets.symmetric(horizontal: 10)),
-                                      _MiniMetric(
-                                        label: 'UPI',
-                                        amount: upiRevenue,
-                                        color: AppColors.primary,
-                                        icon: Icons.qr_code_2_rounded,
-                                      ),
-                                      Container(width: 1, height: 18, color: context.colorBorder, margin: const EdgeInsets.symmetric(horizontal: 10)),
-                                      _MiniMetric(
-                                        label: context.isHindi ? 'उधार' : 'Khata',
-                                        amount: khataRevenue,
-                                        color: AppColors.warning,
-                                        icon: Icons.menu_book_rounded,
-                                      ),
-                                      Container(width: 1, height: 18, color: context.colorBorder, margin: const EdgeInsets.symmetric(horizontal: 10)),
-
-                                      // Interactive Profit Breakdown Toggle Pill
-                                      InkWell(
-                                        onTap: () => setState(() => _showProfitBreakdown = !_showProfitBreakdown),
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                          decoration: BoxDecoration(
-                                            color: _showProfitBreakdown ? AppColors.primary.withValues(alpha: 0.12) : context.colorSurfaceSubtle,
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: _showProfitBreakdown ? AppColors.primary : context.colorBorder,
+                                // Bottom Row: Quick P&L math link + PDF Report
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    InkWell(
+                                      onTap: () => setState(() => _showProfitBreakdown = !_showProfitBreakdown),
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _showProfitBreakdown ? Icons.keyboard_arrow_up_rounded : Icons.calculate_outlined,
+                                              size: 16,
+                                              color: AppColors.primary,
                                             ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                _showProfitBreakdown ? Icons.keyboard_arrow_up_rounded : Icons.calculate_outlined,
-                                                size: 14,
-                                                color: _showProfitBreakdown ? AppColors.primary : context.colorTextSecondary,
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              context.isHindi ? 'मुनाफा हिसाब (P&L Details)' : 'P&L Details',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primary,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                context.isHindi ? 'मुनाफा हिसाब' : 'P&L Details',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _showProfitBreakdown ? AppColors.primary : context.colorTextPrimary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
+                                    ),
 
-                                      // Quick PDF Export Pill
-                                      InkWell(
-                                        onTap: _isDownloadingPdf ? null : _downloadEodPdf,
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFEF2F2),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: const Color(0xFFFECACA)),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 14),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                context.isHindi ? 'P&L PDF' : 'P&L PDF',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Color(0xFF991B1B),
-                                                ),
+                                    InkWell(
+                                      onTap: _isDownloadingPdf ? null : _downloadEodPdf,
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.picture_as_pdf_rounded, size: 15, color: Color(0xFFDC2626)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              context.isHindi ? 'सेल रिपोर्ट PDF' : 'Sales PDF',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: Color(0xFFDC2626),
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
 
-                                // ⚡ Expandable Profit & Expenses Calculation Details Box
+                                // Expandable P&L Formula
                                 if (_showProfitBreakdown) ...[
-                                  const SizedBox(height: 14),
+                                  const SizedBox(height: 10),
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
@@ -609,53 +528,32 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              context.isHindi ? 'दुकानदार शुद्ध मुनाफा गणित' : 'SHOP PROFIT & LOSS MATHEMATICS',
-                                              style: TextStyle(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 0.5,
-                                                color: context.colorTextMuted,
-                                              ),
-                                            ),
-                                            InkWell(
-                                              onTap: () => context.push('/merchant/analytics'),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    context.isHindi ? 'विस्तृत रिपोर्ट →' : 'Full Report →',
-                                                    style: const TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.w700,
-                                                      color: AppColors.primary,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
+                                        Text(
+                                          context.isHindi ? 'दुकानदार शुद्ध मुनाफा गणित' : 'SHOP PROFIT & LOSS MATHEMATICS',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.5,
+                                            color: context.colorTextMuted,
+                                          ),
                                         ),
-                                        const SizedBox(height: 8),
+                                        const SizedBox(height: 6),
                                         _buildFormulaItem(
                                           context,
                                           title: context.isHindi ? '+ कुल बिक्री आय (Sales Revenue)' : '+ Total Sales Revenue',
                                           value: '+₹${totalRevenue.toStringAsFixed(0)}',
                                           color: AppColors.success,
                                         ),
-                                        const SizedBox(height: 4),
+                                        const SizedBox(height: 3),
                                         _buildFormulaItem(
                                           context,
                                           title: context.isHindi ? '- सामान खरीद लागत (Estimated COGS)' : '- Cost of Goods Sold (COGS)',
                                           value: '-₹${totalCogs.toStringAsFixed(0)}',
                                           color: AppColors.error,
                                         ),
-                                        const SizedBox(height: 6),
+                                        const SizedBox(height: 4),
                                         Divider(height: 1, color: context.colorBorder),
-                                        const SizedBox(height: 6),
+                                        const SizedBox(height: 4),
                                         _buildFormulaItem(
                                           context,
                                           title: context.isHindi ? '= शुद्ध जेब मुनाफा (Net Pocket Profit)' : '= Net Pocket Profit',
@@ -671,9 +569,46 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                             ),
                           ),
 
+                          const SizedBox(height: 10),
+
+                          // C. Clean 3-Column Payment Mode Summary (Zero Horizontal Scroll)
+                          AppCard(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _PaymentColumn(
+                                    label: context.isHindi ? 'नकद' : 'Cash',
+                                    amount: cashRevenue,
+                                    icon: Icons.payments_rounded,
+                                    color: AppColors.success,
+                                  ),
+                                ),
+                                Container(width: 1, height: 32, color: context.colorBorder),
+                                Expanded(
+                                  child: _PaymentColumn(
+                                    label: 'UPI',
+                                    amount: upiRevenue,
+                                    icon: Icons.qr_code_2_rounded,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                Container(width: 1, height: 32, color: context.colorBorder),
+                                Expanded(
+                                  child: _PaymentColumn(
+                                    label: context.isHindi ? 'उधार' : 'Khata',
+                                    amount: khataRevenue,
+                                    icon: Icons.menu_book_rounded,
+                                    color: AppColors.warning,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
                           const SizedBox(height: 12),
 
-                          // 2. Sleek 3-Tab Segmented Switcher (Preserves clean tab state)
+                          // D. Sleek 3-Tab View Switcher (Bills First by Default)
                           Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -716,7 +651,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
                           const SizedBox(height: 10),
 
-                          // 3. Customer Style Spacious Search Bar
+                          // E. Customer Style Spacious Search Bar
                           AppSearchField(
                             controller: _searchController,
                             hintText: _activeTabIndex == 0
@@ -863,7 +798,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            // Rank Badge (Clean metallic badge, strictly zero rainbow)
+            // Rank Badge
             Container(
               width: 28,
               height: 28,
@@ -968,6 +903,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         ? (context.isHindi ? 'नकद' : 'CASH')
         : (isUpi ? 'UPI' : (context.isHindi ? 'उधार' : 'KHATA'));
 
+    final localTimeStr = AppDateTimeUtils.formatTime(item.soldAt);
     final relativeTimeStr = AppDateTimeUtils.formatRelativeDate(item.soldAt);
 
     return Padding(
@@ -977,7 +913,6 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Mode Indicator Icon (Clean bag icon, strictly no vegetable icons)
             Container(
               width: 36,
               height: 36,
@@ -993,7 +928,6 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
             ),
             const SizedBox(width: 12),
 
-            // Product name, time, bill number, qty & rate
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1014,7 +948,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                       Icon(Icons.access_time_rounded, size: 12, color: context.colorTextMuted),
                       const SizedBox(width: 4),
                       Text(
-                        relativeTimeStr,
+                        '$localTimeStr ($relativeTimeStr)',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
@@ -1048,7 +982,6 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               ),
             ),
 
-            // Total price & payment badge
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1075,17 +1008,25 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
     );
   }
 
-  /// Builds a high-utility invoice passbook card for a completed bill with direct 1-tap Share & Print
+  /// Builds a high-utility invoice passbook card for a completed bill with exact time, clean spacing, and direct 1-tap actions
   Widget _buildSaleBillTile(BuildContext context, SaleModel sale) {
-    final timeStr = AppDateTimeUtils.formatTime(sale.createdAt);
+    final localDt = sale.createdAt.toLocal();
+    final timeStr = AppDateTimeUtils.formatTime(localDt);
+    final dateStr = DateFormat('dd MMM yyyy').format(localDt);
+
     final isCash = sale.paymentMethod.toLowerCase() == 'cash';
     final isUpi = sale.paymentMethod.toLowerCase() == 'upi';
+    final isSplit = sale.paymentMethod.toLowerCase() == 'split' || sale.splitPayments != null;
 
-    final Color modeColor = isCash ? AppColors.success : (isUpi ? AppColors.primary : AppColors.warning);
+    final Color modeColor = isSplit
+        ? const Color(0xFF8B5CF6)
+        : (isCash ? AppColors.success : (isUpi ? AppColors.primary : AppColors.warning));
 
-    final String paymentLabel = isCash
-        ? (context.isHindi ? 'नकद' : 'CASH')
-        : (isUpi ? 'UPI' : (context.isHindi ? 'उधार' : 'KHATA'));
+    final String paymentLabel = isSplit
+        ? (context.isHindi ? 'विभाजित' : 'SPLIT')
+        : (isCash
+            ? (context.isHindi ? 'नकद' : 'CASH')
+            : (isUpi ? 'UPI' : (context.isHindi ? 'उधार' : 'KHATA')));
 
     final String customerText = sale.customerPhone.isNotEmpty
         ? sale.customerPhone
@@ -1118,7 +1059,9 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    isCash ? Icons.payments_rounded : (isUpi ? Icons.qr_code_2_rounded : Icons.menu_book_rounded),
+                    isSplit
+                        ? Icons.call_split_rounded
+                        : (isCash ? Icons.payments_rounded : (isUpi ? Icons.qr_code_2_rounded : Icons.menu_book_rounded)),
                     color: modeColor,
                     size: 16,
                   ),
@@ -1144,7 +1087,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            timeStr,
+                            '$timeStr, $dateStr',
                             style: TextStyle(fontSize: 11, color: context.colorTextMuted),
                           ),
                         ],
@@ -1562,13 +1505,13 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
   }
 }
 
-/// Compact duration switcher pill inside the Hero Card
-class _MiniPill extends StatelessWidget {
+/// Period Tab button for switching between Today (24h) and 10 Days
+class _PeriodTab extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _MiniPill({
+  const _PeriodTab({
     required this.label,
     required this.isSelected,
     required this.onTap,
@@ -1578,13 +1521,13 @@ class _MiniPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(9),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? context.colorSurface : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(9),
           boxShadow: isSelected
               ? [
                   BoxShadow(
@@ -1597,8 +1540,9 @@ class _MiniPill extends StatelessWidget {
         ),
         child: Text(
           label,
+          textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
             color: isSelected ? AppColors.primary : context.colorTextMuted,
           ),
@@ -1608,40 +1552,47 @@ class _MiniPill extends StatelessWidget {
   }
 }
 
-/// Compact inline metric for Cash, UPI, and Khata in the Hero Card
-class _MiniMetric extends StatelessWidget {
+/// Balanced Vertical Payment Column inside the clean 3-part card
+class _PaymentColumn extends StatelessWidget {
   final String label;
   final double amount;
-  final Color color;
   final IconData icon;
+  final Color color;
 
-  const _MiniMetric({
+  const _PaymentColumn({
     required this.label,
     required this.amount,
-    required this.color,
     required this.icon,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 4),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: context.colorTextMuted,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(
+              '$label: ',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: context.colorTextMuted,
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 2),
         Text(
           '₹${amount.toStringAsFixed(0)}',
           style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
             color: context.colorTextPrimary,
           ),
         ),

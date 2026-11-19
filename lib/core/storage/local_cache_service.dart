@@ -471,16 +471,43 @@ class LocalCacheService {
     return [];
   }
 
-  /// Save full list of sales fetched from backend, strictly enforcing 10-day retention
+  /// Save full list of sales fetched from backend, strictly enforcing 10-day retention and preserving local unsynced sales
   static Future<void> saveSalesList(List<SaleModel> sales) async {
     try {
-      final cutoff = DateTime.now().subtract(_salesRetentionWindow);
-      final filtered = sales.where((s) => s.createdAt.isAfter(cutoff)).toList();
-      filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-      _memorySalesHistory = List<SaleModel>.from(filtered);
       await init();
-      final listJson = jsonEncode(filtered.map((s) => s.toJson()).toList());
+      final cutoff = DateTime.now().subtract(_salesRetentionWindow);
+      final current = getSalesHistory();
+      final Map<String, SaleModel> deduplicated = {};
+
+      // 1. Insert server sales
+      for (final s in sales) {
+        if (s.createdAt.isAfter(cutoff)) {
+          final billNum = s.billNumber?.trim() ?? '';
+          final key = billNum.isNotEmpty
+              ? billNum
+              : 's_${s.createdAt.millisecondsSinceEpoch}_${s.totalAmount}';
+          deduplicated[key] = s;
+        }
+      }
+
+      // 2. Preserve any local sales not yet present in server response (e.g. recent or offline bills)
+      for (final s in current) {
+        if (s.createdAt.isAfter(cutoff)) {
+          final billNum = s.billNumber?.trim() ?? '';
+          final key = billNum.isNotEmpty
+              ? billNum
+              : 's_${s.createdAt.millisecondsSinceEpoch}_${s.totalAmount}';
+          if (!deduplicated.containsKey(key)) {
+            deduplicated[key] = s;
+          }
+        }
+      }
+
+      final merged = deduplicated.values.toList();
+      merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      _memorySalesHistory = List<SaleModel>.from(merged);
+      final listJson = jsonEncode(merged.map((s) => s.toJson()).toList());
       await _prefs!.setString(_keySalesHistory, listJson);
     } catch (e) {
       debugPrint('[LocalCacheService] Error saving sales list: $e');

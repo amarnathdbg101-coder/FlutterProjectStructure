@@ -228,12 +228,18 @@ class PosController extends BaseController {
     for (final sale in recentSales) {
       totalRevenue += sale.totalAmount;
       final method = sale.paymentMethod.toLowerCase();
-      if (method == 'cash') {
+      if (sale.splitPayments != null) {
+        cashRevenue += sale.splitPayments!.cashAmount;
+        upiRevenue += sale.splitPayments!.onlineAmount;
+        khataRevenue += sale.splitPayments!.khataAmount;
+      } else if (method == 'cash') {
         cashRevenue += sale.totalAmount;
-      } else if (method == 'upi') {
+      } else if (method == 'upi' || method == 'online') {
         upiRevenue += sale.totalAmount;
-      } else if (method == 'khata') {
+      } else if (method == 'khata' || method == 'credit' || method == 'udhar') {
         khataRevenue += sale.totalAmount;
+      } else {
+        cashRevenue += sale.totalAmount;
       }
 
       for (final cartItem in sale.items) {
@@ -555,11 +561,33 @@ class PosController extends BaseController {
   }
 
   /// Fetches confirmed PostgreSQL sales for live reports and Today's Sales Screen (10-day retention window)
+  /// Safely merges server records with existing local unsynced/recent bills so no data ever disappears.
   Future<void> fetchBackendSales({String date = ''}) async {
     try {
       var res = await _repo.getSales(limit: 100, date: date);
       if (res.success && res.data != null && res.data!.isNotEmpty) {
-        _serverSales = res.data!;
+        final serverList = res.data!;
+        final localList = LocalCacheService.get10DaySales();
+        final Map<String, SaleModel> deduplicated = {};
+
+        for (final s in serverList) {
+          final billNum = s.billNumber?.trim() ?? '';
+          final key = billNum.isNotEmpty ? billNum : 's_${s.createdAt.millisecondsSinceEpoch}_${s.totalAmount}';
+          deduplicated[key] = s;
+        }
+
+        for (final s in localList) {
+          final billNum = s.billNumber?.trim() ?? '';
+          final key = billNum.isNotEmpty ? billNum : 's_${s.createdAt.millisecondsSinceEpoch}_${s.totalAmount}';
+          if (!deduplicated.containsKey(key)) {
+            deduplicated[key] = s;
+          }
+        }
+
+        final merged = deduplicated.values.toList();
+        merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        _serverSales = merged;
         invalidateSalesMetricsCache();
         await LocalCacheService.saveSalesList(_serverSales);
         notifyListeners();
@@ -570,7 +598,28 @@ class PosController extends BaseController {
       if (date.isNotEmpty) {
         res = await _repo.getSales(limit: 100, date: '');
         if (res.success && res.data != null && res.data!.isNotEmpty) {
-          _serverSales = res.data!;
+          final serverList = res.data!;
+          final localList = LocalCacheService.get10DaySales();
+          final Map<String, SaleModel> deduplicated = {};
+
+          for (final s in serverList) {
+            final billNum = s.billNumber?.trim() ?? '';
+            final key = billNum.isNotEmpty ? billNum : 's_${s.createdAt.millisecondsSinceEpoch}_${s.totalAmount}';
+            deduplicated[key] = s;
+          }
+
+          for (final s in localList) {
+            final billNum = s.billNumber?.trim() ?? '';
+            final key = billNum.isNotEmpty ? billNum : 's_${s.createdAt.millisecondsSinceEpoch}_${s.totalAmount}';
+            if (!deduplicated.containsKey(key)) {
+              deduplicated[key] = s;
+            }
+          }
+
+          final merged = deduplicated.values.toList();
+          merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+          _serverSales = merged;
           invalidateSalesMetricsCache();
           await LocalCacheService.saveSalesList(_serverSales);
           notifyListeners();
