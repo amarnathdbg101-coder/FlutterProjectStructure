@@ -117,6 +117,19 @@ class SalesPdfService {
     }
   }
 
+  // In-memory LRU byte cache for generated Sales PDF Reports (0ms instant sharing)
+  static final Map<String, Uint8List> _salesPdfByteCache = {};
+
+  static String _buildCacheKey({
+    required String shopName,
+    required int windowDays,
+    required int totalBills,
+    required double totalRevenue,
+    required int itemsCount,
+  }) {
+    return '${shopName}_${windowDays}_${totalBills}_${totalRevenue.toStringAsFixed(0)}_$itemsCount';
+  }
+
   /// Builds printable A4 PDF bytes for the given list of sold items.
   static Future<Uint8List> generateSalesPdf({
     required String shopName,
@@ -130,17 +143,29 @@ class SalesPdfService {
     String? shopAddress,
     String? shopPhone,
   }) async {
-    final theme = await _getTheme();
-    final logoImg = await _getLogoImage();
-    final pdf = pw.Document(theme: theme);
-
-    final dateStr = DateFormat('dd-MMM-yyyy HH:mm').format(DateTime.now());
     final cachedShop = LocalCacheService.getShop();
     final cleanShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Merchant'
         ? shopName.trim()
         : (cachedShop?.name.trim().isNotEmpty ?? false
             ? cachedShop!.name.trim()
             : 'ShopSilo Partner Store');
+
+    final cacheKey = _buildCacheKey(
+      shopName: cleanShopName,
+      windowDays: windowDays,
+      totalBills: totalBills,
+      totalRevenue: totalRevenue,
+      itemsCount: items.length,
+    );
+    if (_salesPdfByteCache.containsKey(cacheKey)) {
+      return _salesPdfByteCache[cacheKey]!;
+    }
+
+    final theme = await _getTheme();
+    final logoImg = await _getLogoImage();
+    final pdf = pw.Document(theme: theme);
+
+    final dateStr = DateFormat('dd-MMM-yyyy HH:mm').format(DateTime.now());
 
     final cleanAddress = (shopAddress != null && shopAddress.trim().isNotEmpty)
         ? shopAddress.trim()
@@ -480,7 +505,12 @@ class SalesPdfService {
       );
     }
 
-    return pdf.save();
+    final bytes = await pdf.save();
+    if (_salesPdfByteCache.length >= 20) {
+      _salesPdfByteCache.remove(_salesPdfByteCache.keys.first);
+    }
+    _salesPdfByteCache[cacheKey] = bytes;
+    return bytes;
   }
 
   static pw.Widget _tableCell(

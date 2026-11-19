@@ -333,3 +333,38 @@ class SoldProductTimelineItem {
   };
 }
 
+/// Memoized single-pass aggregated P&L and Sales metrics model.
+/// Eliminates CPU-heavy re-computation loops on UI re-renders.
+class PosSalesMetrics {
+  final double totalRevenue;
+  final double totalCogs;
+  final double grossProfit;
+  final double netProfit;
+  final double marginPct;
+  final int totalBills;
+  final int totalUnitsSold;
+  final double cashRevenue;
+  final double upiRevenue;
+  final double khataRevenue;
+  final List<SaleModel> recentSales;
+  final List<SoldProductTimelineItem> timeSortedItems;
+  final List<Map<String, dynamic>> productRanking;
+
+  const PosSalesMetrics({
+    required this.totalRevenue,
+    required this.totalCogs,
+    required this.grossProfit,
+    required this.netProfit,
+    required this.marginPct,
+    required this.totalBills,
+    required this.totalUnitsSold,
+    required this.cashRevenue,
+    required this.upiRevenue,
+    required this.khataRevenue,
+    required this.recentSales,
+    required this.timeSortedItems,
+    required this.productRanking,
+  });
+}
+
+

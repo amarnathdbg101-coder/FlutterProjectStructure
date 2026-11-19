@@ -93,6 +93,17 @@ class ThermalReceiptPdfService {
 
   static pw.MemoryImage? _cachedLogo;
 
+  // In-memory LRU byte cache for generated thermal receipts (0ms re-sharing/re-printing)
+  static final Map<String, Uint8List> _receiptByteCache = {};
+
+  static String _buildCacheKey(SaleModel sale, ThermalReceiptWidth width, String shopName) {
+    final billNo = sale.billNumber ?? 'walkin';
+    final ts = sale.createdAt.millisecondsSinceEpoch;
+    final total = sale.totalAmount.toStringAsFixed(2);
+    final count = sale.items.length;
+    return '${billNo}_${ts}_${total}_${count}_${width.name}_$shopName';
+  }
+
   static Future<pw.MemoryImage?> _getLogoImage() async {
     if (_cachedLogo != null) return _cachedLogo;
     try {
@@ -139,6 +150,19 @@ class ThermalReceiptPdfService {
     ThermalReceiptWidth width = ThermalReceiptWidth.roll80mm,
     bool isHindi = false,
   }) async {
+    final cachedShop = LocalCacheService.getShop();
+    final effectiveShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Retail Store'
+        ? shopName.trim()
+        : (cachedShop?.name.trim().isNotEmpty ?? false
+            ? cachedShop!.name.trim()
+            : 'ShopSilo Retail Store');
+
+    // ⚡ Fast 0ms cache check (instant sharing & zero CPU re-render)
+    final cacheKey = _buildCacheKey(sale, width, effectiveShopName);
+    if (_receiptByteCache.containsKey(cacheKey)) {
+      return _receiptByteCache[cacheKey]!;
+    }
+
     final pdf = pw.Document();
 
     final is58 = width == ThermalReceiptWidth.roll58mm;
@@ -149,13 +173,6 @@ class ThermalReceiptPdfService {
 
     final theme = await _getReceiptTheme();
     final logoImg = await _getLogoImage();
-
-    final cachedShop = LocalCacheService.getShop();
-    final effectiveShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Retail Store'
-        ? shopName.trim()
-        : (cachedShop?.name.trim().isNotEmpty ?? false
-            ? cachedShop!.name.trim()
-            : 'ShopSilo Retail Store');
 
     final effectiveAddress = shopAddress.trim().isNotEmpty ? shopAddress.trim() : (cachedShop?.address ?? '');
     final effectivePhone = shopPhone.trim().isNotEmpty ? shopPhone.trim() : (cachedShop?.phone ?? cachedShop?.whatsappNumber ?? '');
@@ -456,7 +473,12 @@ class ThermalReceiptPdfService {
       ),
     );
 
-    return pdf.save();
+    final bytes = await pdf.save();
+    if (_receiptByteCache.length >= 60) {
+      _receiptByteCache.remove(_receiptByteCache.keys.first);
+    }
+    _receiptByteCache[cacheKey] = bytes;
+    return bytes;
   }
 
   /// Builds a clean solid dashed separator line with 0 dithering

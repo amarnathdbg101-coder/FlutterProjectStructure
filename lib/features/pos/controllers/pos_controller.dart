@@ -188,85 +188,152 @@ class PosController extends BaseController {
   List<SaleModel> _serverSales = [];
   List<SaleModel> get serverSales => _serverSales;
 
-  /// 24-Hour Sales Analytics Summary (Products Sold in last 24 hours)
-  double get today24hRevenue {
-    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
-    return sales.fold(0.0, (sum, s) => sum + s.totalAmount);
+  // --- High-Performance Memoized Sales & P&L Metrics Cache ---
+  PosSalesMetrics? _cached24hMetrics;
+  PosSalesMetrics? _cached10dMetrics;
+
+  /// Invalidates in-memory metrics cache on new sale, cancellation, or backend sync
+  void invalidateSalesMetricsCache() {
+    _cached24hMetrics = null;
+    _cached10dMetrics = null;
   }
 
-  int get today24hBillCount {
-    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
-    return sales.length;
-  }
+  /// High-performance, single-pass aggregated P&L and Sales metrics.
+  /// Memoized in-memory so UI rebuilds cost 0ms CPU time.
+  PosSalesMetrics getSalesMetrics({int windowDays = 1, double storeExpenses = 0.0}) {
+    if (windowDays == 1 && _cached24hMetrics != null) {
+      return _cached24hMetrics!;
+    }
+    if (windowDays == 10 && _cached10dMetrics != null) {
+      return _cached10dMetrics!;
+    }
 
-  /// 10-Day Sales Analytics Summary
-  double get total10DayRevenue {
-    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
-    return sales.fold(0.0, (sum, s) => sum + s.totalAmount);
-  }
-
-  int get total10DayBillCount {
-    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
-    return sales.length;
-  }
-
-  /// Get all individual sold items within the 10-day retention window, strictly sorted chronologically (newest first)
-  List<SoldProductTimelineItem> getTimeSortedSoldItems({Duration maxAge = const Duration(days: 10)}) {
-    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
+    final maxAge = windowDays == 1 ? const Duration(hours: 24) : const Duration(days: 10);
+    final allSales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
     final cutoff = DateTime.now().subtract(maxAge);
-    final List<SoldProductTimelineItem> items = [];
 
-    for (final sale in sales) {
-      if (sale.createdAt.isBefore(cutoff)) continue;
+    final recentSales = allSales.where((s) => s.createdAt.isAfter(cutoff)).toList();
+    recentSales.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    double totalRevenue = 0.0;
+    double totalCogs = 0.0;
+    double cashRevenue = 0.0;
+    double upiRevenue = 0.0;
+    double khataRevenue = 0.0;
+    int totalUnitsSold = 0;
+
+    final List<SoldProductTimelineItem> timeSortedItems = [];
+    final Map<String, Map<String, dynamic>> aggregatedRanking = {};
+
+    for (final sale in recentSales) {
+      totalRevenue += sale.totalAmount;
+      final method = sale.paymentMethod.toLowerCase();
+      if (method == 'cash') {
+        cashRevenue += sale.totalAmount;
+      } else if (method == 'upi') {
+        upiRevenue += sale.totalAmount;
+      } else if (method == 'khata') {
+        khataRevenue += sale.totalAmount;
+      }
+
       for (final cartItem in sale.items) {
-        items.add(
+        final pName = cartItem.product.name.trim().isNotEmpty ? cartItem.product.name.trim() : 'Product';
+        final qty = cartItem.quantity;
+        final unitPrice = cartItem.customPrice;
+        final itemTotal = cartItem.total;
+        final cost = cartItem.product.costPrice > 0 ? cartItem.product.costPrice : (unitPrice * 0.75);
+
+        totalUnitsSold += qty;
+        totalCogs += cost * qty;
+
+        timeSortedItems.add(
           SoldProductTimelineItem(
-            productName: cartItem.product.name.trim().isNotEmpty ? cartItem.product.name.trim() : 'Product',
+            productName: pName,
             productSku: cartItem.product.sku,
-            quantity: cartItem.quantity,
-            unitPrice: cartItem.customPrice,
-            totalPrice: cartItem.total,
+            quantity: qty,
+            unitPrice: unitPrice,
+            totalPrice: itemTotal,
             paymentMethod: sale.paymentMethod,
             soldAt: sale.createdAt,
             billNumber: sale.billNumber ?? '',
             customerPhone: sale.customerPhone,
           ),
         );
-      }
-    }
 
-    // Strictly sort newest first
-    items.sort((a, b) => b.soldAt.compareTo(a.soldAt));
-    return items;
-  }
-
-  /// Aggregated summary of sold products (ranking by total revenue) for a given duration (default 10 days or 24h)
-  List<Map<String, dynamic>> getSoldProductsSummary({Duration maxAge = const Duration(days: 10)}) {
-    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
-    final cutoff = DateTime.now().subtract(maxAge);
-    final Map<String, Map<String, dynamic>> aggregated = {};
-
-    for (final sale in sales) {
-      if (sale.createdAt.isBefore(cutoff)) continue;
-      for (final item in sale.items) {
-        final name = item.product.name.trim().isNotEmpty ? item.product.name.trim() : 'Product';
-        if (aggregated.containsKey(name)) {
-          aggregated[name]!['qty'] = (aggregated[name]!['qty'] as int) + item.quantity;
-          aggregated[name]!['total'] = (aggregated[name]!['total'] as double) + item.total;
+        if (aggregatedRanking.containsKey(pName)) {
+          aggregatedRanking[pName]!['qty'] = (aggregatedRanking[pName]!['qty'] as int) + qty;
+          aggregatedRanking[pName]!['quantity'] = (aggregatedRanking[pName]!['quantity'] as int) + qty;
+          aggregatedRanking[pName]!['total'] = (aggregatedRanking[pName]!['total'] as double) + itemTotal;
+          aggregatedRanking[pName]!['total_revenue'] = (aggregatedRanking[pName]!['total_revenue'] as double) + itemTotal;
         } else {
-          aggregated[name] = {
-            'name': name,
-            'qty': item.quantity,
-            'unit_price': item.customPrice,
-            'total': item.total,
+          aggregatedRanking[pName] = {
+            'name': pName,
+            'qty': qty,
+            'quantity': qty,
+            'unit_price': unitPrice,
+            'total': itemTotal,
+            'total_revenue': itemTotal,
           };
         }
       }
     }
 
-    final list = aggregated.values.toList();
-    list.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
-    return list;
+    timeSortedItems.sort((a, b) => b.soldAt.compareTo(a.soldAt));
+
+    final productRanking = aggregatedRanking.values.toList();
+    productRanking.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
+
+    final grossProfit = totalRevenue - totalCogs;
+    final proratedExpenses = windowDays == 1 ? (storeExpenses / 30.0) : (storeExpenses / 3.0);
+    final effectiveExpenses = proratedExpenses > 0 ? proratedExpenses : 0.0;
+    final netProfit = grossProfit - effectiveExpenses;
+    final marginPct = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).clamp(-100.0, 100.0) : 0.0;
+
+    final metrics = PosSalesMetrics(
+      totalRevenue: totalRevenue,
+      totalCogs: totalCogs,
+      grossProfit: grossProfit,
+      netProfit: netProfit,
+      marginPct: marginPct,
+      totalBills: recentSales.length,
+      totalUnitsSold: totalUnitsSold,
+      cashRevenue: cashRevenue,
+      upiRevenue: upiRevenue,
+      khataRevenue: khataRevenue,
+      recentSales: recentSales,
+      timeSortedItems: timeSortedItems,
+      productRanking: productRanking,
+    );
+
+    if (windowDays == 1) {
+      _cached24hMetrics = metrics;
+    } else {
+      _cached10dMetrics = metrics;
+    }
+
+    return metrics;
+  }
+
+  /// 24-Hour Sales Analytics Summary (Products Sold in last 24 hours)
+  double get today24hRevenue => getSalesMetrics(windowDays: 1).totalRevenue;
+
+  int get today24hBillCount => getSalesMetrics(windowDays: 1).totalBills;
+
+  /// 10-Day Sales Analytics Summary
+  double get total10DayRevenue => getSalesMetrics(windowDays: 10).totalRevenue;
+
+  int get total10DayBillCount => getSalesMetrics(windowDays: 10).totalBills;
+
+  /// Get all individual sold items within the 10-day retention window, strictly sorted chronologically (newest first)
+  List<SoldProductTimelineItem> getTimeSortedSoldItems({Duration maxAge = const Duration(days: 10)}) {
+    final windowDays = maxAge.inHours <= 24 ? 1 : 10;
+    return getSalesMetrics(windowDays: windowDays).timeSortedItems;
+  }
+
+  /// Aggregated summary of sold products (ranking by total revenue) for a given duration (default 10 days or 24h)
+  List<Map<String, dynamic>> getSoldProductsSummary({Duration maxAge = const Duration(days: 10)}) {
+    final windowDays = maxAge.inHours <= 24 ? 1 : 10;
+    return getSalesMetrics(windowDays: windowDays).productRanking;
   }
 
   List<Map<String, dynamic>> get24HourSoldProductsSummary() {
@@ -406,6 +473,7 @@ class PosController extends BaseController {
     _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
       _products = [];
       _serverSales = [];
+      invalidateSalesMetricsCache();
       clearCart();
       notifyListeners();
     });
@@ -443,6 +511,7 @@ class PosController extends BaseController {
     final cachedSales = LocalCacheService.get10DaySales();
     if (cachedSales.isNotEmpty) {
       _serverSales = cachedSales;
+      invalidateSalesMetricsCache();
     }
   }
 
@@ -491,6 +560,7 @@ class PosController extends BaseController {
       var res = await _repo.getSales(limit: 100, date: date);
       if (res.success && res.data != null && res.data!.isNotEmpty) {
         _serverSales = res.data!;
+        invalidateSalesMetricsCache();
         await LocalCacheService.saveSalesList(_serverSales);
         notifyListeners();
         return;
@@ -501,6 +571,7 @@ class PosController extends BaseController {
         res = await _repo.getSales(limit: 100, date: '');
         if (res.success && res.data != null && res.data!.isNotEmpty) {
           _serverSales = res.data!;
+          invalidateSalesMetricsCache();
           await LocalCacheService.saveSalesList(_serverSales);
           notifyListeners();
         }
@@ -1239,6 +1310,7 @@ class PosController extends BaseController {
       _serverSales.removeWhere((existing) => existing.billNumber == billNumber);
     }
     _serverSales.insert(0, sale);
+    invalidateSalesMetricsCache();
   }
 
   /// 🖨️ Direct Print 58mm / 80mm Vector Thermal Receipt via OS Spooler & Printer Drivers
