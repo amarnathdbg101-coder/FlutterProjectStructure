@@ -336,6 +336,12 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - Added `_memoryToken` and `_memoryRefreshToken` static caches inside `TokenStorage` so `getToken()` returns the active session token in 0ms without waiting for async `SharedPreferences` disk reads.
     - Guaranteed that `AuthInterceptor` automatically injects `Authorization: Bearer <token>` on all requests, preventing "missing authorization header" errors on Khata, POS, and Product APIs.
   - **Verification**: `flutter analyze` passed with 0 errors (No issues found!).
+- **[2026-11-19]**: Universal Search Bar Single-Surface Visual Redesign (`app_search_field.dart`, `app_ui_components.dart`):
+  - **Zero Nested Boxes / Single-Surface Design**:
+    - Eliminated duplicate inner container boxes and double borders inside `AppSearchField` and `AppProductSearchBar`.
+    - Made Voice Microphone, Barcode Scanner, and Clear Cancel icons frameless with smooth ripple effects.
+    - Guaranteed full text visibility and end-to-end text flow.
+  - **Verification**: `flutter analyze` passed in 49.1s with 0 errors.
 - **[2026-11-19]**: Human, Clean & Professional Inventory Screen Redesign (`inventory_screen.dart`):
   - **Sleek Hero Catalog Overview Banner**:
     - Added single Hero Store Catalog Summary Card (`Store Catalog Summary: X Products`) with 1-tap `+ Add Item` button and low-stock reorder status badge (`⚠️ X items low in stock`).
