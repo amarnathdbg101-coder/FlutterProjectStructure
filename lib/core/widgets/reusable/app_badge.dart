@@ -173,13 +173,17 @@ class AppBadge extends StatelessWidget {
             Icon(icon, size: iconSize, color: effectiveText),
             const SizedBox(width: 4),
           ],
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.bold,
-              color: effectiveText,
-              letterSpacing: 0.3,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.bold,
+                color: effectiveText,
+                letterSpacing: 0.3,
+              ),
             ),
           ),
         ],
