@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_project_structure/core/storage/local_cache_service.dart';
 import 'package:flutter_project_structure/core/localization/language_controller.dart';
 import 'package:flutter_project_structure/features/khata/controllers/khata_controller.dart';
+import 'package:flutter_project_structure/features/khata/controllers/micro_plan_controller.dart';
 import 'package:flutter_project_structure/features/khata/models/khata_model.dart';
 import 'package:flutter_project_structure/features/khata/screens/khata_screen.dart';
 
@@ -96,6 +97,85 @@ void main() {
       // Close modal
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('Tapping Customer opens traditional CustomerStatementScreen with Sticky Bottom Bar and AppBar', (tester) async {
+      tester.view.physicalSize = const Size(380, 840);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      SharedPreferences.setMockInitialValues({});
+      await LocalCacheService.init();
+
+      final testCustomers = [
+        KhataCustomerModel(
+          id: 'k-1',
+          name: 'Vikas Sharma',
+          mobile: '9876501234',
+          balance: 850.0,
+          creditLimit: 5000.0,
+          overdueDays: 3,
+          lastTransactionAt: DateTime.now().subtract(const Duration(hours: 2)),
+        ),
+      ];
+      await LocalCacheService.saveKhataCustomers(testCustomers);
+
+      final langCtrl = LanguageController();
+      final khataCtrl = KhataController();
+      final microCtrl = MicroPlanController();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LanguageController>.value(value: langCtrl),
+            ChangeNotifierProvider<KhataController>.value(value: khataCtrl),
+            ChangeNotifierProvider<MicroPlanController>.value(value: microCtrl),
+          ],
+          child: const MaterialApp(
+            home: KhataScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Tap on Customer Card to navigate to traditional CustomerStatementScreen
+      await tester.tap(find.text('Vikas Sharma'));
+      await tester.pumpAndSettle();
+
+      // 1. Verify AppBar with Back Button, 1-Tap PDF and WhatsApp icons
+      expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsWidgets);
+
+      // 2. Verify Unified Financial Summary Card on full page
+      expect(find.text('Net Pending Dues'), findsOneWidget);
+      expect(find.text('₹850'), findsWidgets);
+      expect(find.textContaining('Credit Limit: ₹5000'), findsOneWidget);
+
+      // 3. Verify Sticky Bottom Action Bar is visible
+      expect(find.text('Give Credit (Udhar Diya)'), findsOneWidget);
+      expect(find.text('Receive Payment (Jama Kiya)'), findsOneWidget);
+
+      // 4. Tap Sticky Receive Payment Button -> Navigates to Transaction Modal
+      await tester.tap(find.text('Receive Payment (Jama Kiya)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Full Settle (₹850)'), findsOneWidget);
+
+      // Close modal
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      // 5. Test Back Button pops back to KhataScreen
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Total Market Receivables'), findsOneWidget);
+
+      // Drain error timer from mock network in test
+      await tester.pump(const Duration(seconds: 5));
     });
   });
 }

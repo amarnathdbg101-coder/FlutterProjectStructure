@@ -11,7 +11,6 @@ import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
-import '../../../core/widgets/reusable/app_search_field.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../dashboard/repositories/ai_repository.dart';
 import '../../products/controllers/product_controller.dart';

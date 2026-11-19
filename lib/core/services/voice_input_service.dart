@@ -137,7 +137,7 @@ class AppVoiceInputService extends ChangeNotifier {
       'packet', 'dabba', 'pauwa', 'kilo', 'kg', 'gram', 'litre', 'liter',
       // English fillers
       'i', 'want', 'need', 'show', 'give', 'get', 'find', 'search', 'for', 'look', 'looking',
-      'near', 'me', 'nearby', 'best', 'cheap', 'cheapest', 'good', 'pack', 'bottle',
+      'near', 'nearby', 'best', 'cheap', 'cheapest', 'good', 'pack', 'bottle',
       // Devanagari fillers
       'चाहिए', 'दिखाओ', 'दिखाइए', 'बताओ', 'बताइए', 'दे', 'दो', 'लाओ', 'खोजो', 'ढूंढो',
       'का', 'की', 'के', 'को', 'से', 'में', 'पर', 'और', 'या',

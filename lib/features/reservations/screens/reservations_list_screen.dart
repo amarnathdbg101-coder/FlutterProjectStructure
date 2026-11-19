@@ -9,7 +9,6 @@ import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_drawer.dart';
 import '../../../core/widgets/merchant_shell.dart';
-import '../../../core/widgets/reusable/app_search_field.dart';
 import '../../../core/widgets/store_qr_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../controllers/reservation_controller.dart';

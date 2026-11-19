@@ -723,7 +723,7 @@ class ProductController extends BaseController {
 
     // 1. 0ms local memory scan
     final localMatches = _products.where((p) {
-      if (p.barcode?.trim().toLowerCase() == cleanCode.toLowerCase()) return true;
+      if (p.barcode.trim().toLowerCase() == cleanCode.toLowerCase()) return true;
       if (p.sku.trim().toLowerCase() == cleanCode.toLowerCase()) return true;
       if (p.attributes['barcode']?.toString().trim().toLowerCase() == cleanCode.toLowerCase()) return true;
       return false;
