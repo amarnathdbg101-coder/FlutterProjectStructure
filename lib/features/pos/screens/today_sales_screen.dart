@@ -93,26 +93,18 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         : 'ShopSilo Partner Store';
 
     try {
-      // ⚡ High-Fidelity Vector PDF Action Modal (Native Sharing & Printing)
-      await AppPdfShareModal.show(
-        context,
-        title: context.isHindi ? 'दैनिक बिक्री व P&L रिपोर्ट' : 'Daily Sales & P&L Report',
-        subtitle: '$effectiveShopName • ${_selectedWindowDays == 1 ? (context.isHindi ? "आज" : "Today") : "$_selectedWindowDays ${context.isHindi ? "दिन" : "Days"}"}',
-        filename: _selectedWindowDays > 1
-            ? '${effectiveShopName.replaceAll(" ", "_")}_${_selectedWindowDays}Day_Sales_Journal.pdf'
-            : '${effectiveShopName.replaceAll(" ", "_")}_Today_Sales_Report.pdf',
-        getPdfBytes: () => SalesPdfService.generateSalesPdf(
-          shopName: effectiveShopName,
-          items: allTimeSortedItems,
-          totalRevenue: totalRevenue,
-          totalBills: totalBills,
-          cashRevenue: cashRevenue,
-          upiRevenue: upiRevenue,
-          khataRevenue: khataRevenue,
-          windowDays: _selectedWindowDays,
-          shopAddress: cachedShop?.address,
-          shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
-        ),
+      // ⚡ Direct 1-Tap Native Share Sheet (Bluetooth, WhatsApp, Instagram, Quick Share, etc.)
+      await SalesPdfService.shareSalesSheet(
+        shopName: effectiveShopName,
+        items: allTimeSortedItems,
+        totalRevenue: totalRevenue,
+        totalBills: totalBills,
+        cashRevenue: cashRevenue,
+        upiRevenue: upiRevenue,
+        khataRevenue: khataRevenue,
+        windowDays: _selectedWindowDays,
+        shopAddress: cachedShop?.address,
+        shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
       );
     } catch (err) {
       debugPrint('[SalesPDF] Local generation error: $err, falling back to backend');
@@ -231,6 +223,12 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
           ),
         ),
         actions: [
+          // Quick Native Share (Bluetooth, WhatsApp, Instagram, etc.)
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: AppColors.primary, size: 21),
+            tooltip: context.isHindi ? 'सेल रिपोर्ट शेयर करें (WhatsApp, Bluetooth...)' : 'Share Sales PDF (WhatsApp, Bluetooth...)',
+            onPressed: _isDownloadingPdf ? null : _downloadEodPdf,
+          ),
           // Quick PDF Download
           IconButton(
             icon: _isDownloadingPdf

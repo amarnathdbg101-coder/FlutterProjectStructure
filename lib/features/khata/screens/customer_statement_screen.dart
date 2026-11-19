@@ -114,10 +114,16 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
               ],
             ),
             actions: [
-              // Direct 1-tap PDF Statement Download
+              // Direct 1-tap Native PDF Statement Share (Bluetooth, WhatsApp, Instagram, etc.)
+              IconButton(
+                icon: const Icon(Icons.share_rounded, size: 21, color: AppColors.primary),
+                tooltip: context.isHindi ? 'लेजर शेयर करें (WhatsApp, Bluetooth...)' : 'Share Statement (WhatsApp, Bluetooth...)',
+                onPressed: () => khata.shareStatementPdf(context, liveCustomer.mobile, customer: liveCustomer),
+              ),
+              // Direct 1-tap PDF Statement Download / Print
               IconButton(
                 icon: const Icon(Icons.picture_as_pdf_outlined, size: 21, color: AppColors.primary),
-                tooltip: context.isHindi ? 'पीडीएफ लेजर डाउनलोड' : 'Download PDF Statement',
+                tooltip: context.isHindi ? 'पीडीएफ लेजर' : 'PDF Statement',
                 onPressed: () => khata.openStatementPdf(context, liveCustomer.mobile, customer: liveCustomer),
               ),
               // Direct 1-tap WhatsApp Reminder (if dues > 0)

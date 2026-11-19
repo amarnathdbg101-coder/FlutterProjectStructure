@@ -566,9 +566,11 @@ class SalesPdfService {
       shopPhone: shopPhone,
     );
 
+    final safeShop = shopName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_').trim();
+    final cleanBase = safeShop.isNotEmpty && safeShop != '_' ? safeShop : 'ShopSilo';
     final safeName = windowDays > 1
-        ? '${shopName.replaceAll(" ", "_")}_10Day_Sales_Journal.pdf'
-        : '${shopName.replaceAll(" ", "_")}_Today_Sales_Report.pdf';
+        ? '${cleanBase}_10Day_Sales_Journal.pdf'
+        : '${cleanBase}_Today_Sales_Report.pdf';
 
     await Printing.sharePdf(
       bytes: pdfBytes,

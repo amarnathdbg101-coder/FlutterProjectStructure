@@ -264,8 +264,8 @@ class ProcurementController extends BaseController {
     }
   }
 
-  /// 🖨️ 1-Tap Print-Ready Mandi Procurement PDF Sheet Engine
-  Future<void> generatePdfSheet(BuildContext context, String shopName) async {
+  /// 📤 1-Tap Native Share Sheet (Bluetooth, WhatsApp, Instagram, Quick Share, etc.)
+  Future<void> sharePdfSheet(BuildContext context, String shopName) async {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Mandi procurement list is empty')),
@@ -283,59 +283,29 @@ class ProcurementController extends BaseController {
             ? cachedShop!.name.trim()
             : 'ShopSilo Partner Store');
 
-    // ⚡ Ultra-Fast Local Vector PDF Generation (Native Sharing & Printing)
     try {
-      await AppPdfShareModal.show(
-        context,
-        title: context.isHindi ? 'मंडी खरीद सूची' : 'Mandi Procurement Sheet',
-        subtitle: '$effectiveShopName • ${target.length} ${context.isHindi ? "सामग्री" : "items"}',
-        filename: '${effectiveShopName.replaceAll(" ", "_")}_Mandi_List.pdf',
-        getPdfBytes: () => ProcurementPdfService.generateProcurementPdf(
-          shopName: effectiveShopName,
-          items: target,
-          totalBudget: totalEstimatedBudget,
-          shopAddress: cachedShop?.address,
-          shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
-        ),
+      await ProcurementPdfService.shareProcurementSheet(
+        shopName: effectiveShopName,
+        items: target,
+        totalBudget: totalEstimatedBudget,
+        shopAddress: cachedShop?.address,
+        shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
       );
     } catch (err) {
-      debugPrint('[Procurement] Local PDF generation failed, attempting backend fallback: $err');
-      // Background / Remote PDF Fallback if local printing fails
-      try {
-        final ProductRepository productRepo = ProductRepository();
-        final requestItems = target.map((i) => {
-          'name': i.name,
-          'qty': i.qty,
-          'category': i.category,
-          'dealer': i.dealerName,
-          'estimated_price': '₹${i.estimatedPrice.toStringAsFixed(0)}',
-          'notes': i.notes,
-        }).toList();
-
-        final res = await productRepo.generateCustomProcurementPdf(
-          title: '$effectiveShopName - Mandi Procurement Sheet',
-          items: requestItems,
+      debugPrint('[Procurement] Share PDF failed: $err');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.isHindi ? 'मंडी लिस्ट शेयर करने में विफल: $err' : 'Failed to share mandi list: $err'),
+            backgroundColor: Colors.red,
+          ),
         );
-
-        if (res.success && res.data != null) {
-          final b64 = res.data!['pdf_base64']?.toString();
-          if (b64 != null && b64.isNotEmpty) {
-            final bytes = base64Decode(b64);
-            await Printing.layoutPdf(
-              onLayout: (format) async => bytes,
-              name: '${effectiveShopName}_Mandi_Procurement_Sheet.pdf',
-            );
-            return;
-          }
-        }
-      } catch (backendErr) {
-        debugPrint('[Procurement] Backend PDF generation failed: $backendErr');
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to generate Mandi sheet: $err')),
-          );
-        }
       }
     }
+  }
+
+  /// 🖨️ 1-Tap Mandi Procurement PDF Sheet Engine (Shares or Prints)
+  Future<void> generatePdfSheet(BuildContext context, String shopName) async {
+    await sharePdfSheet(context, shopName);
   }
 }

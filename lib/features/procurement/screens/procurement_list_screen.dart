@@ -1489,6 +1489,13 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
             },
           ),
 
+          // 1-Tap PDF Share Direct Action (Bluetooth, WhatsApp, Instagram, etc.)
+          IconButton(
+            icon: const Icon(Icons.share_rounded, size: 20, color: AppColors.primary),
+            tooltip: context.isHindi ? 'मंडी लिस्ट शेयर करें (Bluetooth, WhatsApp...)' : 'Share Mandi PDF',
+            onPressed: () => controller.sharePdfSheet(context, shopName),
+          ),
+
           // WhatsApp Share Direct Action
           IconButton(
             icon: const Icon(Icons.send_rounded, size: 19, color: Color(0xFF128C7E)),

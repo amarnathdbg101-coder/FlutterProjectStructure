@@ -541,9 +541,11 @@ class KhataPdfService {
       balance: balance,
       transactions: transactions,
     );
+    final safeName = customerName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_').trim();
+    final cleanFileName = safeName.isNotEmpty && safeName != '_' ? '${safeName}_Khata_Passbook.pdf' : 'Khata_Passbook.pdf';
     await Printing.sharePdf(
       bytes: pdfBytes,
-      filename: '${customerName}_Khata_Passbook.pdf',
+      filename: cleanFileName,
     );
   }
 }

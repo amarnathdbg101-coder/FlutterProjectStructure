@@ -565,20 +565,20 @@ class KhataController extends BaseController {
 
   // --- Download / Share / Print Statement PDF ---
   Future<void> openStatementPdf(BuildContext context, String mobile, {KhataCustomerModel? customer}) async {
+    await shareStatementPdf(context, mobile, customer: customer);
+  }
+
+  /// 📤 Direct 1-Tap Native Share Sheet (Bluetooth, WhatsApp, Instagram, Quick Share, etc.)
+  Future<void> shareStatementPdf(BuildContext context, String mobile, {KhataCustomerModel? customer}) async {
     clearError();
+    try {
+      final shop = LocalCacheService.getShop();
+      final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
+      final custName = customer?.name ?? 'Customer';
+      final balance = customer?.balance ?? 0.0;
+      final shopPhone = (shop?.phone.isNotEmpty == true) ? shop!.phone : shop?.whatsappNumber;
 
-    final shop = LocalCacheService.getShop();
-    final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
-    final custName = customer?.name ?? 'Customer';
-    final balance = customer?.balance ?? 0.0;
-    final shopPhone = (shop?.phone.isNotEmpty == true) ? shop!.phone : shop?.whatsappNumber;
-
-    AppPdfShareModal.show(
-      context,
-      title: context.isHindi ? 'खाता पासबुक लेजर' : 'Khata Ledger Passbook',
-      subtitle: '$custName • $mobile',
-      filename: '${custName.replaceAll(" ", "_")}_Khata_Passbook.pdf',
-      getPdfBytes: () => KhataPdfService.generateStatementPdf(
+      await KhataPdfService.shareStatement(
         shopName: shopName,
         shopAddress: shop?.address,
         shopPhone: shopPhone,
@@ -587,10 +587,18 @@ class KhataController extends BaseController {
         customerMobile: mobile,
         balance: balance,
         transactions: _currentCustomerStatement,
-      ),
-      customerPhone: mobile,
-      customerName: custName,
-    );
+      );
+    } catch (e) {
+      debugPrint('[KhataController] Share Statement error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.isHindi ? 'लेजर शेयर करने में विफल: $e' : 'Failed to share statement: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   // --- 1-Tap Broadcast WhatsApp Reminders to All Overdue Debtors ---

@@ -415,9 +415,11 @@ class ProcurementPdfService {
       shopAddress: shopAddress,
       shopPhone: shopPhone,
     );
+    final safeName = shopName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_').trim();
+    final cleanFileName = safeName.isNotEmpty && safeName != '_' ? '${safeName}_Mandi_List.pdf' : 'Mandi_List.pdf';
     await Printing.sharePdf(
       bytes: pdfBytes,
-      filename: '${shopName}_Mandi_Procurement_Sheet.pdf',
+      filename: cleanFileName,
     );
   }
 }
