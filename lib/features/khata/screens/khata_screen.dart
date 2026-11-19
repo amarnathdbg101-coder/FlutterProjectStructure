@@ -100,14 +100,14 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
               elevation: 4,
               onSelected: (val) async {
                 switch (val) {
-                  case 'add':
-                    _showAddTransactionModal(context, isCredit: true);
-                    break;
                   case 'broadcast':
                     khata.broadcastWhatsAppOverdueReminders(context);
                     break;
                   case 'aging':
                     _showAgingBreakdownSheet(context);
+                    break;
+                  case 'add':
+                    _showAddTransactionModal(context, isCredit: true);
                     break;
                   case 'refresh':
                     await khata.loadCustomers();
@@ -124,6 +124,27 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                 }
               },
               itemBuilder: (ctx) => [
+                if (khata.overdueCount > 0)
+                  PopupMenuItem(
+                    value: 'broadcast',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.campaign_rounded, color: Color(0xFF25D366), size: 18),
+                        const SizedBox(width: 10),
+                        Text(ctx.isHindi ? '📢 सभी बकायेदारों को तगादा भेजें' : '📢 Broadcast Reminders'),
+                      ],
+                    ),
+                  ),
+                PopupMenuItem(
+                  value: 'aging',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.analytics_outlined, color: AppColors.warning, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'उधारी एजिंग रिपोर्ट (0-30, 31-60 दिन)' : 'View Aging Report'),
+                    ],
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'add',
                   child: Row(
@@ -134,27 +155,6 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                     ],
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'aging',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.analytics_outlined, color: AppColors.warning, size: 18),
-                      const SizedBox(width: 10),
-                      Text(ctx.isHindi ? 'उधारी एजिंग रिपोर्ट' : 'View Aging Report'),
-                    ],
-                  ),
-                ),
-                if (khata.overdueCount > 0)
-                  PopupMenuItem(
-                    value: 'broadcast',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.campaign_rounded, color: Color(0xFF25D366), size: 18),
-                        const SizedBox(width: 10),
-                        Text(ctx.isHindi ? 'व्हाट्सएप तगादा भेजें' : 'Send WhatsApp Reminders'),
-                      ],
-                    ),
-                  ),
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'refresh',
@@ -173,10 +173,10 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
         ),
         floatingActionButton: FloatingActionButton.extended(
           backgroundColor: AppColors.primary,
-          icon: const Icon(Icons.add_rounded, color: Colors.white),
+          icon: const Icon(Icons.person_add_rounded, color: Colors.white),
           label: Text(
-            context.tr('khata_add_btn'),
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            context.isHindi ? '+ नया खाता' : '+ New Customer',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
           ),
           onPressed: () => _showAddTransactionModal(context, isCredit: true),
         ),
@@ -201,12 +201,12 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: context.colorPrimaryLight,
+                                color: (khata.totalMarketDebt > 0 ? AppColors.error : AppColors.primary).withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.account_balance_wallet_rounded,
-                                color: AppColors.primary,
+                                color: khata.totalMarketDebt > 0 ? AppColors.error : AppColors.primary,
                                 size: 24,
                               ),
                             ),
@@ -216,7 +216,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    context.tr('khata_banner_title'),
+                                    context.isHindi ? 'कुल बाज़ार बाकी (मार्केट उधारी)' : 'Total Market Dues',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -230,18 +230,18 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                     child: Text(
                                       '₹${khata.totalMarketDebt.toStringAsFixed(0)}',
                                       style: TextStyle(
-                                        fontSize: 24,
+                                        fontSize: 26,
                                         fontWeight: FontWeight.w900,
-                                        color: context.colorTextPrimary,
+                                        color: khata.totalMarketDebt > 0 ? AppColors.error : AppColors.success,
                                         letterSpacing: -0.5,
                                       ),
                                     ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${khata.debtorsCount} ${context.tr('khata_kpi_debtors')}',
+                                    '${khata.debtorsCount} ${context.isHindi ? "ग्राहक बाकीदार" : "customers owe dues"}',
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w500,
                                       color: context.colorTextMuted,
                                     ),
@@ -251,15 +251,16 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                             ),
                             if (khata.overdueCount > 0)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
                                   color: AppColors.error.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.warning_amber_rounded, size: 13, color: AppColors.error),
+                                    const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.error),
                                     const SizedBox(width: 4),
                                     Text(
                                       '${khata.overdueCount} ${context.isHindi ? "समय पार" : "Overdue"}',
@@ -287,15 +288,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                   backgroundColor: AppColors.error.withValues(alpha: 0.1),
                                   foregroundColor: AppColors.error,
                                   elevation: 0,
-                                  minimumSize: const Size.fromHeight(40),
+                                  minimumSize: const Size.fromHeight(42),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
                                   ),
-                                  textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                  textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                                 ),
                                 icon: const Icon(Icons.arrow_outward_rounded, size: 16),
-                                label: Text(context.isHindi ? 'दिए (उधार)' : '+ Give Credit'),
+                                label: Text(context.isHindi ? 'दिए (+ उधार)' : '+ Give Credit'),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -306,15 +307,15 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                                   backgroundColor: AppColors.success.withValues(alpha: 0.1),
                                   foregroundColor: AppColors.success,
                                   elevation: 0,
-                                  minimumSize: const Size.fromHeight(40),
+                                  minimumSize: const Size.fromHeight(42),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     side: BorderSide(color: AppColors.success.withValues(alpha: 0.3)),
                                   ),
-                                  textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                  textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                                 ),
                                 icon: const Icon(Icons.arrow_downward_rounded, size: 16),
-                                label: Text(context.isHindi ? 'मिले (जमा)' : '+ Settle Cash'),
+                                label: Text(context.isHindi ? 'मिले (- जमा)' : '- Receive Cash'),
                               ),
                             ),
                           ],
