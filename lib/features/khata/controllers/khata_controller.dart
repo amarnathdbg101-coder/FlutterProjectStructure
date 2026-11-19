@@ -9,6 +9,7 @@ import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/app_ui_components.dart';
 import '../models/khata_model.dart';
 import '../repositories/khata_repository.dart';
 import '../services/khata_pdf_service.dart';
@@ -562,19 +563,22 @@ class KhataController extends BaseController {
     await showSmartPaymentReminderSheet(context, customer, transactions: txs);
   }
 
-  // --- Download / Open Statement PDF ---
+  // --- Download / Share / Print Statement PDF ---
   Future<void> openStatementPdf(BuildContext context, String mobile, {KhataCustomerModel? customer}) async {
     clearError();
 
-    // ⚡ Executive Native Vector PDF Passbook (Sub-15ms, 100% offline, full Devanagari & ₹ support)
-    try {
-      final shop = LocalCacheService.getShop();
-      final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
-      final custName = customer?.name ?? 'Customer';
-      final balance = customer?.balance ?? 0.0;
-      final shopPhone = (shop?.phone.isNotEmpty == true) ? shop!.phone : shop?.whatsappNumber;
+    final shop = LocalCacheService.getShop();
+    final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
+    final custName = customer?.name ?? 'Customer';
+    final balance = customer?.balance ?? 0.0;
+    final shopPhone = (shop?.phone.isNotEmpty == true) ? shop!.phone : shop?.whatsappNumber;
 
-      await KhataPdfService.printStatement(
+    AppPdfShareModal.show(
+      context,
+      title: context.isHindi ? 'खाता पासबुक लेजर' : 'Khata Ledger Passbook',
+      subtitle: '$custName • $mobile',
+      filename: '${custName.replaceAll(" ", "_")}_Khata_Passbook.pdf',
+      getPdfBytes: () => KhataPdfService.generateStatementPdf(
         shopName: shopName,
         shopAddress: shop?.address,
         shopPhone: shopPhone,
@@ -583,32 +587,10 @@ class KhataController extends BaseController {
         customerMobile: mobile,
         balance: balance,
         transactions: _currentCustomerStatement,
-      );
-      return;
-    } catch (e) {
-      debugPrint('[KhataController] Native PDF Passbook error: $e, trying remote fallback');
-    }
-
-    // Remote Backend PDF fallback
-    try {
-      final res = await _repo.getStatementPdfUrl(mobile).timeout(const Duration(seconds: 4));
-      if (res.success && res.data != null && res.data!.isNotEmpty) {
-        final uri = Uri.parse(res.data!);
-        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (launched) return;
-      }
-    } catch (e) {
-      debugPrint('Remote PDF launch error: $e');
-    }
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.tr('khata_pdf_error')),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
+      ),
+      customerPhone: mobile,
+      customerName: custName,
+    );
   }
 
   // --- 1-Tap Broadcast WhatsApp Reminders to All Overdue Debtors ---

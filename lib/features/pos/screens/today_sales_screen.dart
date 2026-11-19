@@ -93,18 +93,26 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         : 'ShopSilo Partner Store';
 
     try {
-      // ⚡ High-Fidelity Vector PDF (Matches Mandi Procurement Sheet identically)
-      await SalesPdfService.printSalesSheet(
-        shopName: effectiveShopName,
-        items: allTimeSortedItems,
-        totalRevenue: totalRevenue,
-        totalBills: totalBills,
-        cashRevenue: cashRevenue,
-        upiRevenue: upiRevenue,
-        khataRevenue: khataRevenue,
-        windowDays: _selectedWindowDays,
-        shopAddress: cachedShop?.address,
-        shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
+      // ⚡ High-Fidelity Vector PDF Action Modal (Native Sharing & Printing)
+      await AppPdfShareModal.show(
+        context,
+        title: context.isHindi ? 'दैनिक बिक्री व P&L रिपोर्ट' : 'Daily Sales & P&L Report',
+        subtitle: '$effectiveShopName • ${_selectedWindowDays == 1 ? (context.isHindi ? "आज" : "Today") : "$_selectedWindowDays ${context.isHindi ? "दिन" : "Days"}"}',
+        filename: _selectedWindowDays > 1
+            ? '${effectiveShopName.replaceAll(" ", "_")}_${_selectedWindowDays}Day_Sales_Journal.pdf'
+            : '${effectiveShopName.replaceAll(" ", "_")}_Today_Sales_Report.pdf',
+        getPdfBytes: () => SalesPdfService.generateSalesPdf(
+          shopName: effectiveShopName,
+          items: allTimeSortedItems,
+          totalRevenue: totalRevenue,
+          totalBills: totalBills,
+          cashRevenue: cashRevenue,
+          upiRevenue: upiRevenue,
+          khataRevenue: khataRevenue,
+          windowDays: _selectedWindowDays,
+          shopAddress: cachedShop?.address,
+          shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
+        ),
       );
     } catch (err) {
       debugPrint('[SalesPDF] Local generation error: $err, falling back to backend');
@@ -1008,8 +1016,27 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               const Divider(height: 20),
 
               // Action Buttons
-              // 1. Print Thermal Receipt (Reusable AppButton)
+              // 1. Share Thermal Receipt (Bluetooth, WhatsApp, Instagram, etc.)
               AppButton(
+                text: isHindi ? 'रसीद शेयर करें (WhatsApp, Bluetooth...)' : 'Share Receipt (WhatsApp, Bluetooth...)',
+                icon: Icons.share_rounded,
+                isFullWidth: true,
+                onPressed: () {
+                  Navigator.pop(sheetCtx);
+                  context.read<PosController>().shareThermalReceiptPdf(
+                    sale,
+                    shopName,
+                    shopAddress: shop?.address ?? '',
+                    shopPhone: shop?.phone ?? shop?.whatsappNumber ?? '',
+                    shopGstin: shop?.gstin ?? '',
+                    upiId: shop?.upiId ?? '',
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+
+              // 2. Print Thermal Receipt (Reusable AppButton)
+              AppButton.outline(
                 text: isHindi ? 'थर्मल रसीद प्रिंट करें (58mm/80mm)' : 'Print Thermal Slip (58mm/80mm)',
                 icon: Icons.print_rounded,
                 isFullWidth: true,

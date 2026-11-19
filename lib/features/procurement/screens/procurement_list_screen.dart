@@ -1530,10 +1530,10 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 value: 'pdf',
                 child: Row(
                   children: [
-                    const Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
+                    const Icon(Icons.share_rounded, size: 18, color: AppColors.primary),
                     const SizedBox(width: 10),
                     Text(
-                      context.tr('mandi_pdf_sheet'),
+                      ctx.isHindi ? 'मंडी PDF शीट (शेयर व प्रिंट)' : 'Mandi PDF (Share & Print)',
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ],

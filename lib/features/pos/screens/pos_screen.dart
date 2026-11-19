@@ -1888,6 +1888,34 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
             const SizedBox(height: 8),
 
+            // 2b. Share Thermal Receipt (Bluetooth, WhatsApp, Instagram, etc.)
+            AppButton(
+              text: ctx.isHindi ? 'रसीद शेयर करें (WhatsApp, Bluetooth...)' : 'Share Receipt (WhatsApp, Bluetooth...)',
+              icon: Icons.share_rounded,
+              isFullWidth: true,
+              onPressed: () {
+                final authShop = context.read<AuthController>().currentShop;
+                final cachedShop = LocalCacheService.getShop();
+                final shop = authShop ?? cachedShop;
+                final rawShopName = (shop?.name ?? '').trim();
+                final shopName = rawShopName.isNotEmpty && rawShopName != 'ShopSilo Retail Store'
+                    ? rawShopName
+                    : (cachedShop?.name.trim().isNotEmpty ?? false
+                        ? cachedShop!.name.trim()
+                        : 'ShopSilo Retail Store');
+
+                context.read<PosController>().shareThermalReceiptPdf(
+                  sale,
+                  shopName,
+                  shopAddress: shop?.address ?? '',
+                  shopPhone: shop?.phone ?? shop?.whatsappNumber ?? '',
+                  shopGstin: shop?.gstin ?? '',
+                  upiId: shop?.upiId ?? '',
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+
             // 3. Print Thermal Receipt Button (Reusable AppButton)
 
             AppButton.outline(
