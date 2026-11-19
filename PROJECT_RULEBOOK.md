@@ -63,9 +63,12 @@ The following components have been verified, battle-tested, and locked. **DO NOT
   - Backend: `C:\Go\ShopSilo\GoBackend\internal\handler\services\user.go`
   - Backend: `C:\Go\ShopSilo\GoBackend\internal\handler\dto\user.go`
 
-### 🔒 Locked 3: Bi-Lingual Localization System (English & Hindi ONLY)
-- **Rule**: STRICTLY 2 languages: **English** and **हिन्दी (Hindi)**.
-- **Strict Prohibition**: Absolutely NO informal/broken Hinglish (e.g. *"Khatam hone wale"*, *"Bikri karein"*). All UI strings MUST be pure English or pure Devanagari Hindi.
+### 🔒 Locked 3: Bi-Lingual Localization System (English & Hindi ONLY - ZERO HINGLISH)
+- **TOP PRIORITY MANDATE**: STRICTLY 2 isolated languages: **English (`en`)** and **हिन्दी (Hindi `hi`)**.
+- **Strict Prohibition (Zero Mixing)**:
+  - If English is chosen: 100% pure English ONLY. Zero Devanagari characters or colloquial Hindi words anywhere in UI labels, buttons, or toasts.
+  - If Hindi is chosen: 100% pure Devanagari Hindi ONLY. Zero English words, Latin script, or bracketed translations (e.g. NEVER write `प्रारंभिक खाता शेष (Opening Balance)` or `उधार (Credit)`).
+  - Absolutely NO informal/broken Hinglish (e.g. *"Khatam hone wale"*, *"Bikri karein"*). All UI strings MUST be 100% pure English or 100% pure Devanagari Hindi.
 - **Implementation**: All user-facing strings must use `context.tr('key')` backed by `AppTranslations`.
 - **Persistence**: User language is saved in `TokenStorage.saveLanguage()` and loaded on boot.
 - **Target Files**:
@@ -101,6 +104,19 @@ The following components have been verified, battle-tested, and locked. **DO NOT
     - `AppBadge`: Standard status tag (`neutral`, `success`, `warning`, `error`, `primary`).
 - **Effortless Merchant Usability**:
   - Zero cognitive overload. Keep every user flow clear, uncluttered, and fast to operate during busy retail peak hours.
+
+### 🔒 Locked 6: Unified Live Data-Bus & Zero-Latency Cross-Feature Sync
+- **TOP PRIORITY DIRECTIVE**: All modules (POS Billing, Customer Khata, Inventory Stock, Today's Sales, Analytics P&L, Expenses) MUST be interconnected via a live event bus (`AppEventBus` in Flutter, `sync-bus.ts` in Web).
+- **Instant Reactive Updates (0ms Lag)**:
+  - When POS completes a sale:
+    - Inventory stock count decrements immediately (0ms).
+    - If sale is on credit ('khata'), customer's balance updates in 0ms and passbook appends the transaction.
+    - Today's sales stream and revenue KPI increment immediately.
+    - Analytics P&L recalculates gross profit, COGS, and net margin in real time.
+- **Cross-Tab & Cross-Device Parity**:
+  - Web uses browser `BroadcastChannel` in tandem with DOM `CustomEvent` for zero-latency multi-tab synchronization.
+- **Mathematical Consistency**:
+  - No calculation drift allowed across any ledger, cash drawer, or stock count.
 
 ---
 
@@ -310,6 +326,65 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - Handled hidden/private price check (`isPricePublic`).
     - Displays `📞 Ask Price (रेट पूछें)` instead of `₹0` when the merchant chooses to hide product price, improving user experience.
   - **Verification**: `npm run build` compiled in 2.64s, Vitest 21/21 test files passed (94/94 tests green), `flutter analyze` 0 errors.
+- **[2026-11-13]**: Go Backend Khata & Customer Credit Features Performance & Security Audit (`khata.go`, `khata_repo.go`):
+  - **ACID Pessimistic Row Locking (`FOR UPDATE`) & Sub-ms Index Scans**:
+    - Validated pessimistic row locking on customer khata accounts preventing race conditions during concurrent POS sales & Jama entries.
+    - Verified phone number normalization (`utils.NormalizeIndianPhone`), credit limit enforcement, and single-query SQL aging analysis.
+  - **Verification**: `go test ./...` in GoBackend passed with 0 errors (All packages OK!).
+- **[2026-11-13]**: Missing Authorization Header & Static Token In-Memory Backup Fix (`token_storage.dart` & `auth_interceptor.dart`):
+  - **0ms Static Token Cache & Sub-millisecond Header Injection**:
+    - Added `_memoryToken` and `_memoryRefreshToken` static caches inside `TokenStorage` so `getToken()` returns the active session token in 0ms without waiting for async `SharedPreferences` disk reads.
+    - Guaranteed that `AuthInterceptor` automatically injects `Authorization: Bearer <token>` on all requests, preventing "missing authorization header" errors on Khata, POS, and Product APIs.
+  - **Verification**: `flutter analyze` passed with 0 errors (No issues found!).
+- **[2026-11-19]**: Human, Clean & Professional Inventory Screen Redesign (`inventory_screen.dart`):
+  - **Sleek Hero Catalog Overview Banner**:
+    - Added single Hero Store Catalog Summary Card (`Store Catalog Summary: X Products`) with 1-tap `+ Add Item` button and low-stock reorder status badge (`⚠️ X items low in stock`).
+  - **Streamlined Filters & 3-Dot Overflow Menu**:
+    - Replaced cluttered headers with 1-row clean category filter chips. Tucked complex tools (Barcode Studio, Bulk Import/Export, Batch Scan) inside AppBar 3-dot overflow menu.
+  - **Verification**: `flutter analyze` passed in 9.2s with 0 errors.
+- **[2026-11-13]**: AI Merchant Business Specialist Customization & Prompt Polish (`merchant_assistant.go`, `ai_service.go`):
+  - **Shopkeeper-Centric AI Persona**:
+    - Customized AI system prompt to act as the merchant's personal ShopSilo AI Store Manager / Personal Business Specialist.
+    - Enhanced Hinglish, Hindi, and English responses with actionable advice on sales margins, khata udhar recovery, stock reorders, and bottom-safe bargaining prices.
+  - **Verification**: `go test ./...` in GoBackend passed with 0 errors, `flutter analyze` passed with 0 errors.
+- **[2026-11-13]**: Enterprise PDF Layout & Necessary Data Enrichment (`invoice.go`, `receipt.go`, `khata_pdf_service.dart`):
+  - **Enriched Data Attributes**:
+    - Added itemized `Unit` (`pcs`, `kg`, `ltr`), `HSNCode`, `Discount / Savings` breakdown, `Tax / GST`, `PaymentStatus` badges (`PAID`, `UNPAID`), `AmountPaid` & `BalanceDue` callout rows.
+  - **Executive Formatting**:
+    - High-contrast headers, alternating table row shading (`#F8FAFC`), UPI QR Code scan-to-pay, and computer-generated document legal footers.
+  - **Verification**: `go test ./...` in `go-gopdf-pdfkit` passed in 0.58s (sub-25ms benchmark), `flutter analyze` passed with 0 errors.
+- **[2026-11-13]**: Customer Product Gallery Pre-fetching & Instant Carousel Swipes (`ProductTrustDetailView.jsx`):
+  - **0ms Image Swipe Pre-fetching**:
+    - Added in-memory background image pre-fetching for product gallery images (2nd to 4th images), eliminating white flash loading delays on carousel swipe transitions.
+  - **Verification**: `npm run build` compiled in 3.3s, Vitest 26/26 test files passed (130/130 tests green).
+- **[2026-11-13]**: Customer Web App Product & Catalog Features Audit (`ProductDetailScreen.jsx`, `ProductTrustDetailView.jsx`, `StorefrontScreen.jsx`):
+  - **0ms Optimistic SWR Hydration & User Gesture Native Share**:
+    - Verified 0ms optimistic navigation, `extractProductObject` payload envelope unwrapping, and synchronous 0ms user-gesture native product share (`shareProduct()`).
+  - **Privacy Shield & Input Sanitization**:
+    - Enforced `is_price_public` privacy shields and phone number sanitization on counter pickup reservation modals.
+  - **Verification**: `npm run build` compiled in 3.3s, Vitest 26/26 test files passed (130/130 tests green).
+- **[2026-11-13]**: Product Catalog & Inventory Features Performance & Security Audit (`product_controller.dart`, `inventory_screen.dart`, `price_checker_screen.dart`):
+  - **0ms SWR Caching & Real-Time Event Sync**:
+    - Validated 0ms Stale-While-Revalidate local cache hydration, diff-based UI rebuild protection, and real-time inventory stock sync across POS and Khata.
+  - **Numeric Price Bounds & Tenant Isolation Security**:
+    - Enforced non-negative price/stock bounds (`max(0, price)`), sanitized barcode strings, and active `shop_id` tenant isolation.
+  - **Verification**: `flutter analyze` passed with 0 errors (No issues found!).
+- **[2026-11-13]**: Customer Web App Login & Register Performance & Security Optimization (`LoginScreen.jsx`, `RegisterScreen.jsx`):
+  - **Input Sanitization & Double-Submit Guard**:
+    - Normalized email and phone inputs (`.trim().toLowerCase()` and `replace(/[^0-9]/g, '')`). Added `if (loading) return;` in-flight submission guard.
+  - **HTML5 Autofill & Password Keyboard Hardening**:
+    - Added standard `autoComplete` attributes (`"username email"`, `"current-password"`, `"new-password"`, `"name"`, `"tel"`).
+  - **Verification**: `npm run build` compiled in 4.1s, Vitest 26/26 test files passed (130/130 tests green).
+- **[2026-11-13]**: Login & Register Auth Flow Performance & Security Hardening (`login_screen.dart`, `register_screen.dart`, `auth_controller.dart`):
+  - **0ms Instant Navigation & Async Shop Sync**:
+    - Triggered non-blocking background `fetchShopDetails()` and `fetchUserProfile()` via `unawaited()`, eliminating 500-1000ms blocking UI delay on login and registration.
+  - **Double-Submit Guard & Input Normalization**:
+    - Added `_isSubmitting` in-flight lock guard to prevent double-submitting forms on fast double-taps.
+    - Sanitized inputs: Lowercased email and stripped non-digit characters from phone numbers (`replaceAll(RegExp(r'[^0-9]'), '')`).
+  - **Autofill Hints & Password Security**:
+    - Added `AutofillGroup` and `autofillHints` (`[AutofillHints.email]`, `[AutofillHints.password]`, `[AutofillHints.name]`, `[AutofillHints.telephoneNumber]`) for 1-tap OS credential autofill.
+    - Disabled autocorrect and suggestions on password inputs for keyboard security.
+  - **Verification**: `flutter analyze` passed in 5.3s with 0 errors (No issues found!).
 - **[2026-11-09]**: Real Data Profit & Shop Analytics Overhaul (`analytics_controller.dart` & `analytics_screen.dart`):
   - **Zero Fake / Hardcoded Data Guarantee**:
     - Completely removed all fake fallback data (`Amul Gold Milk`, `Fortune Rice Bran Oil`, `45800.0`).

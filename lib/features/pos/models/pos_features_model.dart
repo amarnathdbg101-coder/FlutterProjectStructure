@@ -59,65 +59,6 @@ class HotkeyItem {
   }
 }
 
-class MarginCheckItem {
-  final String productId;
-  final double sellingPrice;
-  final double quantity;
-  final double? costPrice;
-
-  MarginCheckItem({
-    required this.productId,
-    required this.sellingPrice,
-    required this.quantity,
-    this.costPrice,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'product_id': productId,
-      'selling_price': sellingPrice,
-      'quantity': quantity,
-      if (costPrice != null) 'cost_price': costPrice,
-    };
-  }
-}
-
-class MarginCheckResult {
-  final bool allowed;
-  final double totalSale;
-  final double totalCost;
-  final double netMarginPercentage;
-  final double minFloorPercentage;
-  final List<String> warnings;
-  final bool criticalViolation;
-
-  MarginCheckResult({
-    required this.allowed,
-    required this.totalSale,
-    required this.totalCost,
-    required this.netMarginPercentage,
-    required this.minFloorPercentage,
-    required this.warnings,
-    required this.criticalViolation,
-  });
-
-  factory MarginCheckResult.fromJson(Map<String, dynamic> json) {
-    final rawWarnings = json['warnings'];
-    List<String> list = [];
-    if (rawWarnings is List) {
-      list = rawWarnings.map((e) => e.toString()).toList();
-    }
-    return MarginCheckResult(
-      allowed: json['allowed'] == true,
-      totalSale: (json['total_sale'] as num?)?.toDouble() ?? 0.0,
-      totalCost: (json['total_cost'] as num?)?.toDouble() ?? 0.0,
-      netMarginPercentage: (json['net_margin_percentage'] as num?)?.toDouble() ?? 0.0,
-      minFloorPercentage: (json['min_floor_percentage'] as num?)?.toDouble() ?? 5.0,
-      warnings: list,
-      criticalViolation: json['critical_violation'] == true,
-    );
-  }
-}
 
 class CashDrawerSession {
   final String id;

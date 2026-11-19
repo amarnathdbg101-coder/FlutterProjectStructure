@@ -8,7 +8,6 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
-import '../services/smart_barcode_catalog_service.dart';
 import '../widgets/barcode_sticker_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
@@ -16,10 +15,19 @@ import '../../../core/utils/whatsapp_share_helper.dart';
 import 'barcode_sheet_studio_screen.dart';
 
 /// Clean, Aesthetic, High-Vibe E-Commerce Product Details Showcase.
-/// Features studio hero gallery with tap-to-zoom fullscreen preview,
-/// balanced modern typography, tactile counter restock stepper,
-/// centralized profit visibility (controlled from Store Settings),
-/// and a minimalist specifications chip grid.
+/// Complete parity with CustomerFrontend UI/UX while providing essential
+/// merchant controls:
+/// - Flipkart-style white showcase stage with live availability pill, discount tag,
+///   circular floating action buttons (Favorite, Share, Zoom, Camera), rating pill,
+///   animated blue dot pagination, and interactive thumbnails strip.
+/// - Customer-identical Executive Pricing Hero Card with savings callout & 1-tap
+///   Online Storefront Price Visibility toggle (Public vs Hidden Mandi Rate).
+/// - Apparel Size & Beauty Shade Variant Matrix preview.
+/// - Tactical Counter Restock Stepper & Inventory Health (Instant 0ms sync).
+/// - Merchant Intelligence & Commercials Hub (Purchase Cost, Unit Margin %, Batch Retail).
+/// - Structured Specifications Table & Description card matching customer side.
+/// - Integrated Barcode Printing & Hardware Station.
+/// - Responsive 2-column desktop/tablet layout and zero-overflow fluid mobile layout.
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
   final Function(BuildContext context, ProductModel p)? onEditRequested;
@@ -36,21 +44,47 @@ class ProductDetailScreen extends StatefulWidget {
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
-class _ProductDetailScreenState extends State<ProductDetailScreen> {
+class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTickerProviderStateMixin {
   late final PageController _pageController;
   int _activeImageIndex = 0;
   bool _isTitleExpanded = false;
   bool _isWishlisted = false;
+  bool _isProfitExpanded = true;
+  String? _selectedSize;
+  String? _selectedColor;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    // Initialize variant selection if available
+    final attrs = widget.product.attributes;
+    if (attrs.containsKey('size') || attrs.containsKey('sizes')) {
+      final raw = (attrs['size'] ?? attrs['sizes']).toString();
+      final list = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (list.isNotEmpty) _selectedSize = list.first;
+    }
+    if (attrs.containsKey('color') || attrs.containsKey('colors')) {
+      final raw = (attrs['color'] ?? attrs['colors']).toString();
+      final list = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (list.isNotEmpty) _selectedColor = list.first;
+    }
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -139,60 +173,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         final updates = <String, dynamic>{
           'barcode': cleanBarcode,
         };
-        if (p.sku.trim().isEmpty) {
-          updates['sku'] = cleanBarcode;
-        }
-
-        // Global Smart Barcode Auto-Fill / Master Catalog Enrichment
-        final masterMatch = await SmartBarcodeCatalogService.lookup(cleanBarcode);
-        String updatedDisplayName = p.name;
-        if (masterMatch != null) {
-          final isGenericName = p.name.trim().isEmpty ||
-              p.name.trim().toLowerCase() == 'new product' ||
-              p.name.trim().toLowerCase() == 'item' ||
-              p.name.trim().toLowerCase().startsWith('product ');
-          if (isGenericName) {
-            updates['name'] = masterMatch.name;
-            updatedDisplayName = masterMatch.name;
-          }
-          if (p.brand.trim().isEmpty && masterMatch.brand.isNotEmpty) {
-            updates['brand'] = masterMatch.brand;
-            final attrs = Map<String, dynamic>.from(p.attributes);
-            attrs['brand'] = masterMatch.brand;
-            updates['attributes'] = attrs;
-          }
-          if ((p.comparePrice <= 0) && masterMatch.mrp > 0) {
-            updates['compare_price'] = masterMatch.mrp;
-          }
-          if ((p.price <= 0) && masterMatch.sellingPrice > 0) {
-            updates['price'] = masterMatch.sellingPrice;
-          }
-          if ((p.category.trim().isEmpty || p.category.trim().toLowerCase() == 'general store') && masterMatch.category.isNotEmpty) {
-            updates['category'] = CategoryRegistry.formatCategoryName(masterMatch.category);
-          }
-          if (p.unit.trim().isEmpty && masterMatch.unit.isNotEmpty) {
-            updates['unit'] = masterMatch.unit;
-          }
-        }
 
         final success = await prodCtrl.editProduct(p.id, updates);
         if (context.mounted) {
           if (success) {
-            final autoFilledNote = masterMatch != null && (updatedDisplayName != p.name || updates.length > 2);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  autoFilledNote
-                      ? (context.isHindi
-                          ? '⚡ "$updatedDisplayName" में बारकोड ($cleanBarcode) जुड़ा और मास्टर कैटलॉग से विवरण ऑटो-फिल हुआ!'
-                          : '⚡ Attached Barcode ($cleanBarcode) & Auto-Filled details for "$updatedDisplayName"!')
-                      : (context.isHindi
-                          ? '✓ "$updatedDisplayName" में बारकोड ($cleanBarcode) जुड़ गया'
-                          : '✓ Attached Barcode ($cleanBarcode) to "$updatedDisplayName"'),
+                  context.isHindi
+                      ? '✓ बारकोड सफलतापूर्वक अपडेट हो गया!'
+                      : '✓ Barcode attached successfully!',
                 ),
                 backgroundColor: AppColors.success,
                 behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 3),
+                duration: const Duration(seconds: 2),
               ),
             );
           } else {
@@ -200,7 +194,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               SnackBar(
                 content: Text(
                   prodCtrl.errorMessage ??
-                      (context.isHindi ? 'बारकोड सेव करने में विफल' : 'Failed to save barcode'),
+                      (context.isHindi ? 'बारकोड सेव नहीं हो सका' : 'Failed to update barcode'),
                 ),
                 backgroundColor: AppColors.error,
                 behavior: SnackBarBehavior.floating,
@@ -213,12 +207,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  void _shareProductViaWhatsApp(BuildContext context, ProductModel p) async {
+    final currentShop = context.read<AuthController>().currentShop ?? LocalCacheService.getShop();
+    final shopSlug = currentShop?.slug.isNotEmpty == true ? currentShop!.slug : '';
+    final shopName = currentShop?.name.isNotEmpty == true ? currentShop!.name : 'ShopSilo';
+
+    await WhatsAppShareHelper.shareProduct(
+      context: context,
+      productName: p.name,
+      price: p.price,
+      comparePrice: p.comparePrice,
+      productId: p.id.toString(),
+      shopSlug: shopSlug,
+      shopName: shopName,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final prodController = context.watch<ProductController>();
     // Synchronize with active product from controller or fallback to widget initial product
     final p = prodController.products.firstWhere(
-      (item) => item.id == widget.product.id,
+      (item) => item.id.toString() == widget.product.id.toString(),
       orElse: () => widget.product,
     );
 
@@ -254,6 +264,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined, size: 20),
+            tooltip: context.isHindi ? 'शेयर करें' : 'Share Product',
+            onPressed: () => _shareProductViaWhatsApp(context, p),
+          ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -304,7 +319,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const Icon(Icons.qr_code_2_rounded, size: 18, color: AppColors.primary),
                     const SizedBox(width: 8),
                     Text(
-                      'Print Barcodes',
+                      ctx.isHindi ? 'बारकोड स्टीकर प्रिंट' : 'Print Barcodes',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],
@@ -317,7 +332,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const Icon(Icons.print_rounded, size: 18, color: AppColors.primary),
                     const SizedBox(width: 8),
                     Text(
-                      ctx.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Sheet Studio',
+                      ctx.isHindi ? 'बारकोड प्रिंट स्टूडियो (A4)' : 'Barcode Sheet Studio',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],
@@ -330,7 +345,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     Icon(Icons.edit_note_rounded, size: 18, color: ctx.colorTextPrimary),
                     const SizedBox(width: 8),
                     Text(
-                      'Update Details',
+                      ctx.isHindi ? 'विवरण बदलें' : 'Update Details',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],
@@ -343,7 +358,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     Icon(Icons.copy_rounded, size: 18, color: ctx.colorTextPrimary),
                     const SizedBox(width: 8),
                     Text(
-                      'Duplicate Product',
+                      ctx.isHindi ? 'कॉपी बनाएं' : 'Duplicate Product',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],
@@ -368,99 +383,124 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1040),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isDesktop = constraints.maxWidth >= 840;
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1040),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isDesktop = constraints.maxWidth >= 840;
 
-                  if (isDesktop) {
-                    // DESKTOP / TABLET 2-COLUMN STUDIO LAYOUT
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Left Column: Studio Hero Gallery
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                        if (isDesktop) {
+                          // DESKTOP / TABLET 2-COLUMN STUDIO LAYOUT
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildHeroImageStudio(context, p, imagesList),
+                              // Left Column: Studio Hero Gallery & Barcode Hardware Station
+                              Expanded(
+                                flex: 5,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildHeroImageStudio(context, p, imagesList),
+                                    const SizedBox(height: 16),
+                                    _buildBarcodeHardwareCard(context, p),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 22),
+                              // Right Column: Header, Pricing, Restock Stepper, Commercials, Specs, Notes
+                              Expanded(
+                                flex: 6,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildProductHeader(context, p),
+                                    const SizedBox(height: 14),
+                                    _buildPricingHeroCard(context, p),
+                                    const SizedBox(height: 14),
+                                    _buildVariantMatrix(context, p),
+                                    const SizedBox(height: 14),
+                                    _buildCounterRestockCard(context, p),
+                                    if (isProfitVisible) ...[
+                                      const SizedBox(height: 14),
+                                      _buildMerchantIntelligenceCard(context, p),
+                                    ],
+                                    const SizedBox(height: 14),
+                                    _buildSpecificationsGrid(context, p),
+                                    const SizedBox(height: 14),
+                                    _buildDescriptionCard(context, p),
+                                    const SizedBox(height: 18),
+                                    _buildSimilarProductsRow(context, p),
+                                    const SizedBox(height: 32),
+                                  ],
+                                ),
+                              ),
                             ],
-                          ),
-                        ),
-                        const SizedBox(width: 22),
-                        // Right Column: Header, Pricing, Inventory & Stock, Commercials (if enabled), Specs, Notes
-                        Expanded(
-                          flex: 6,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildProductHeader(context, p),
-                              const SizedBox(height: 14),
-                              _buildPricingHeroCard(context, p),
-                              if (isProfitVisible) ...[
-                                const SizedBox(height: 14),
-                                _buildMerchantIntelligenceCard(context, p),
-                              ],
-                              const SizedBox(height: 14),
-                              _buildSpecificationsGrid(context, p),
-                              const SizedBox(height: 14),
-                              _buildDescriptionCard(context, p),
-                              const SizedBox(height: 18),
-                              _buildSimilarProductsRow(context, p),
-                              const SizedBox(height: 32),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }
+                          );
+                        }
 
-                  // MOBILE FLUID SINGLE-COLUMN LAYOUT
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildHeroImageStudio(context, p, imagesList),
-                      const SizedBox(height: 14),
-                      _buildProductHeader(context, p),
-                      const SizedBox(height: 14),
-                      _buildPricingHeroCard(context, p),
-                      if (isProfitVisible) ...[
-                        const SizedBox(height: 14),
-                        _buildMerchantIntelligenceCard(context, p),
-                      ],
-                      const SizedBox(height: 14),
-                      _buildSpecificationsGrid(context, p),
-                      const SizedBox(height: 14),
-                      _buildDescriptionCard(context, p),
-                      const SizedBox(height: 18),
-                      _buildSimilarProductsRow(context, p),
-                      const SizedBox(height: 36),
-                    ],
-                  );
-                },
+                        // MOBILE FLUID SINGLE-COLUMN LAYOUT
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildHeroImageStudio(context, p, imagesList),
+                            const SizedBox(height: 14),
+                            _buildProductHeader(context, p),
+                            const SizedBox(height: 14),
+                            _buildPricingHeroCard(context, p),
+                            const SizedBox(height: 14),
+                            _buildVariantMatrix(context, p),
+                            const SizedBox(height: 14),
+                            _buildCounterRestockCard(context, p),
+                            if (isProfitVisible) ...[
+                              const SizedBox(height: 14),
+                              _buildMerchantIntelligenceCard(context, p),
+                            ],
+                            const SizedBox(height: 14),
+                            _buildSpecificationsGrid(context, p),
+                            const SizedBox(height: 14),
+                            _buildDescriptionCard(context, p),
+                            const SizedBox(height: 14),
+                            _buildBarcodeHardwareCard(context, p),
+                            const SizedBox(height: 18),
+                            _buildSimilarProductsRow(context, p),
+                            const SizedBox(height: 36),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+            // Sticky Bottom Quick Action Bar
+            _buildBottomActionBar(context, p),
+          ],
         ),
       ),
     );
   }
 
-  // --- 1. STUDIO HERO GALLERY (Flipkart Style: Clean White Showcase, Floating Heart & Share, Rating Pill, Centered Blue Dot Pagination) ---
+  // =========================================================================
+  // 1. STUDIO HERO GALLERY (CustomerFrontend Flipkart-Style Parity)
+  // =========================================================================
   Widget _buildHeroImageStudio(BuildContext context, ProductModel p, List<String> imagesList) {
+    final hasDiscount = p.hasDiscount;
+    final discountPct = p.discountPct.toInt();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Main Showcase Stage
         Container(
-          height: 330,
+          height: 340,
           width: double.infinity,
           decoration: BoxDecoration(
             color: Colors.white,
@@ -506,128 +546,134 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         },
                       ),
 
-                      // Floating Top-Left Available Now Status Pill
+                      // Floating Top-Left Available Now Status Pill & Savings Tag
                       Positioned(
                         top: 14,
                         left: 14,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                          decoration: BoxDecoration(
-                            color: (p.isOutOfStock
-                                    ? AppColors.error
-                                    : (p.isLowStock ? AppColors.warning : AppColors.success))
-                                .withValues(alpha: 0.95),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Live Availability Pill with Pulsing Dot
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                              decoration: BoxDecoration(
+                                color: (p.isOutOfStock
+                                        ? AppColors.error
+                                        : (p.isLowStock ? AppColors.warning : AppColors.success))
+                                    .withValues(alpha: 0.95),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  FadeTransition(
+                                    opacity: _pulseAnimation,
+                                    child: Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    p.isOutOfStock
+                                        ? (context.isHindi ? 'आउट ऑफ स्टॉक' : 'Out of Stock')
+                                        : (p.isLowStock
+                                            ? (context.isHindi ? 'कम स्टॉक (${p.stock})' : 'Low Stock (${p.stock})')
+                                            : (context.isHindi ? 'उपलब्ध है (${p.stock})' : 'In Stock (${p.stock})')),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Savings Pill
+                            if (hasDiscount && discountPct >= 5) ...[
+                              const SizedBox(height: 6),
                               Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF16A34A),
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.10),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                p.isOutOfStock
-                                    ? (context.isHindi ? 'आउट ऑफ स्टॉक' : 'Out of Stock')
-                                    : (p.isLowStock
-                                        ? (context.isHindi ? 'कम स्टॉक (${p.stock})' : 'Low Stock (${p.stock})')
-                                        : (context.isHindi ? 'उपलब्ध है (${p.stock})' : 'In Stock (${p.stock})')),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.auto_awesome_rounded, size: 10, color: Colors.white),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      '$discountPct% ${context.isHindi ? 'छूट' : 'OFF'}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
+                          ],
                         ),
                       ),
 
-                      // Floating Top-Right Circular Action Buttons: Wishlist & Share (Flipkart Style)
+                      // Floating Top-Right Circular Action Buttons: Wishlist, Share, Fullscreen Zoom
                       Positioned(
                         top: 14,
                         right: 14,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.12),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: Icon(
-                                  _isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                  color: _isWishlisted ? const Color(0xFFEF4444) : const Color(0xFF475569),
-                                  size: 20,
-                                ),
-                                onPressed: () => setState(() => _isWishlisted = !_isWishlisted),
-                              ),
+                            // Wishlist / Bookmark Button
+                            _buildFloatingRoundButton(
+                              icon: _isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                              iconColor: _isWishlisted ? const Color(0xFFEF4444) : const Color(0xFF475569),
+                              tooltip: context.isHindi ? 'पसंदीदा' : 'Wishlist',
+                              onTap: () => setState(() => _isWishlisted = !_isWishlisted),
                             ),
                             const SizedBox(height: 8),
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.12),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(Icons.share_outlined, color: Color(0xFF475569), size: 19),
-                                onPressed: () async {
-                                  final currentShop = context.read<AuthController>().currentShop ?? LocalCacheService.getShop();
-                                  final shopSlug = currentShop?.slug.isNotEmpty == true ? currentShop!.slug : '';
-                                  final shopName = currentShop?.name.isNotEmpty == true ? currentShop!.name : 'ShopSilo';
-
-                                  await WhatsAppShareHelper.shareProduct(
-                                    context: context,
-                                    productName: p.name,
-                                    price: p.price,
-                                    comparePrice: p.comparePrice,
-                                    productId: p.id.toString(),
-                                    shopSlug: shopSlug,
-                                    shopName: shopName,
-                                  );
-                                },
-                              ),
+                            // WhatsApp Share Button
+                            _buildFloatingRoundButton(
+                              icon: Icons.share_outlined,
+                              iconColor: const Color(0xFF475569),
+                              tooltip: context.isHindi ? 'शेयर करें' : 'Share',
+                              onTap: () => _shareProductViaWhatsApp(context, p),
+                            ),
+                            const SizedBox(height: 8),
+                            // Fullscreen Zoom Button
+                            _buildFloatingRoundButton(
+                              icon: Icons.fullscreen_rounded,
+                              iconColor: const Color(0xFF475569),
+                              tooltip: context.isHindi ? 'बड़ा करके देखें' : 'Zoom',
+                              onTap: () => _openFullScreenImage(context, imagesList, _activeImageIndex),
                             ),
                           ],
                         ),
                       ),
 
-                      // Floating Bottom-Left Rating Pill: 4.4 ★ | 14 (Flipkart Style)
+                      // Floating Bottom-Left Rating / Trust Pill (Flipkart Style: 4.4 ★ | Verified)
                       Positioned(
                         bottom: 14,
                         left: 14,
@@ -645,10 +691,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               ),
                             ],
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
+                              const Text(
                                 '4.4',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
@@ -656,12 +702,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   color: Color(0xFF0F172A),
                                 ),
                               ),
-                              SizedBox(width: 3),
-                              Icon(Icons.star_rounded, color: Color(0xFF16A34A), size: 14),
-                              SizedBox(width: 4),
+                              const SizedBox(width: 3),
+                              const Icon(Icons.star_rounded, color: Color(0xFF16A34A), size: 14),
+                              const SizedBox(width: 4),
                               Text(
-                                '|  14',
-                                style: TextStyle(
+                                '|  ${context.isHindi ? "सत्यापित" : "Verified"}',
+                                style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 11.5,
                                   color: Color(0xFF64748B),
@@ -672,38 +718,36 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       ),
 
-                      // Quick Edit / Change Photos Button
-                      Positioned(
-                        bottom: 14,
-                        right: 14,
-                        child: GestureDetector(
-                          onTap: () {
-                            if (widget.onEditRequested != null) {
-                              widget.onEditRequested!(context, p);
-                            }
-                          },
+                      // Floating Bottom-Right Photo Counter Pill (📷 1 / 4)
+                      if (imagesList.length > 1)
+                        Positioned(
+                          bottom: 14,
+                          right: 14,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.black.withValues(alpha: 0.65),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.photo_camera_rounded, size: 12, color: Colors.white),
-                                SizedBox(width: 4),
+                                const Icon(Icons.camera_alt_outlined, size: 11, color: Colors.white),
+                                const SizedBox(width: 4),
                                 Text(
-                                  'Edit Photos',
-                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                  '${_activeImageIndex + 1} / ${imagesList.length}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                      ),
 
-                      // Animated Blue Dot Pagination Pills: ● ○ ○ ○ (Flipkart Style)
+                      // Centered Blue Dot Pagination Pills: ● ○ ○ ○ (Flipkart Style)
                       if (imagesList.length > 1)
                         Positioned(
                           bottom: 14,
@@ -717,9 +761,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 width: isSelected ? 18 : 6,
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? const Color(0xFF2563EB)
-                                      : Colors.grey.shade300,
+                                  color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade300,
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               );
@@ -742,7 +784,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'No Product Photo',
+                          context.isHindi ? 'उत्पाद की फोटो नहीं है' : 'No Product Photo',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -751,7 +793,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          'Attach photo for counter & storefront',
+                          context.isHindi
+                              ? 'काउंटर और ऑनलाइन स्टोर के लिए फोटो लगाएं'
+                              : 'Attach photo for counter & storefront',
                           style: TextStyle(fontSize: 11, color: context.colorTextMuted),
                         ),
                         const SizedBox(height: 10),
@@ -762,7 +806,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           ),
                           icon: const Icon(Icons.add_photo_alternate_rounded, size: 15, color: AppColors.primary),
-                          label: const Text('Add Photo', style: TextStyle(fontSize: 11.5, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                          label: Text(
+                            context.isHindi ? 'फोटो जोड़ें' : 'Add Photo',
+                            style: const TextStyle(fontSize: 11.5, color: AppColors.primary, fontWeight: FontWeight.bold),
+                          ),
                           onPressed: () {
                             if (widget.onEditRequested != null) {
                               widget.onEditRequested!(context, p);
@@ -775,7 +822,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
         ),
 
-        // Gallery Thumbnails Strip
+        // Gallery Thumbnails Strip (Rounded Rectangles with Blue Active Border)
         if (imagesList.length > 1) ...[
           const SizedBox(height: 10),
           SizedBox(
@@ -830,7 +877,39 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 2. PRODUCT HEADER: BRAND & EXPANDABLE TITLE (Flipkart Style) ---
+  Widget _buildFloatingRoundButton({
+    required IconData icon,
+    required Color iconColor,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        icon: Icon(icon, color: iconColor, size: 19),
+        tooltip: tooltip,
+        onPressed: onTap,
+      ),
+    );
+  }
+
+  // =========================================================================
+  // 2. PRODUCT HEADER: BRAND & EXPANDABLE TITLE (Customer Side Parity)
+  // =========================================================================
   Widget _buildProductHeader(BuildContext context, ProductModel p) {
     final brandName = p.brand.isNotEmpty
         ? p.brand
@@ -839,26 +918,56 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Brand Name (Bold Header Subtitle like Flipkart)
-        Text(
-          brandName,
-          style: TextStyle(
-            fontSize: 14.5,
-            fontWeight: FontWeight.w800,
-            color: context.colorTextPrimary,
-            letterSpacing: -0.2,
-          ),
+        // Brand Eyebrow Tag
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: context.colorPrimaryLight,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                brandName.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: context.colorSurfaceSubtle,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: context.colorBorder),
+              ),
+              child: Text(
+                p.category,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: context.colorTextMuted,
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
 
-        // Product Name with ...more toggle (Flipkart Style)
+        // Product Name with ...more toggle
         GestureDetector(
           onTap: () => setState(() => _isTitleExpanded = !_isTitleExpanded),
           child: RichText(
             text: TextSpan(
               style: TextStyle(
-                fontSize: 16.5,
-                fontWeight: FontWeight.w600,
+                fontSize: 17.5,
+                fontWeight: FontWeight.w700,
                 color: context.colorTextPrimary,
                 height: 1.3,
               ),
@@ -883,24 +992,92 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 8),
+
+        // Trust Signals Row: Verified Store & Live Storefront Badges (Wrapped for zero overflow)
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFA7F3D0)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.verified_user_rounded, size: 12, color: Color(0xFF059669)),
+                  const SizedBox(width: 4),
+                  Text(
+                    context.isHindi ? 'सत्यापित स्टोर' : 'Verified Store',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF059669),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: p.isActive ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: p.isActive ? const Color(0xFFBBF7D0) : const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: p.isActive ? AppColors.success : AppColors.error,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    p.isActive
+                        ? (context.isHindi ? 'डिजिटल स्टोर पर एक्टिव' : 'Active on Storefront')
+                        : (context.isHindi ? 'ऑफलाइन (छिपा हुआ)' : 'Inactive (Offline)'),
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: p.isActive ? const Color(0xFF16A34A) : AppColors.error,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  // --- 3. PRICING HERO CARD: UNIFIED FLIPKART ROW (↓70%  3,999  ₹1,199) ---
+  // =========================================================================
+  // 3. PRICING HERO CARD: UNIFIED ROW + ONLINE VISIBILITY TOGGLE
+  // =========================================================================
   Widget _buildPricingHeroCard(BuildContext context, ProductModel p) {
     final hasDiscount = p.comparePrice > p.price;
+    final savings = hasDiscount ? (p.comparePrice - p.price) : 0.0;
+    final discountPct = p.discountPct.toInt();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: context.colorSurface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: context.colorBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.02),
-            blurRadius: 5,
+            blurRadius: 6,
             offset: const Offset(0, 1),
           ),
         ],
@@ -908,52 +1085,85 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Single Unified Flipkart Price Row: ↓70% 3,999 ₹1,199
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          // Single Unified Price Row: ₹SellingPrice  ₹MRP  ↓X% OFF
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 4,
             children: [
-              if (hasDiscount) ...[
-                Text(
-                  '↓${p.discountPct.toInt()}%',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF16A34A),
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '₹${p.comparePrice.toInt()}',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: context.colorTextMuted,
-                    decoration: TextDecoration.lineThrough,
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
               Text(
                 '₹${p.price.toInt()}',
                 style: TextStyle(
-                  fontSize: 26,
+                  fontSize: 28,
                   fontWeight: FontWeight.w900,
                   color: context.colorTextPrimary,
                   letterSpacing: -0.5,
                 ),
               ),
+              if (hasDiscount) ...[
+                Text(
+                  '₹${p.comparePrice.toInt()}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: context.colorTextMuted,
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '↓$discountPct% OFF',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF16A34A),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 5),
+
+          // Savings callout banner
+          if (hasDiscount) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF16A34A)),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    context.isHindi
+                        ? 'बचत ₹${savings.toInt()} ($discountPct% छूट)'
+                        : 'Save ₹${savings.toInt()} ($discountPct% OFF)',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF16A34A),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          const SizedBox(height: 8),
 
           // Subline Delivery / Pickup Fee with Chevron
           Row(
             children: [
               Expanded(
                 child: Text(
-                  '+ ₹0 Delivery Fee • Counter Pickup In Stock',
+                  context.isHindi
+                      ? 'दुकान से पिकअप · कोई डिलीवरी चार्ज नहीं'
+                      : 'Store Pickup · Ready at counter in 15 mins',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -968,9 +1178,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ],
           ),
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Divider(height: 1, color: context.colorBorder),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+
+          // Online Storefront Price Visibility Control
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -979,22 +1191,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   children: [
                     Icon(
                       p.isPricePublic ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                      size: 14,
+                      size: 15,
                       color: p.isPricePublic ? AppColors.success : AppColors.warning,
                     ),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        p.isPricePublic
-                            ? 'Online Storefront: Public Price'
-                            : 'Online Storefront: 🔒 Price Hidden',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: p.isPricePublic ? AppColors.success : AppColors.warning,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p.isPricePublic
+                                ? (context.isHindi ? 'ऑनलाइन स्टोर: दाम दिख रहा है' : 'Online Store: Public Price')
+                                : (context.isHindi ? 'ऑनलाइन स्टोर: दाम छुपा हुआ है' : 'Online Store: 🔒 Price Hidden'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: p.isPricePublic ? AppColors.success : AppColors.warning,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            p.isPricePublic
+                                ? (context.isHindi ? 'ग्राहकों को दाम दिखेगा' : 'Customers can see listed price')
+                                : (context.isHindi ? 'ग्राहकों को "दाम पूछें" दिखेगा' : 'Shows "Price on Request" to buyers'),
+                            style: TextStyle(fontSize: 10, color: context.colorTextMuted),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1012,21 +1237,30 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(newStatus
-                            ? 'Price is now visible to online customers.'
-                            : 'Price is now hidden from online customers (Shows "Price on Request").'),
+                            ? (context.isHindi ? 'दाम ऑनलाइन ग्राहकों को दिखने लगा।' : 'Price is now visible to online customers.')
+                            : (context.isHindi ? 'दाम ऑनलाइन ग्राहकों से छुपा दिया गया है।' : 'Price is now hidden from online customers.')),
+                        backgroundColor: AppColors.primary,
+                        behavior: SnackBarBehavior.floating,
                         duration: const Duration(seconds: 2),
                       ),
                     );
                   }
                 },
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: context.colorPrimaryLight,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  ),
                   child: Text(
-                    p.isPricePublic ? 'Hide Online' : 'Show Online',
+                    p.isPricePublic
+                        ? (context.isHindi ? 'दाम छुपाएं' : 'Hide Online')
+                        : (context.isHindi ? 'दाम दिखाएं' : 'Show Online'),
                     style: const TextStyle(
                       fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.primary,
                     ),
                   ),
@@ -1039,7 +1273,395 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 5. MERCHANT INTELLIGENCE & PROFIT HUB (Centrally Controlled from Settings) ---
+  // =========================================================================
+  // 4. APPAREL SIZES & COLORS VARIANT MATRIX (Customer Parity)
+  // =========================================================================
+  Widget _buildVariantMatrix(BuildContext context, ProductModel p) {
+    final attrs = p.attributes;
+    final List<String> sizes = [];
+    final List<String> colors = [];
+
+    // Extract sizes if present
+    if (attrs.containsKey('sizes') || attrs.containsKey('size')) {
+      final raw = (attrs['sizes'] ?? attrs['size']).toString();
+      sizes.addAll(raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty));
+    }
+    // Extract colors if present
+    if (attrs.containsKey('colors') || attrs.containsKey('color')) {
+      final raw = (attrs['colors'] ?? attrs['color']).toString();
+      colors.addAll(raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty));
+    }
+
+    if (sizes.isEmpty && colors.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colorBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.02),
+            blurRadius: 5,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: context.colorPrimaryLight,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: const Icon(Icons.style_outlined, size: 15, color: AppColors.primary),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  context.isHindi ? 'वेरिएंट एवं विकल्प (Variants & Options)' : 'Variants & Options',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Sizes Row
+          if (sizes.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  context.isHindi ? 'साइज़ (Sizes)' : 'Select Size',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.colorTextMuted),
+                ),
+                if (_selectedSize != null)
+                  Text(
+                    '${context.isHindi ? "चुना गया" : "Selected"}: $_selectedSize',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.primary),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: sizes.map((sz) {
+                final isSelected = _selectedSize == sz;
+                return InkWell(
+                  onTap: () => setState(() => _selectedSize = sz),
+                  borderRadius: BorderRadius.circular(8),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: isSelected ? context.colorPrimaryLight : context.colorSurfaceSubtle,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : context.colorBorder,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Text(
+                      sz,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: isSelected ? AppColors.primary : context.colorTextPrimary,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (colors.isNotEmpty) const SizedBox(height: 14),
+          ],
+
+          // Colors Row
+          if (colors.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  context.isHindi ? 'रंग (Colors)' : 'Select Color',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.colorTextMuted),
+                ),
+                if (_selectedColor != null)
+                  Text(
+                    '${context.isHindi ? "चुना गया" : "Selected"}: $_selectedColor',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.primary),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: colors.map((col) {
+                final isSelected = _selectedColor == col;
+                return InkWell(
+                  onTap: () => setState(() => _selectedColor = col),
+                  borderRadius: BorderRadius.circular(20),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected ? context.colorPrimaryLight : context.colorSurfaceSubtle,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : context.colorBorder,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _resolveColorPreview(col),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black26, width: 0.5),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          col,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected ? AppColors.primary : context.colorTextPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _resolveColorPreview(String name) {
+    final lower = name.toLowerCase().trim();
+    if (lower.contains('red')) return Colors.red;
+    if (lower.contains('blue')) return Colors.blue;
+    if (lower.contains('green')) return Colors.green;
+    if (lower.contains('yellow')) return Colors.amber;
+    if (lower.contains('black')) return Colors.black;
+    if (lower.contains('white')) return Colors.white;
+    if (lower.contains('pink')) return Colors.pinkAccent;
+    if (lower.contains('purple')) return Colors.purple;
+    if (lower.contains('orange')) return Colors.orange;
+    if (lower.contains('grey') || lower.contains('gray')) return Colors.grey;
+    return AppColors.primary;
+  }
+
+  // =========================================================================
+  // 5. TACTICAL COUNTER RESTOCK STEPPER & INVENTORY HEALTH (Shop Owner)
+  // =========================================================================
+  Widget _buildCounterRestockCard(BuildContext context, ProductModel p) {
+    final prodCtrl = context.read<ProductController>();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colorBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.02),
+            blurRadius: 5,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: context.colorPrimaryLight,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.primary),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  context.isHindi ? 'स्टॉक एवं इन्वेंटरी' : 'Stock & Inventory',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (p.isOutOfStock
+                          ? AppColors.error
+                          : (p.isLowStock ? AppColors.warning : AppColors.success))
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  p.isOutOfStock
+                      ? (context.isHindi ? 'आउट ऑफ स्टॉक' : 'Out of Stock')
+                      : (p.isLowStock
+                          ? (context.isHindi ? 'कम स्टॉक' : 'Low Stock')
+                          : (context.isHindi ? 'पर्याप्त स्टॉक' : 'In Stock')),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: p.isOutOfStock
+                        ? AppColors.error
+                        : (p.isLowStock ? AppColors.warning : AppColors.success),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Stepper Row: [-]  {stock} {unit}  [+]  +  Quick Restock Chips
+          Row(
+            children: [
+              // Decrement Stepper Button
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: context.colorSurfaceSubtle,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.remove_rounded, size: 20),
+                onPressed: p.stock > 0
+                    ? () => prodCtrl.adjustStock(p, -1)
+                    : null,
+              ),
+              const SizedBox(width: 8),
+
+              // Stock Number Display
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    '${p.stock}',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: context.colorTextPrimary,
+                    ),
+                  ),
+                  Text(
+                    p.unit.isNotEmpty ? p.unit : (context.isHindi ? 'यूनिट' : 'units'),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: context.colorTextMuted),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+
+              // Increment Stepper Button
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.add_rounded, size: 20),
+                onPressed: () => prodCtrl.adjustStock(p, 1),
+              ),
+
+              const SizedBox(width: 10),
+
+              // Quick Restock Chips: +5, +10, +25, +50
+              Expanded(
+                child: Wrap(
+                  spacing: 5,
+                  runSpacing: 5,
+                  alignment: WrapAlignment.end,
+                  children: [5, 10, 25, 50].map((qty) {
+                    return InkWell(
+                      onTap: () {
+                        prodCtrl.adjustStock(p, qty);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              context.isHindi
+                                  ? '+$qty यूनिट स्टॉक में जोड़ा गया!'
+                                  : 'Added +$qty units to stock!',
+                            ),
+                            backgroundColor: AppColors.success,
+                            duration: const Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4.5),
+                        decoration: BoxDecoration(
+                          color: context.colorPrimaryLight,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          '+$qty',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+          // Low stock alert indicator
+          Row(
+            children: [
+              Icon(Icons.info_outline_rounded, size: 13, color: context.colorTextMuted),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  context.isHindi
+                      ? 'स्टॉक ≤ ${p.lowStockThreshold} होने पर रीस्टॉक अलर्ट मिलेगा'
+                      : 'Low stock alerts trigger when stock is ≤ ${p.lowStockThreshold} ${p.unit}',
+                  style: TextStyle(fontSize: 10.5, color: context.colorTextMuted, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // 6. MERCHANT INTELLIGENCE & COMMERCIALS HUB (Shop Owner Specific)
+  // =========================================================================
   Widget _buildMerchantIntelligenceCard(BuildContext context, ProductModel p) {
     final hasCost = p.costPrice > 0;
     final totalInventoryValue = p.price * p.stock;
@@ -1075,48 +1697,128 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
-                  'Profit & Commercials Hub',
+                  context.isHindi ? 'मुनाफा एवं व्यापारिक जानकारी' : 'Profit & Commercials Hub',
                   style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              InkWell(
+                onTap: () => setState(() => _isProfitExpanded = !_isProfitExpanded),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  child: Icon(
+                    _isProfitExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: context.colorTextMuted,
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
 
-          // 3 Clean Minimalist KPI Tiles (Balanced scale)
-          Row(
-            children: [
-              Expanded(
-                child: _buildMiniStat(
-                  context,
-                  label: 'Purchase Cost',
-                  value: hasCost ? '₹${p.costPrice.toStringAsFixed(0)}' : '₹0',
-                  subtext: 'Per unit cost',
+          if (_isProfitExpanded) ...[
+            const SizedBox(height: 12),
+            // 4 Clean Minimalist KPI Tiles
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMiniStat(
+                    context,
+                    label: context.isHindi ? 'खरीद लागत' : 'Purchase Cost',
+                    value: hasCost ? '₹${p.costPrice.toStringAsFixed(0)}' : '₹0',
+                    subtext: context.isHindi ? 'प्रति यूनिट' : 'Per unit cost',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: _buildMiniStat(
-                  context,
-                  label: 'Unit Margin',
-                  value: hasCost ? '+₹${p.profitAmount.toStringAsFixed(0)}' : '₹0',
-                  subtext: hasCost ? '${p.profitMarginPct.toStringAsFixed(1)}% margin' : '0%',
-                  valueColor: AppColors.success,
+                const SizedBox(width: 7),
+                Expanded(
+                  child: _buildMiniStat(
+                    context,
+                    label: context.isHindi ? 'यूनिट मुनाफा' : 'Unit Margin',
+                    value: hasCost ? '+₹${p.profitAmount.toStringAsFixed(0)}' : '₹0',
+                    subtext: hasCost ? '${p.profitMarginPct.toStringAsFixed(1)}% margin' : '0%',
+                    valueColor: AppColors.success,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: _buildMiniStat(
-                  context,
-                  label: 'Batch Retail',
-                  value: '₹${totalInventoryValue.toStringAsFixed(0)}',
-                  subtext: '+₹${totalProfitPotential.toStringAsFixed(0)} profit',
+              ],
+            ),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMiniStat(
+                    context,
+                    label: context.isHindi ? 'कुल स्टॉक वैल्यू' : 'Batch Retail',
+                    value: '₹${totalInventoryValue.toStringAsFixed(0)}',
+                    subtext: context.isHindi ? 'वर्तमान स्टॉक' : '${p.stock} in inventory',
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: _buildMiniStat(
+                    context,
+                    label: context.isHindi ? 'संभावित कुल लाभ' : 'Batch Profit',
+                    value: '+₹${totalProfitPotential.toStringAsFixed(0)}',
+                    subtext: context.isHindi ? 'बिक्री होने पर' : 'Upon complete sale',
+                    valueColor: AppColors.success,
+                  ),
+                ),
+              ],
+            ),
+
+            // Batch & Expiry Radar (if present)
+            if (p.batchNo.isNotEmpty || p.expiryDate != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: context.colorSurfaceSubtle,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.colorBorder),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.access_time_rounded, size: 14, color: AppColors.primary),
+                    const SizedBox(width: 6),
+                    if (p.batchNo.isNotEmpty) ...[
+                      Text(
+                        'Batch: ${p.batchNo}',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    if (p.expiryDate != null) ...[
+                      Text(
+                        'Exp: ${p.expiryDate!.day}/${p.expiryDate!.month}/${p.expiryDate!.year}',
+                        style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                      ),
+                      if (p.daysUntilExpiry != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: (p.daysUntilExpiry! <= 30 ? AppColors.warning : AppColors.success).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            p.daysUntilExpiry! <= 0
+                                ? (context.isHindi ? 'अवधि समाप्त' : 'Expired')
+                                : '${p.daysUntilExpiry} ${context.isHindi ? "दिन बाकी" : "days left"}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: p.daysUntilExpiry! <= 30 ? AppColors.warning : AppColors.success,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
                 ),
               ),
             ],
-          ),
+          ],
         ],
       ),
     );
@@ -1130,10 +1832,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     Color? valueColor,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: context.colorSurfaceSubtle,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: context.colorBorder),
       ),
       child: Column(
@@ -1141,26 +1843,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         children: [
           Text(
             label,
-            style: TextStyle(fontSize: 10, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 10.5, color: context.colorTextMuted, fontWeight: FontWeight.w600),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 3),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 13.5,
+                fontSize: 15,
                 fontWeight: FontWeight.w900,
                 color: valueColor ?? context.colorTextPrimary,
               ),
             ),
           ),
-          const SizedBox(height: 1.5),
+          const SizedBox(height: 2),
           Text(
             subtext,
-            style: TextStyle(fontSize: 9, color: context.colorTextMuted),
+            style: TextStyle(fontSize: 9.5, color: context.colorTextMuted),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1169,7 +1871,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 6. SPECIFICATIONS & ATTRIBUTES SHOWCASE ---
+  // =========================================================================
+  // 7. SPECIFICATIONS & ATTRIBUTES SHOWCASE (Zero-Overflow Table Format)
+  // =========================================================================
   Widget _buildSpecificationsGrid(BuildContext context, ProductModel p) {
     final specItems = <MapEntry<String, String>>[];
 
@@ -1185,7 +1889,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     specItems.add(MapEntry('Unit', p.unit));
 
     if (p.weight > 0) {
-      specItems.add(MapEntry('Net Weight', '${p.weight} ${p.unit.isNotEmpty ? p.unit : "g"}'));
+      specItems.add(MapEntry('Net Weight', '${p.weight} ${p.unit.isNotEmpty ? p.unit : "kg"}'));
     }
 
     if (p.sku.isNotEmpty) {
@@ -1198,27 +1902,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       specItems.add(const MapEntry('Barcode', '+ Attach Barcode'));
     }
 
-    // 2. Pricing & Negotiation Rules
-    if (p.floorPrice > 0) {
-      specItems.add(MapEntry('Floor Price', '₹${p.floorPrice.toStringAsFixed(0)}'));
-    }
-
-    if (p.allowBargain) {
-      specItems.add(const MapEntry('Bargain', 'Allowed'));
-    }
-
     if (p.lowStockThreshold > 0) {
       specItems.add(MapEntry('Low Stock Alert', '≤ ${p.lowStockThreshold} units'));
     }
 
-    // 3. Dynamic Custom JSONB Attributes & Merchant Specifications
+    // 2. Dynamic Custom JSONB Attributes & Specifications
     if (p.attributes.isNotEmpty) {
       p.attributes.forEach((k, v) {
         final kLow = k.toLowerCase().trim();
-        if (kLow != 'brand' &&
+        if (!CustomerPrivacyShield.blockedKeys.contains(kLow) &&
+            kLow != 'brand' &&
             kLow != 'category_name' &&
             kLow != 'category' &&
             kLow != 'unit' &&
+            kLow != 'size' &&
+            kLow != 'sizes' &&
+            kLow != 'color' &&
+            kLow != 'colors' &&
             v != null &&
             v.toString().trim().isNotEmpty) {
           final formattedKey = k
@@ -1265,7 +1965,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
-                  'Specifications & Attributes',
+                  context.isHindi ? 'उत्पाद विवरण एवं विशेषताएं' : 'Specifications & Details',
                   style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1286,56 +1986,68 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: specItems.map((item) {
+          // Structured Key-Value Rows with Guaranteed Zero Overflow
+          Column(
+            children: specItems.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final item = entry.value;
+              final isEven = idx % 2 == 0;
               final isAttachAction = item.key == 'Barcode' && item.value == '+ Attach Barcode';
-              return InkWell(
-                onTap: isAttachAction ? () => _attachBarcode(context, p) : null,
-                borderRadius: BorderRadius.circular(9),
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 300),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: isAttachAction ? context.colorPrimaryLight : context.colorSurfaceSubtle,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: isAttachAction ? AppColors.primary.withValues(alpha: 0.4) : context.colorBorder,
-                      width: isAttachAction ? 1.5 : 1.0,
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isEven ? context.colorSurfaceSubtle.withValues(alpha: 0.5) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 105,
+                      child: Text(
+                        item.key,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: context.colorTextMuted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isAttachAction) ...[
-                        const Icon(Icons.qr_code_scanner_rounded, size: 14, color: AppColors.primary),
-                        const SizedBox(width: 4),
-                        Text(
-                          context.isHindi ? 'बारकोड जोड़ें' : 'Attach Barcode',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ] else ...[
-                        Text(
-                          '${item.key}: ',
-                          style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
-                        ),
-                        Flexible(
-                          child: Text(
-                            item.value,
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                    Expanded(
+                      child: isAttachAction
+                          ? InkWell(
+                              onTap: () => _attachBarcode(context, p),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.qr_code_scanner_rounded, size: 14, color: AppColors.primary),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    context.isHindi ? 'बारकोड जोड़ें' : 'Attach Barcode',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Text(
+                              item.value,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: context.colorTextPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                    ),
+                  ],
                 ),
               );
             }).toList(),
@@ -1345,7 +2057,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 7. DESCRIPTION & CATALOG NOTES ---
+  // =========================================================================
+  // 8. DESCRIPTION & CATALOG NOTES
+  // =========================================================================
   Widget _buildDescriptionCard(BuildContext context, ProductModel p) {
     if (p.description.trim().isEmpty) return const SizedBox.shrink();
 
@@ -1378,18 +2092,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(width: 7),
               Text(
-                'Description',
+                context.isHindi ? 'विवरण (About this item)' : 'About this item',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             p.description.trim(),
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 13,
               color: context.colorTextPrimary,
-              height: 1.45,
+              height: 1.5,
             ),
           ),
         ],
@@ -1397,7 +2111,130 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  // --- 8. SIMILAR PRODUCTS HORIZONTAL ROW ---
+  // =========================================================================
+  // 9. BARCODE HARDWARE & PRINTING STATION (Shop Owner Specific)
+  // =========================================================================
+  Widget _buildBarcodeHardwareCard(BuildContext context, ProductModel p) {
+    final hasBarcode = p.barcode.trim().isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colorBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.02),
+            blurRadius: 5,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: context.colorPrimaryLight,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: const Icon(Icons.qr_code_2_rounded, size: 15, color: AppColors.primary),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  context.isHindi ? 'बारकोड एवं लेबल प्रिंट' : 'Barcode & Sticker Printing',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (hasBarcode) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 11, color: Color(0xFF059669)),
+                      const SizedBox(width: 4),
+                      Text(
+                        p.barcode,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF059669),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Print Actions Buttons
+          Row(
+            children: [
+              // Single / Multi Barcode Sticker
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    side: const BorderSide(color: AppColors.primary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 16, color: AppColors.primary),
+                  label: Text(
+                    context.isHindi ? 'स्टीकर प्रिंट' : 'Print Sticker',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: () => BarcodeStickerDialog.show(context, p),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // A4 Barcode Sheet Studio
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.print_rounded, size: 16),
+                  label: Text(
+                    context.isHindi ? 'शीट स्टूडियो' : 'Sheet Studio',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: () => BarcodeSheetStudioScreen.show(context, initialProduct: p),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // 10. SIMILAR PRODUCTS HORIZONTAL ROW
+  // =========================================================================
   Widget _buildSimilarProductsRow(BuildContext context, ProductModel currentProduct) {
     final allProducts = context.watch<ProductController>().products;
     final cleanCat = CategoryRegistry.formatCategoryName(currentProduct.category);
@@ -1425,16 +2262,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             type: AppBadgeType.neutral,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
           child: Row(
             children: similarItems.map((item) {
               return Padding(
-                padding: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.only(right: 12),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   onTap: () {
                     Navigator.pushReplacement(
                       context,
@@ -1448,28 +2285,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     );
                   },
                   child: Container(
-                    width: 140,
+                    width: 145,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: context.colorSurface,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: context.colorBorder),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.02),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 124,
-                          height: 100,
+                          width: 129,
+                          height: 105,
                           decoration: BoxDecoration(
                             color: context.colorSurfaceSubtle,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: AppProductImage(
                             imageUrl: item.imageUrl,
-                            width: 124,
-                            height: 100,
+                            width: 129,
+                            height: 105,
                             fit: BoxFit.cover,
                             fallbackIcon: Icons.inventory_2_outlined,
                             fallbackIconSize: 28,
@@ -1479,7 +2323,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         Text(
                           CategoryRegistry.formatCategoryName(item.category),
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w600,
                             color: context.colorTextMuted,
                           ),
@@ -1519,18 +2363,88 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  // =========================================================================
+  // 11. STICKY BOTTOM QUICK ACTION BAR
+  // =========================================================================
+  Widget _buildBottomActionBar(BuildContext context, ProductModel p) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        border: Border(top: BorderSide(color: context.colorBorder)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // Print Barcode Button
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: context.colorBorder),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.qr_code_2_rounded, size: 18, color: AppColors.primary),
+              label: Text(
+                context.isHindi ? 'बारकोड' : 'Barcode',
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+              ),
+              onPressed: () => BarcodeStickerDialog.show(context, p),
+            ),
+            const SizedBox(width: 10),
+
+            // Primary Update / Edit Details Button
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.edit_note_rounded, size: 20),
+                label: Text(
+                  context.isHindi ? 'उत्पाद विवरण बदलें (Edit)' : 'Edit Product Details',
+                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onPressed: () {
+                  if (widget.onEditRequested != null) {
+                    widget.onEditRequested!(context, p);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _confirmDelete(BuildContext context, dynamic productId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('Delete Product'),
-        content: const Text('Are you sure you want to delete this product from your catalog?'),
+        title: Text(context.isHindi ? 'उत्पाद हटाएं' : 'Delete Product'),
+        content: Text(
+          context.isHindi
+              ? 'क्या आप निश्चित हैं कि आप इस उत्पाद को अपने कैटलॉग से हटाना चाहते हैं?'
+              : 'Are you sure you want to delete this product from your catalog?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(context.isHindi ? 'रद्द करें' : 'Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -1545,11 +2459,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   Navigator.pop(context);
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Product deleted from catalog')),
+                  SnackBar(
+                    content: Text(
+                      context.isHindi ? 'उत्पाद कैटलॉग से हटा दिया गया' : 'Product deleted from catalog',
+                    ),
+                    backgroundColor: AppColors.error,
+                  ),
                 );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: Text(
+              context.isHindi ? 'हटाएं' : 'Delete',
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

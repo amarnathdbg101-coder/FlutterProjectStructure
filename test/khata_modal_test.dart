@@ -34,5 +34,8 @@ void main() {
 
     // Verify modal is open and shows form fields
     expect(find.byType(TextField), findsWidgets);
+
+    // Flush any pending BaseController error auto-dismiss timers
+    await tester.pump(const Duration(seconds: 5));
   });
 }

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+
 import '../constants/api_constants.dart';
 import '../storage/token_storage.dart';
 import 'api_response.dart';
@@ -7,6 +8,11 @@ import 'auth_interceptor.dart';
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
+
+  static const String _englishNetworkError =
+      "Can't connect to ShopSilo right now. Check server or network availability and try again.";
+  static const String _hindiNetworkError =
+      'ShopSilo से अभी कनेक्ट नहीं हो पा रहा है। सर्वर या नेटवर्क उपलब्ध होने पर फिर प्रयास करें।';
 
   late final Dio dio;
 
@@ -45,7 +51,11 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      final res = await dio.post(path, data: data, queryParameters: queryParameters);
+      final res = await dio.post(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      );
       return ApiResponse.fromJson(res.data, (d) => d);
     } catch (e) {
       return ApiResponse.failure(handleError(e));
@@ -131,7 +141,9 @@ class ApiClient {
           }
         } else if (data is String && data.isNotEmpty) {
           // Ignore raw HTML pages (such as Cloudflare 502/504 errors)
-          if (!data.contains('<html') && !data.contains('<!DOCTYPE') && data.length < 300) {
+          if (!data.contains('<html') &&
+              !data.contains('<!DOCTYPE') &&
+              data.length < 300) {
             serverMsg = data.trim();
           }
         }
@@ -180,6 +192,14 @@ class ApiClient {
             return isHindi
                 ? 'शॉपसाइलो सर्वर पर अस्थायी समस्या है। कृपया कुछ ही पलों में पुनः प्रयास करें।'
                 : 'ShopSilo server is temporarily unavailable. Please try again shortly.';
+          default:
+            return statusCode >= 500
+                ? (isHindi
+                      ? 'शॉपसाइलो सर्वर पर अस्थायी समस्या है। कृपया थोड़ी देर बाद पुनः प्रयास करें।'
+                      : 'ShopSilo is temporarily unavailable. Please try again shortly.')
+                : (isHindi
+                      ? 'अनुरोध पूरा नहीं हो सका। कृपया विवरण जांचकर फिर प्रयास करें।'
+                      : 'The request could not be completed. Please check the details and try again.');
         }
       }
 
@@ -188,27 +208,15 @@ class ApiClient {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.sendTimeout:
         case DioExceptionType.receiveTimeout:
-          return isHindi
-              ? 'सर्वर से कनेक्ट होने में समय समाप्त हो गया। कृपया अपना इंटरनेट कनेक्शन जांचें।'
-              : 'Connection timed out. Please check your internet connection.';
         case DioExceptionType.connectionError:
-          return isHindi
-              ? 'इंटरनेट या सर्वर से कनेक्शन नहीं बन पा रहा है। कृपया इंटरनेट जांचें।'
-              : 'Cannot connect to ShopSilo server. Please verify your internet connection.';
+          return _networkErrorMessage(isHindi: isHindi);
         case DioExceptionType.cancel:
-          return isHindi ? 'अनुरोध रद्द कर दिया गया।' : 'Request was cancelled.';
-        default:
-          final msg = error.message ?? '';
-          if (msg.contains('SocketException') ||
-              msg.contains('Connection refused') ||
-              msg.contains('Network is unreachable')) {
-            return isHindi
-                ? 'इंटरनेट कनेक्शन उपलब्ध नहीं है। कृपया वाई-फाई या मोबाइल डेटा जांचें।'
-                : 'No internet connection. Please verify your Wi-Fi or mobile data.';
-          }
           return isHindi
-              ? 'अस्थायी नेटवर्क समस्या उत्पन्न हुई। कृपया पुनः प्रयास करें।'
-              : 'A network error occurred. Please try again.';
+              ? 'अनुरोध रद्द कर दिया गया।'
+              : 'Request was cancelled.';
+        default:
+          final details = error.error?.toString() ?? error.message ?? '';
+          return _sanitizeErrorMessage(details, isHindi: isHindi);
       }
     }
 
@@ -216,13 +224,34 @@ class ApiClient {
     return _sanitizeErrorMessage(error.toString(), isHindi: isHindi);
   }
 
+  static bool isNetworkErrorMessage(String message) {
+    final normalized = message.trim();
+    return normalized == _englishNetworkError ||
+        normalized == _hindiNetworkError;
+  }
+
+  static String _networkErrorMessage({required bool isHindi}) =>
+      isHindi ? _hindiNetworkError : _englishNetworkError;
+
   /// Sanitizes SQL/PostgreSQL exceptions, technical stack dumps, and raw errors
   /// into crystal-clear merchant friendly messages.
   static String _sanitizeErrorMessage(String raw, {required bool isHindi}) {
     final lower = raw.toLowerCase();
 
+    if (lower.contains('socketexception') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('connection refused') ||
+        lower.contains('connection error') ||
+        lower.contains('timed out') ||
+        lower.contains('network request failed') ||
+        lower.contains('no address associated with hostname')) {
+      return _networkErrorMessage(isHindi: isHindi);
+    }
+
     // Database: Unique constraint collisions
-    if (lower.contains('duplicate key') || lower.contains('unique constraint')) {
+    if (lower.contains('duplicate key') ||
+        lower.contains('unique constraint')) {
       if (lower.contains('barcode')) {
         return isHindi
             ? 'इस बारकोड वाला सामान आपकी इन्वेंटरी में पहले से मौजूद है।'
@@ -249,7 +278,8 @@ class ApiClient {
     }
 
     // Database: Foreign key violation
-    if (lower.contains('foreign key constraint') || lower.contains('violates foreign key')) {
+    if (lower.contains('foreign key constraint') ||
+        lower.contains('violates foreign key')) {
       return isHindi
           ? 'इस रिकॉर्ड से जुड़े अन्य डेटा होने के कारण इसे नहीं हटाया जा सकता।'
           : 'Cannot complete this action because other active records depend on it.';
@@ -270,7 +300,8 @@ class ApiClient {
     }
 
     // Database: Not null violation
-    if (lower.contains('violates not-null constraint') || lower.contains('null value in column')) {
+    if (lower.contains('violates not-null constraint') ||
+        lower.contains('null value in column')) {
       return isHindi
           ? 'कुछ आवश्यक जानकारी छूट गई है। कृपया सभी अनिवार्य फ़ील्ड भरें।'
           : 'Required details are missing. Please complete all required fields.';
@@ -284,30 +315,38 @@ class ApiClient {
     }
 
     // Session / Auth tokens
-    if (lower.contains('token expired') || lower.contains('signature is invalid') || lower.contains('jwt')) {
+    if (lower.contains('token expired') ||
+        lower.contains('signature is invalid') ||
+        lower.contains('jwt')) {
       return isHindi
           ? 'लॉगिन सत्र समाप्त हो गया। कृपया दोबारा लॉगिन करें।'
           : 'Your session has expired. Please log in again.';
     }
 
     // HTML / Cloudflare error pages
-    if (raw.contains('<html') || raw.contains('<!doctype') || raw.contains('<div') || raw.contains('<title>')) {
+    if (raw.contains('<html') ||
+        raw.contains('<!doctype') ||
+        raw.contains('<div') ||
+        raw.contains('<title>')) {
       return isHindi
           ? 'शॉपसाइलो सर्वर अस्थायी रूप से अनुपलब्ध है। कृपया थोड़ी देर बाद पुनः प्रयास करें।'
           : 'ShopSilo server is temporarily unavailable. Please try again shortly.';
-    }
-
-    // Socket exceptions
-    if (lower.contains('socketexception') || lower.contains('connection refused') || lower.contains('network is unreachable')) {
-      return isHindi
-          ? 'इंटरनेट कनेक्शन नहीं मिला। कृपया इंटरनेट चालू करें।'
-          : 'No internet connection. Please check your network and retry.';
     }
 
     // Strip "Exception: " prefix if present
     var cleaned = raw;
     if (cleaned.startsWith('Exception: ')) {
       cleaned = cleaned.substring('Exception: '.length).trim();
+    }
+
+    if (RegExp(
+          r'^(?:[A-Za-z_][A-Za-z0-9_.]*(?:Exception|Error)|StateError|TypeError)\b',
+        ).hasMatch(cleaned) ||
+        lower.contains('is not a subtype of') ||
+        lower.contains('null check operator used on a null value')) {
+      return isHindi
+          ? 'कुछ गड़बड़ हुई है। कृपया फिर से प्रयास करें।'
+          : 'Something went wrong. Please try again.';
     }
 
     return cleaned;

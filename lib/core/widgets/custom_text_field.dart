@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'reusable/app_voice_icon_button.dart';
 
 class CustomTextField extends StatefulWidget {
   final TextEditingController controller;
@@ -6,6 +7,7 @@ class CustomTextField extends StatefulWidget {
   final String? hint;
   final IconData? prefixIcon;
   final bool isPassword;
+  final bool enableVoice;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
 
@@ -16,6 +18,7 @@ class CustomTextField extends StatefulWidget {
     this.hint,
     this.prefixIcon,
     this.isPassword = false,
+    this.enableVoice = false,
     this.keyboardType = TextInputType.text,
     this.validator,
   });
@@ -60,7 +63,12 @@ class _CustomTextFieldState extends State<CustomTextField> {
                       });
                     },
                   )
-                : null,
+                : (widget.enableVoice
+                    ? AppVoiceIconButton(
+                        controller: widget.controller,
+                        hint: widget.hint ?? widget.label,
+                      )
+                    : null),
           ),
         ),
       ],

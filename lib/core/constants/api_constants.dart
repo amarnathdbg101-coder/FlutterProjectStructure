@@ -106,6 +106,7 @@ class ApiConstants {
   static const String productsImportTemplateCsv = '/shops/me/products/import-template.csv';
   static const String productsImportTemplateXlsx = '/shops/me/products/import-template.xlsx';
   static const String scanBarcode = '/products/scan';
+  static String shopProductByBarcode(String barcode) => '/shops/me/products/barcode/${Uri.encodeComponent(barcode)}';
   static String masterCatalogBarcode(String code) => '/catalog/barcode/${Uri.encodeComponent(code)}';
   static const String masterCatalogLookup = '/catalog/lookup'; // ?barcode=... fallback
 

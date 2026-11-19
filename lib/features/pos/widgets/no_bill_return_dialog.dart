@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
-import '../controllers/damage_claim_controller.dart';
+import '../controllers/pos_controller.dart';
 
 class NoBillReturnDialog {
   static void show(BuildContext context) {
@@ -11,7 +11,7 @@ class NoBillReturnDialog {
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => Consumer<DamageClaimController>(
+      builder: (dialogCtx) => Consumer<PosController>(
         builder: (ctx, claimCtrl, _) {
           final results = claimCtrl.lookupResults;
           final isSearching = claimCtrl.isLookingUpReturns;

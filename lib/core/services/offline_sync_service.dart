@@ -1,23 +1,15 @@
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
 import '../network/api_client.dart';
 import '../storage/local_cache_service.dart';
 import 'event_bus_service.dart';
 
-enum SyncActionType {
-  posSale,
-  expenseCreate,
-  khataEntry,
-  stockAdjust,
-}
+enum SyncActionType { posSale, expenseCreate, khataEntry, stockAdjust }
 
-enum SyncStatus {
-  pending,
-  syncing,
-  failed,
-  completed,
-}
+enum SyncStatus { pending, syncing, failed, completed }
 
 class SyncQueueItem {
   final String id;
@@ -89,31 +81,47 @@ class SyncQueueItem {
   factory SyncQueueItem.fromJson(Map<String, dynamic> json) {
     SyncActionType parsedAction;
     try {
-      parsedAction = SyncActionType.values.byName(json['action']?.toString() ?? 'posSale');
+      parsedAction = SyncActionType.values.byName(
+        json['action']?.toString() ?? 'posSale',
+      );
     } catch (_) {
       parsedAction = SyncActionType.posSale;
     }
 
     SyncStatus parsedStatus;
     try {
-      parsedStatus = SyncStatus.values.byName(json['status']?.toString() ?? 'pending');
+      parsedStatus = SyncStatus.values.byName(
+        json['status']?.toString() ?? 'pending',
+      );
     } catch (_) {
       parsedStatus = SyncStatus.pending;
     }
 
     return SyncQueueItem(
-      id: json['id']?.toString() ?? 'sync_${DateTime.now().millisecondsSinceEpoch}',
+      id:
+          json['id']?.toString() ??
+          'sync_${DateTime.now().millisecondsSinceEpoch}',
       action: parsedAction,
       endpoint: json['endpoint']?.toString() ?? '',
       method: json['method']?.toString() ?? 'POST',
-      payload: (json['payload'] is Map) ? Map<String, dynamic>.from(json['payload']) : {},
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
-      idempotencyKey: json['idempotency_key']?.toString() ?? 'idemp_${DateTime.now().millisecondsSinceEpoch}',
-      retryCount: (json['retry_count'] is num) ? (json['retry_count'] as num).toInt() : 0,
+      payload: (json['payload'] is Map)
+          ? Map<String, dynamic>.from(json['payload'])
+          : {},
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
+      idempotencyKey:
+          json['idempotency_key']?.toString() ??
+          'idemp_${DateTime.now().millisecondsSinceEpoch}',
+      retryCount: (json['retry_count'] is num)
+          ? (json['retry_count'] as num).toInt()
+          : 0,
       status: parsedStatus,
       errorMessage: json['error_message']?.toString(),
       title: json['title']?.toString() ?? 'Offline Transaction',
-      amount: (json['amount'] is num) ? (json['amount'] as num).toDouble() : 0.0,
+      amount: (json['amount'] is num)
+          ? (json['amount'] as num).toDouble()
+          : 0.0,
     );
   }
 }
@@ -130,10 +138,12 @@ class OfflineSyncService {
   final List<SyncQueueItem> _queue = [];
   bool _isSyncing = false;
 
-  final StreamController<int> _countController = StreamController<int>.broadcast();
+  final StreamController<int> _countController =
+      StreamController<int>.broadcast();
 
   List<SyncQueueItem> get queue => List.unmodifiable(_queue);
-  List<SyncQueueItem> get pendingItems => _queue.where((i) => i.status != SyncStatus.completed).toList();
+  List<SyncQueueItem> get pendingItems =>
+      _queue.where((i) => i.status != SyncStatus.completed).toList();
   int get pendingCount => pendingItems.length;
   bool get isSyncing => _isSyncing;
   Stream<int> get pendingCountStream => _countController.stream;
@@ -181,7 +191,8 @@ class OfflineSyncService {
   }) async {
     final now = DateTime.now();
     final uniqueId = 'sync_${now.millisecondsSinceEpoch}_${_queue.length + 1}';
-    final key = idempotencyKey ?? 'idemp_${now.microsecondsSinceEpoch}_$uniqueId';
+    final key =
+        idempotencyKey ?? 'idemp_${now.microsecondsSinceEpoch}_$uniqueId';
 
     final item = SyncQueueItem(
       id: uniqueId,
@@ -220,7 +231,10 @@ class OfflineSyncService {
     bool allSucceeded = true;
 
     // Snapshot IDs to iterate safely without index range errors
-    final targetIds = _queue.where((i) => i.status != SyncStatus.completed).map((i) => i.id).toList();
+    final targetIds = _queue
+        .where((i) => i.status != SyncStatus.completed)
+        .map((i) => i.id)
+        .toList();
 
     for (final itemId in targetIds) {
       // Re-lookup index in case items were modified or cleared
@@ -236,9 +250,7 @@ class OfflineSyncService {
       try {
         final options = Options(
           method: current.method,
-          headers: {
-            'X-Idempotency-Key': current.idempotencyKey,
-          },
+          headers: {'X-Idempotency-Key': current.idempotencyKey},
           sendTimeout: const Duration(seconds: 12),
           receiveTimeout: const Duration(seconds: 12),
         );
@@ -281,14 +293,15 @@ class OfflineSyncService {
           _emitEventBusAfterSync(current);
         } else {
           allSucceeded = false;
-          final isNetworkError = dioErr.type == DioExceptionType.connectionError ||
+          final isNetworkError =
+              dioErr.type == DioExceptionType.connectionError ||
               dioErr.type == DioExceptionType.connectionTimeout ||
               dioErr.type == DioExceptionType.receiveTimeout;
 
           _queue[idx] = _queue[idx].copyWith(
             status: isNetworkError ? SyncStatus.pending : SyncStatus.failed,
             retryCount: current.retryCount + 1,
-            errorMessage: dioErr.message ?? 'Network connection error',
+            errorMessage: ApiClient.handleError(dioErr),
           );
 
           // If device is offline, stop loop so we don't spam network
@@ -304,7 +317,7 @@ class OfflineSyncService {
         _queue[idx] = _queue[idx].copyWith(
           status: SyncStatus.failed,
           retryCount: current.retryCount + 1,
-          errorMessage: err.toString(),
+          errorMessage: ApiClient.handleError(err),
         );
       }
     }
@@ -318,7 +331,10 @@ class OfflineSyncService {
   void _emitEventBusAfterSync(SyncQueueItem item) {
     switch (item.action) {
       case SyncActionType.posSale:
-        AppEventBus().emit(AppCacheEventType.posSaleCompleted, payload: item.payload);
+        AppEventBus().emit(
+          AppCacheEventType.posSaleCompleted,
+          payload: item.payload,
+        );
         break;
       case SyncActionType.expenseCreate:
         AppEventBus().emit(AppCacheEventType.expenseMutated);

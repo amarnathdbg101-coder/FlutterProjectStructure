@@ -79,6 +79,43 @@ class KhataPdfService {
     );
   }
 
+  static pw.MemoryImage? _cachedLogo;
+
+  static Future<pw.MemoryImage?> _getLogoImage() async {
+    if (_cachedLogo != null) return _cachedLogo;
+    try {
+      ByteData data;
+      try {
+        data = await rootBundle.load('assets/images/app_mark.png');
+      } catch (_) {
+        final candidates = [
+          'assets/images/app_mark.png',
+          'Frontend/assets/images/app_mark.png',
+          '../assets/images/app_mark.png',
+          '${Directory.current.path}/assets/images/app_mark.png',
+          '${Directory.current.path}/Frontend/assets/images/app_mark.png',
+        ];
+        File? f;
+        for (final c in candidates) {
+          final file = File(c);
+          if (file.existsSync()) {
+            f = file;
+            break;
+          }
+        }
+        if (f != null) {
+          data = ByteData.view(f.readAsBytesSync().buffer);
+        } else {
+          return null;
+        }
+      }
+      _cachedLogo = pw.MemoryImage(data.buffer.asUint8List());
+      return _cachedLogo;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Builds A4 passbook PDF bytes for the given customer account.
   static Future<Uint8List> generateStatementPdf({
     required String shopName,
@@ -91,6 +128,7 @@ class KhataPdfService {
     required List<KhataTransactionModel> transactions,
   }) async {
     final theme = await _getTheme();
+    final logoImg = await _getLogoImage();
     final pdf = pw.Document(theme: theme);
 
     final dateStr = DateFormat('dd-MMM-yyyy HH:mm').format(DateTime.now());
@@ -147,19 +185,33 @@ class KhataPdfService {
               pw.Container(
                 color: cTopBanner,
                 padding: const pw.EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                child: pw.Column(
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Text(
-                      cleanShopName.toUpperCase(),
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16, color: PdfColors.white),
-                      textAlign: pw.TextAlign.center,
-                    ),
-                    pw.SizedBox(height: 3),
-                    pw.Text(
-                      'OFFICIAL CUSTOMER KHATA PASSBOOK & ACCOUNT STATEMENT',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cHeaderSub),
-                      textAlign: pw.TextAlign.center,
+                    if (logoImg != null) ...[
+                      pw.Container(
+                        width: 36,
+                        height: 30,
+                        margin: const pw.EdgeInsets.only(right: 12),
+                        child: pw.Image(logoImg, fit: pw.BoxFit.contain),
+                      ),
+                    ],
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Text(
+                          cleanShopName.toUpperCase(),
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16, color: PdfColors.white),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                        pw.SizedBox(height: 3),
+                        pw.Text(
+                          'OFFICIAL CUSTOMER KHATA PASSBOOK & ACCOUNT STATEMENT',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cHeaderSub),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ],
                     ),
                   ],
                 ),

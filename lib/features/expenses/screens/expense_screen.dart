@@ -188,6 +188,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                     decoration: InputDecoration(
                       labelText: sheetCtx.tr('exp_field_notes'),
                       hintText: 'e.g. Samosa & tea for staff',
+                      suffixIcon: AppVoiceIconButton(
+                        controller: notesCtrl,
+                        hint: sheetCtx.tr('exp_field_notes'),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),

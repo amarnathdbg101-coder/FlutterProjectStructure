@@ -283,8 +283,6 @@ void main() {
       const invalidMrp = 80.0;
       const validCost = 70.0;
       const invalidCost = 110.0;
-      const validFloor = 90.0;
-      const invalidFloor = 105.0;
 
       // MRP Constraint: comparePrice > 0 && comparePrice < price
       expect(validMrp > 0 && validMrp < price, isFalse);
@@ -293,10 +291,6 @@ void main() {
       // Cost Price Constraint: costPrice > price
       expect(validCost > price, isFalse);
       expect(invalidCost > price, isTrue);
-
-      // Floor Price Constraint: floorPrice > price
-      expect(validFloor > price, isFalse);
-      expect(invalidFloor > price, isTrue);
     });
 
     test('Optimistic ProductModel creation works with zero latency and handles local images', () {
@@ -312,7 +306,6 @@ void main() {
         price: 250.0,
         costPrice: 200.0,
         comparePrice: 280.0,
-        floorPrice: 240.0,
         stock: 50,
         lowStockThreshold: 10,
         unit: 'packet',
@@ -329,6 +322,77 @@ void main() {
       expect(optimistic.imageUrl, equals(localImagePath));
       expect(optimistic.isLowStock, isFalse);
       expect(optimistic.isOutOfStock, isFalse);
+    });
+
+    test('Batch number and expiry date are preserved in ProductModel attributes and JSON', () {
+      final product = ProductModel(
+        id: 'p-batch-101',
+        name: 'Amul Taaza Milk 500ml',
+        price: 32.0,
+        costPrice: 28.0,
+        stock: 50,
+        unit: 'packet',
+        category: 'Dairy, Bakery & Frozen',
+        barcode: '8901262010053',
+        sku: 'AMUL-MILK-500',
+        attributes: {
+          'batch_number': 'LOT-2026-B9',
+          'expiry_date': '2026-11-25',
+        },
+      );
+
+      expect(product.attributes['batch_number'], 'LOT-2026-B9');
+      expect(product.attributes['expiry_date'], '2026-11-25');
+
+      final jsonMap = product.toJson();
+      expect(jsonMap['attributes']['batch_number'], 'LOT-2026-B9');
+      expect(jsonMap['attributes']['expiry_date'], '2026-11-25');
+
+      final deserialized = ProductModel.fromJson(jsonMap);
+      expect(deserialized.attributes['batch_number'], 'LOT-2026-B9');
+      expect(deserialized.attributes['expiry_date'], '2026-11-25');
+    });
+
+    test('findProductByBarcode matches local in-memory products by Barcode or SKU with zero latency', () async {
+      final controller = ProductController();
+      final p1 = ProductModel(
+        id: 'p-1',
+        name: 'Fortune Sunlite 1L',
+        price: 150.0,
+        costPrice: 130.0,
+        stock: 15,
+        unit: 'litre',
+        barcode: '8901234567890',
+        sku: 'FORT-OIL-1L',
+      );
+      final p2 = ProductModel(
+        id: 'p-2',
+        name: 'Tata Salt 1kg',
+        price: 28.0,
+        costPrice: 22.0,
+        stock: 40,
+        unit: 'kg',
+        barcode: '8901030000000',
+        sku: 'TATA-SALT-1KG',
+      );
+
+      // Populate memory list
+      controller.setProductsForTesting([p1, p2]);
+
+      // Lookup by exact barcode
+      final match1 = await controller.findProductByBarcode('8901234567890');
+      expect(match1, isNotNull);
+      expect(match1?.id, 'p-1');
+      expect(match1?.name, 'Fortune Sunlite 1L');
+
+      // Lookup by SKU
+      final match2 = await controller.findProductByBarcode('TATA-SALT-1KG');
+      expect(match2, isNotNull);
+      expect(match2?.id, 'p-2');
+
+      // Non-existent barcode returns null
+      final match3 = await controller.findProductByBarcode('9999999999999');
+      expect(match3, isNull);
     });
   });
 
@@ -472,8 +536,6 @@ void main() {
         'price': 32.0,
         'cost_price': 28.0,
         'compare_price': 34.0,
-        'floor_price': 30.0,
-        'allow_bargain': true,
         'stock': 50,
         'low_stock_threshold': 10,
         'weight': 1.0,
@@ -486,8 +548,6 @@ void main() {
       expect(product.category, equals('Dairy, Bakery & Frozen'));
       expect(product.brand, equals('Amul'));
       expect(product.unit, equals('litre'));
-      expect(product.floorPrice, equals(30.0));
-      expect(product.allowBargain, isTrue);
       expect(product.lowStockThreshold, equals(10));
       expect(product.weight, equals(1.0));
       expect(product.attributes['brand'], equals('Amul'));
@@ -499,8 +559,6 @@ void main() {
       final serialized = product.toJson();
       expect(serialized['unit'], equals('litre'));
       expect(serialized['brand'], equals('Amul'));
-      expect(serialized['floor_price'], equals(30.0));
-      expect(serialized['allow_bargain'], isTrue);
       expect(serialized['attributes']['flavor'], equals('Plain'));
       expect(serialized['attributes']['shelf_life'], equals('2 Days'));
     });
@@ -797,8 +855,8 @@ void main() {
       ),
     ];
 
-    test('InventorySortOption covers all 9 business sorting modes with valid badges and icons', () {
-      expect(InventorySortOption.values.length, equals(9));
+    test('InventorySortOption covers all 8 business sorting modes with valid badges and icons', () {
+      expect(InventorySortOption.values.length, equals(8));
       for (final opt in InventorySortOption.values) {
         expect(opt.icon, isNotNull);
       }
@@ -868,11 +926,11 @@ void main() {
       expect(list.first.id, equals('4')); // Saffron ~40% margin
     });
 
-    test('Inventory Sorting: Hidden Price First puts storefront bargain items on top', () {
+    test('Inventory Sorting: Hidden Price First puts storefront hidden price items on top', () {
       final list = List<ProductModel>.from(sampleProducts);
       list.sort((a, b) {
-        final aVal = (!a.isPricePublic || a.allowBargain) ? 1 : 0;
-        final bVal = (!b.isPricePublic || b.allowBargain) ? 1 : 0;
+        final aVal = (!a.isPricePublic) ? 1 : 0;
+        final bVal = (!b.isPricePublic) ? 1 : 0;
         return bVal.compareTo(aVal);
       });
 
@@ -923,7 +981,6 @@ void main() {
         name: 'Cotton Casual Shirt',
         price: 999.0,
         costPrice: 600.0,
-        floorPrice: 850.0,
         stock: 50,
         unit: 'piece',
         weight: 0.35,

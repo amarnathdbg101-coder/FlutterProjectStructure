@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../constants/app_colors.dart';
+import '../network/api_client.dart';
 import '../routes/app_router.dart';
 import '../storage/token_storage.dart';
 
@@ -11,6 +13,8 @@ enum SnackbarType { error, success, warning, info }
 class CustomSnackbar {
   static String? _lastMessage;
   static DateTime? _lastTime;
+  static DateTime? _lastNetworkErrorTime;
+  static const Duration _networkErrorCooldown = Duration(seconds: 30);
 
   /// Display a user-friendly error toast anywhere in the app.
   static void showError(
@@ -89,25 +93,41 @@ class CustomSnackbar {
     VoidCallback? onRetry,
     String? retryLabel,
   }) {
-    final cleanMsg = message.trim();
+    final cleanMsg =
+        (type == SnackbarType.error ? ApiClient.handleError(message) : message)
+            .trim();
     if (cleanMsg.isEmpty) return;
 
-    // Deduplication filter: Avoid spamming duplicate toasts within 2.2 seconds
     final now = DateTime.now();
-    if (_lastMessage == cleanMsg &&
-        _lastTime != null &&
-        now.difference(_lastTime!) < const Duration(milliseconds: 2200)) {
-      return;
+    if (type == SnackbarType.error &&
+        ApiClient.isNetworkErrorMessage(cleanMsg)) {
+      if (_lastNetworkErrorTime != null &&
+          now.difference(_lastNetworkErrorTime!) < _networkErrorCooldown) {
+        return;
+      }
+    } else {
+      // Avoid showing the same toast repeatedly during rapid UI updates.
+      if (_lastMessage == cleanMsg &&
+          _lastTime != null &&
+          now.difference(_lastTime!) < const Duration(milliseconds: 2200)) {
+        return;
+      }
     }
-    _lastMessage = cleanMsg;
-    _lastTime = now;
 
     // Locate active ScaffoldMessenger
     final messenger = (context != null && context.mounted)
-        ? ScaffoldMessenger.maybeOf(context) ?? rootScaffoldMessengerKey.currentState
+        ? ScaffoldMessenger.maybeOf(context) ??
+              rootScaffoldMessengerKey.currentState
         : rootScaffoldMessengerKey.currentState;
 
     if (messenger == null) return;
+
+    if (type == SnackbarType.error &&
+        ApiClient.isNetworkErrorMessage(cleanMsg)) {
+      _lastNetworkErrorTime = now;
+    }
+    _lastMessage = cleanMsg;
+    _lastTime = now;
 
     final isHindi = TokenStorage.getLanguage() == 'hi';
 
@@ -223,7 +243,10 @@ class CustomSnackbar {
                     TextButton(
                       style: TextButton.styleFrom(
                         foregroundColor: accentColor,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
@@ -233,7 +256,10 @@ class CustomSnackbar {
                       },
                       child: Text(
                         retryLabel ?? (isHindi ? 'पुनः प्रयास' : 'Retry'),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],

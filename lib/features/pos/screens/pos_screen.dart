@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/voice_input_service.dart';
 import '../../../core/utils/whatsapp_share_helper.dart';
 
 import '../../../core/localization/language_controller.dart';
@@ -93,35 +94,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   @override
 
-  void initState() {
-
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-
-      context.read<PosController>().searchProducts('');
-
-      context.read<PosController>().addListener(_onPosCartChanged);
-
-    });
-
-  }
-
-  void _onPosCartChanged() {
-
-    // Clean and lightweight cart listener
-
-  }
-
-  @override
-
   void dispose() {
-
-    try {
-
-      context.read<PosController>().removeListener(_onPosCartChanged);
-
-    } catch (_) {}
 
     _posSearchDebounceTimer?.cancel();
 
@@ -209,17 +182,17 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
         if (!mounted || _scanController.text.trim().toLowerCase() != clean) return;
 
-        await pos.searchProducts(clean);
+        final serverResults = await pos.searchProducts(clean);
 
         if (mounted && _scanController.text.trim().toLowerCase() == clean) {
 
           // Products returned from server are already matched & ranked by PostgreSQL's trigram fuzzy search
 
-          final serverResults = pos.products.take(8).toList();
+          final visibleResults = serverResults.take(8).toList();
 
           ProductModel? serverFuzzy;
 
-          if (serverResults.isEmpty && clean.length >= 3) {
+          if (visibleResults.isEmpty && clean.length >= 3) {
 
             serverFuzzy = SearchFuzzyUtils.findClosestFuzzySuggestion(clean, pos.products);
 
@@ -227,13 +200,13 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
           setState(() {
 
-            _matchingSearchResults = serverResults;
+            _matchingSearchResults = visibleResults;
 
             _didYouMeanSuggestion = serverFuzzy;
 
-            if (_highlightedMatchIndex >= serverResults.length) {
+            if (_highlightedMatchIndex >= visibleResults.length) {
 
-              _highlightedMatchIndex = serverResults.isNotEmpty ? 0 : -1;
+              _highlightedMatchIndex = visibleResults.isNotEmpty ? 0 : -1;
 
             }
 
@@ -467,6 +440,11 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
                 hintText: ctx.isHindi ? 'उदा. समोसा, पैकिंग शुल्क' : 'e.g. Loose Samosa, Packing Charge',
 
+                suffixIcon: AppVoiceIconButton(
+                  controller: customNameCtrl,
+                  hint: ctx.isHindi ? 'वस्तु का नाम' : 'Item Name',
+                ),
+
               ),
 
             ),
@@ -548,12 +526,21 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
             onPressed: () {
 
               final name = customNameCtrl.text.trim();
+              final price = double.tryParse(customPriceCtrl.text.trim());
+              final qty = int.tryParse(customQtyCtrl.text.trim());
 
-              final price = double.tryParse(customPriceCtrl.text) ?? 0.0;
+              if (name.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      ctx.isHindi ? 'वस्तु का नाम आवश्यक है' : 'Enter an item name',
+                    ),
+                  ),
+                );
+                return;
+              }
 
-              final qty = int.tryParse(customQtyCtrl.text) ?? 1;
-
-              if (price <= 0) {
+              if (price == null || !price.isFinite || price <= 0) {
 
                 ScaffoldMessenger.of(ctx).showSnackBar(
 
@@ -565,13 +552,26 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
               }
 
+              if (qty == null || qty <= 0) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      ctx.isHindi
+                          ? 'मात्रा 1 या उससे अधिक होनी चाहिए'
+                          : 'Quantity must be at least 1',
+                    ),
+                  ),
+                );
+                return;
+              }
+
               context.read<PosController>().addCustomItem(
 
-                name: name.isNotEmpty ? name : (ctx.isHindi ? 'अतिरिक्त वस्तु' : 'Custom Item'),
+                name: name,
 
                 price: price,
 
-                quantity: qty > 0 ? qty : 1,
+                quantity: qty,
 
               );
 
@@ -1115,7 +1115,19 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
             onPressed: () {
 
-              final d = double.tryParse(discountCtrl.text.trim()) ?? 0.0;
+              final d = double.tryParse(discountCtrl.text.trim());
+              if (d == null || !d.isFinite || d < 0 || d > pos.subtotal) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      ctx.isHindi
+                          ? 'छूट बिल की कुल राशि से अधिक नहीं हो सकती'
+                          : 'Discount must be between ₹0 and the bill subtotal',
+                    ),
+                  ),
+                );
+                return;
+              }
 
               pos.setDiscount(d);
 
@@ -1965,8 +1977,6 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
     final isWide = Responsive.isWide(context);
 
-    final today24hRevenue = pos.today24hRevenue;
-
     return MerchantShell(
 
       currentIndex: 1,
@@ -2009,102 +2019,13 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
           ),
 
-          title: SingleChildScrollView(
-
-            scrollDirection: Axis.horizontal,
-
-            physics: const BouncingScrollPhysics(),
-
-            child: Row(
-
-              children: [
-
-                Text(
-
-                  context.isHindi ? 'पीओएस बिलिंग काउंटर' : 'POS Billing Counter',
-
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
-
-                ),
-
-                const SizedBox(width: 6),
-
-                Container(
-
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-
-                  decoration: BoxDecoration(
-
-                    color: context.colorPrimaryLight,
-
-                    borderRadius: BorderRadius.circular(6),
-
-                  ),
-
-                  child: Text(
-
-                    '${pos.totalItemCount} ${context.isHindi ? "सामान" : "Items"}',
-
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.primary),
-
-                  ),
-
-                ),
-
-                if (today24hRevenue > 0) ...[
-
-                  const SizedBox(width: 6),
-
-                  InkWell(
-
-                    onTap: () => context.push('/merchant/today-sales'),
-
-                    borderRadius: BorderRadius.circular(6),
-
-                    child: Container(
-
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-
-                      decoration: BoxDecoration(
-
-                        color: AppColors.successLight,
-
-                        borderRadius: BorderRadius.circular(6),
-
-                        border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-
-                      ),
-
-                      child: Row(
-
-                        children: [
-
-                          Text(
-
-                            '${context.isHindi ? "24h बिक्री" : "Today 24h"}: ₹${today24hRevenue.toStringAsFixed(0)}',
-
-                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.success),
-
-                          ),
-
-                          const SizedBox(width: 3),
-
-                          const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.success),
-
-                        ],
-
-                      ),
-
-                    ),
-
-                  ),
-
-                ],
-
-              ],
-
+          title: Text(
+            context.isHindi ? 'पीओएस बिलिंग काउंटर' : 'POS Billing Counter',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: context.colorTextPrimary,
             ),
-
           ),
 
           actions: [
@@ -2350,13 +2271,6 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               onSelected: (val) async {
 
                 switch (val) {
-
-                  case 'custom_item':
-
-                    _showAddCustomItemDialog(context);
-
-                    break;
-
                   case 'hold':
 
                     final ok = pos.holdCurrentBill();
@@ -2438,8 +2352,9 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                     break;
 
                   case 'refresh':
-
-                    await context.read<PosController>().loadCatalog();
+                    await context
+                        .read<PosController>()
+                        .loadCatalog(forceRefresh: true);
 
                     if (context.mounted) {
 
@@ -2484,35 +2399,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               },
 
               itemBuilder: (ctx) => [
-
-                PopupMenuItem(
-
-                  value: 'custom_item',
-
-                  child: Row(
-
-                    children: [
-
-                      const Icon(Icons.add_shopping_cart_rounded, size: 18, color: AppColors.primary),
-
-                      const SizedBox(width: 10),
-
-                      Text(
-
-                        ctx.isHindi ? 'खुला / कस्टम सामान जोड़ें' : 'Add Custom / Loose Item',
-
-                        style: const TextStyle(fontSize: 13),
-
-                      ),
-
-                    ],
-
-                  ),
-
-                ),
-
                 if (pos.cart.isNotEmpty)
-
                   PopupMenuItem(
 
                     value: 'hold',
@@ -2573,7 +2460,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
                 ),
 
-                PopupMenuItem(
+                if (!isWide) PopupMenuItem(
 
                   value: 'scratchpad',
 
@@ -2635,7 +2522,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
                 ),
 
-                PopupMenuItem(
+                if (!isWide) PopupMenuItem(
 
                   value: 'auto_print_toggle',
 
@@ -2720,15 +2607,15 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
         ),
 
         body: SafeArea(
-
-          child: ResponsiveContainer(
-
-            maxWidth: 1240,
-
-            child: isWide ? _buildDesktopTerminal(context, pos) : _buildMobileTerminal(context, pos),
-
+          child: AbsorbPointer(
+            absorbing: pos.isCompletingSale,
+            child: ResponsiveContainer(
+              maxWidth: 1240,
+              child: isWide
+                  ? _buildDesktopTerminal(context, pos)
+                  : _buildMobileTerminal(context, pos),
+            ),
           ),
-
         ),
 
       ),
@@ -3013,6 +2900,67 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
               ),
 
+            ),
+
+            const SizedBox(width: 6),
+
+            ListenableBuilder(
+              listenable: AppVoiceInputService.instance,
+              builder: (context, _) {
+                final isListening = AppVoiceInputService.instance.isListeningTo(_scanController);
+                return Material(
+                  color: isListening ? AppColors.error.withValues(alpha: 0.12) : context.colorSurfaceSubtle,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    onTap: () async {
+                      await AppVoiceInputService.instance.listenAndFill(
+                        context: context,
+                        controller: _scanController,
+                        onChanged: (val) => _onSearchQueryChanged(val, pos),
+                        onSubmitted: (val) {
+                          _onSearchQueryChanged(val, pos);
+                          _handleSearchSubmit(pos);
+                        },
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      height: 42,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isListening ? AppColors.error : context.colorBorder,
+                          width: isListening ? 1.5 : 1.0,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
+                            size: 20,
+                            color: isListening ? AppColors.error : AppColors.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isListening
+                                ? (context.isHindi ? 'सुन रहे हैं...' : 'Listening...')
+                                : (context.isHindi ? 'बोलें' : 'Voice'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: isListening ? AppColors.error : context.colorTextPrimary,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
 
             if (MediaQuery.of(context).size.width > 650) ...[
@@ -3489,7 +3437,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
                   children: [
 
-                    ElevatedButton.icon(
+                    if (MediaQuery.of(context).size.width <= 650)
+                      ElevatedButton.icon(
 
                       style: ElevatedButton.styleFrom(
 
@@ -3657,7 +3606,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
             const SizedBox(height: 16),
 
-            OutlinedButton.icon(
+            if (!_isSearchingLocal && MediaQuery.of(context).size.width <= 650)
+              OutlinedButton.icon(
 
               style: OutlinedButton.styleFrom(
 
@@ -3927,7 +3877,12 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
   Widget _buildCheckoutPanel(BuildContext context, PosController pos) {
 
-    _phoneController.text = pos.customerPhone;
+    if (_phoneController.text != pos.customerPhone) {
+      _phoneController.value = TextEditingValue(
+        text: pos.customerPhone,
+        selection: TextSelection.collapsed(offset: pos.customerPhone.length),
+      );
+    }
 
     return SingleChildScrollView(
 
@@ -3962,6 +3917,12 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
               hintText: context.isHindi ? '10 अंकों का ग्राहक मोबाइल दर्ज करें...' : 'Enter 10-digit customer mobile...',
 
               prefixIcon: const Icon(Icons.phone_outlined, size: 18),
+
+              suffixIcon: AppVoiceIconButton(
+                controller: _phoneController,
+                hint: context.isHindi ? 'ग्राहक मोबाइल' : 'Customer Phone',
+                onSubmitted: (val) => _onCustomerPhoneChanged(val, pos),
+              ),
 
             ),
 
@@ -5279,11 +5240,11 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
             isFullWidth: true,
 
-            isLoading: pos.isLoading,
+            isLoading: pos.isCompletingSale,
 
             borderRadius: 14,
 
-            onPressed: (pos.cart.isEmpty || pos.isLoading)
+            onPressed: (pos.cart.isEmpty || pos.isCompletingSale)
 
                 ? null
 
@@ -6065,17 +6026,15 @@ class _PosCartItemTile extends StatelessWidget {
 
     final cost = item.product.costPrice;
 
-    final floor = item.product.floorPrice;
-
     final effectivePrice = item.customPrice;
 
-    if (cost <= 0 && floor <= 0) return const SizedBox.shrink();
+    if (cost <= 0) return const SizedBox.shrink();
 
-    final isFloorBreached = (floor > 0 && effectivePrice < floor) || (cost > 0 && effectivePrice < cost);
+    final isBelowCost = effectivePrice < cost;
 
-    final isAtFloor = (floor > 0 && (effectivePrice - floor).abs() < 1) || (cost > 0 && (effectivePrice - cost).abs() < 1);
+    final isAtCost = (effectivePrice - cost).abs() < 1;
 
-    final marginPct = cost > 0 ? ((effectivePrice - cost) / effectivePrice) * 100 : 0.0;
+    final marginPct = ((effectivePrice - cost) / effectivePrice) * 100;
 
     Color dotColor;
 
@@ -6083,11 +6042,11 @@ class _PosCartItemTile extends StatelessWidget {
 
     IconData icon;
 
-    if (isFloorBreached || isAtFloor || marginPct < 10) {
+    if (isBelowCost || isAtCost || marginPct < 10) {
 
       dotColor = AppColors.error;
 
-      statusTip = 'दर सीमा लॉक (न्यूनतम मार्जिन)';
+      statusTip = 'न्यूनतम मार्जिन चेतावनी';
 
       icon = Icons.lock_outline_rounded;
 
@@ -6095,7 +6054,7 @@ class _PosCartItemTile extends StatelessWidget {
 
       dotColor = AppColors.warning;
 
-      statusTip = 'मध्यम मार्जिन (₹20-50 तक मोलभाव सुरक्षित)';
+      statusTip = 'मध्यम मार्जिन';
 
       icon = Icons.shield_outlined;
 
@@ -6103,7 +6062,7 @@ class _PosCartItemTile extends StatelessWidget {
 
       dotColor = AppColors.success;
 
-      statusTip = 'मजबूत मार्जिन (मोलभाव सुरक्षित)';
+      statusTip = 'मजबूत मार्जिन';
 
       icon = Icons.verified_outlined;
 

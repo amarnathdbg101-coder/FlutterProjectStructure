@@ -91,6 +91,43 @@ class ThermalReceiptPdfService {
     );
   }
 
+  static pw.MemoryImage? _cachedLogo;
+
+  static Future<pw.MemoryImage?> _getLogoImage() async {
+    if (_cachedLogo != null) return _cachedLogo;
+    try {
+      ByteData data;
+      try {
+        data = await rootBundle.load('assets/images/app_mark.png');
+      } catch (_) {
+        final candidates = [
+          'assets/images/app_mark.png',
+          'Frontend/assets/images/app_mark.png',
+          '../assets/images/app_mark.png',
+          '${Directory.current.path}/assets/images/app_mark.png',
+          '${Directory.current.path}/Frontend/assets/images/app_mark.png',
+        ];
+        File? f;
+        for (final c in candidates) {
+          final file = File(c);
+          if (file.existsSync()) {
+            f = file;
+            break;
+          }
+        }
+        if (f != null) {
+          data = ByteData.view(f.readAsBytesSync().buffer);
+        } else {
+          return null;
+        }
+      }
+      _cachedLogo = pw.MemoryImage(data.buffer.asUint8List());
+      return _cachedLogo;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Generates printable PDF bytes for a given SaleModel and Shop Details offline in under 15ms.
   static Future<Uint8List> generateReceiptPdf({
     required SaleModel sale,
@@ -111,6 +148,7 @@ class ThermalReceiptPdfService {
         : const PdfPageFormat(80 * PdfPageFormat.mm, double.infinity, marginAll: 3 * PdfPageFormat.mm);
 
     final theme = await _getReceiptTheme();
+    final logoImg = await _getLogoImage();
 
     final cachedShop = LocalCacheService.getShop();
     final effectiveShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Retail Store'
@@ -143,7 +181,17 @@ class ThermalReceiptPdfService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.stretch,
               children: [
-                // 1. STORE HEADER
+                // 1. BRAND LOGO & STORE HEADER
+                if (logoImg != null) ...[
+                  pw.Center(
+                    child: pw.Container(
+                      width: is58 ? 32 : 40,
+                      height: is58 ? 26 : 33,
+                      margin: const pw.EdgeInsets.only(bottom: 5),
+                      child: pw.Image(logoImg, fit: pw.BoxFit.contain),
+                    ),
+                  ),
+                ],
                 pw.Text(
                   effectiveShopName.toUpperCase(),
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsTitle),
@@ -256,7 +304,6 @@ class ThermalReceiptPdfService {
                               pw.Text(
                                 cleanName,
                                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody),
-                                maxLines: 2,
                               ),
                               if (cleanUnit.isNotEmpty)
                                 pw.Text(

@@ -11,7 +11,6 @@ import '../../../core/utils/image_utils.dart';
 import '../models/bulk_import_result.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
-import '../services/smart_barcode_catalog_service.dart';
 import '../../pos/models/pos_model.dart';
 
 /// High-performance, offline-first Product Controller with 0ms load speed.
@@ -112,24 +111,7 @@ class ProductController extends BaseController {
     final cached = LocalCacheService.getProducts();
     if (cached.isNotEmpty) {
       _products = cached;
-      _syncBarcodesToSmartCatalog(_products);
       notifyListeners();
-    }
-  }
-
-  void _syncBarcodesToSmartCatalog(List<ProductModel> list) {
-    for (final p in list) {
-      if (p.barcode.trim().isNotEmpty) {
-        SmartBarcodeCatalogService.registerDynamicItem(SmartCatalogItem(
-          barcode: p.barcode.trim(),
-          name: p.name,
-          brand: p.brand.isNotEmpty ? p.brand : (p.attributes['brand']?.toString() ?? ''),
-          category: p.category,
-          unit: p.unit,
-          mrp: p.comparePrice > 0 ? p.comparePrice : p.price,
-          sellingPrice: p.price,
-        ));
-      }
     }
   }
 
@@ -151,7 +133,6 @@ class ProductController extends BaseController {
       final cached = LocalCacheService.getProducts();
       if (cached.isNotEmpty) {
         _products = cached;
-        _syncBarcodesToSmartCatalog(_products);
       }
     }
 
@@ -223,8 +204,6 @@ class ProductController extends BaseController {
     required double price,
     double costPrice = 0.0,
     double comparePrice = 0.0,
-    double floorPrice = 0.0,
-    bool allowBargain = false,
     required int stock,
     String unit = 'piece',
     String category = 'General Store',
@@ -239,6 +218,12 @@ class ProductController extends BaseController {
     Map<String, dynamic> attributes = const {},
   }) async {
     clearError();
+
+    // Enforce non-negative numeric bounds sanitization
+    final safePrice = price.clamp(0.0, 9999999.0);
+    final safeCostPrice = costPrice.clamp(0.0, 9999999.0);
+    final safeComparePrice = comparePrice.clamp(0.0, 9999999.0);
+    final safeStock = stock.clamp(0, 999999);
 
     final generatedSku = barcode.trim().isNotEmpty
         ? barcode.trim()
@@ -262,12 +247,10 @@ class ProductController extends BaseController {
       description: description.trim(),
       sku: generatedSku,
       barcode: barcode.trim().isNotEmpty ? barcode.trim() : generatedSku,
-      price: price,
-      costPrice: costPrice,
-      comparePrice: comparePrice,
-      floorPrice: floorPrice,
-      allowBargain: allowBargain,
-      stock: stock,
+      price: safePrice,
+      costPrice: safeCostPrice,
+      comparePrice: safeComparePrice,
+      stock: safeStock,
       lowStockThreshold: lowStockThreshold,
       unit: unit,
       category: cleanCategory,
@@ -281,7 +264,6 @@ class ProductController extends BaseController {
 
     // Immediately insert in memory & write to device storage
     _products.insert(0, optimisticProduct);
-    _syncBarcodesToSmartCatalog([optimisticProduct]);
     await LocalCacheService.saveProducts(_products);
     notifyListeners();
 
@@ -321,13 +303,11 @@ class ProductController extends BaseController {
         'description': description.trim(),
         'sku': generatedSku,
         'barcode': barcode.trim().isNotEmpty ? barcode.trim() : generatedSku,
-        'price': price,
-        'cost_price': costPrice,
-        'compare_price': comparePrice,
-        'mrp': comparePrice,
-        'floor_price': floorPrice,
-        'allow_bargain': allowBargain,
-        'stock_quantity': stock,
+        'price': safePrice,
+        'cost_price': safeCostPrice,
+        'compare_price': safeComparePrice,
+        'mrp': safeComparePrice,
+        'stock_quantity': safeStock,
         'min_stock': lowStockThreshold,
         'low_stock_threshold': lowStockThreshold,
         'unit': unit,
@@ -363,8 +343,6 @@ class ProductController extends BaseController {
           unit: createdItem.unit.isNotEmpty && createdItem.unit != 'piece'
               ? createdItem.unit
               : unit,
-          floorPrice: createdItem.floorPrice > 0 ? createdItem.floorPrice : floorPrice,
-          allowBargain: createdItem.allowBargain || allowBargain,
           isPricePublic: isPricePublic,
           attributes: combinedAttributes,
         );
@@ -420,6 +398,10 @@ class ProductController extends BaseController {
     final targetId = id.toString();
     clearError();
 
+    // 0. Locate existing product first to safely preserve attributes & specifications on partial updates
+    final index = _products.indexWhere((p) => p.id == id || p.id.toString() == targetId);
+    final ProductModel? original = index >= 0 ? _products[index] : null;
+
     // 1. Build sanitized backend payload compliant with Go dto.UpdateProductRequest
     final payload = <String, dynamic>{};
 
@@ -446,12 +428,6 @@ class ProductController extends BaseController {
       payload['compare_price'] = (updateData['compare_price'] as num).toDouble();
       payload['mrp'] = (updateData['compare_price'] as num).toDouble();
     }
-    if (updateData['floor_price'] != null) {
-      payload['floor_price'] = (updateData['floor_price'] as num).toDouble();
-    }
-    if (updateData['allow_bargain'] != null) {
-      payload['allow_bargain'] = updateData['allow_bargain'] == true;
-    }
 
     // Stock Quantity
     final stockVal = updateData['stock_quantity'] ?? updateData['stock'];
@@ -477,17 +453,20 @@ class ProductController extends BaseController {
     if (updateData['is_featured'] != null) {
       payload['is_featured'] = updateData['is_featured'] == true;
     }
+
+    // Robust Attribute Merging (RFC 7396 Merge Patch Standard):
+    // Seed with existing product attributes so partial updates (e.g., toggling price visibility)
+    // NEVER erase stored brand, specifications, dimensions, shelf life, or units.
+    final mergedAttributes = Map<String, dynamic>.from(original?.attributes ?? {});
+
+    if (updateData['attributes'] != null && updateData['attributes'] is Map) {
+      mergedAttributes.addAll(Map<String, dynamic>.from(updateData['attributes'] as Map));
+    }
+
     if (updateData['is_price_public'] != null) {
       final bool isPub = updateData['is_price_public'] == true;
       payload['is_price_public'] = isPub;
-      final attr = Map<String, dynamic>.from(payload['attributes'] ?? updateData['attributes'] ?? {});
-      attr['is_price_public'] = isPub;
-      payload['attributes'] = attr;
-    }
-    if (updateData['attributes'] != null && updateData['attributes'] is Map) {
-      final currentAttr = Map<String, dynamic>.from(payload['attributes'] ?? {});
-      currentAttr.addAll(Map<String, dynamic>.from(updateData['attributes'] as Map));
-      payload['attributes'] = currentAttr;
+      mergedAttributes['is_price_public'] = isPub;
     }
 
     // Category: Canonical formatting, slug mapping & attributes persistence
@@ -503,14 +482,21 @@ class ProductController extends BaseController {
       payload['category_id'] = catSlug;
       payload['category_name'] = cleanCategory;
       payload['category'] = cleanCategory;
-
-      final attr = Map<String, dynamic>.from(payload['attributes'] ?? updateData['attributes'] ?? {});
-      attr['category_name'] = cleanCategory;
-      attr['category'] = cleanCategory;
-      payload['attributes'] = attr;
+      mergedAttributes['category_name'] = cleanCategory;
+      mergedAttributes['category'] = cleanCategory;
     }
 
-    // Images: extract clean server URLs (up to 4)
+    if (updateData['unit'] != null && updateData['unit'].toString().trim().isNotEmpty) {
+      final cleanUnit = updateData['unit'].toString().trim();
+      payload['unit'] = cleanUnit;
+      mergedAttributes['unit'] = cleanUnit;
+    }
+
+    if (mergedAttributes.isNotEmpty) {
+      payload['attributes'] = mergedAttributes;
+    }
+
+    // Images: extract clean server URLs (up to 10)
     if (updateData['images'] != null && updateData['images'] is List) {
       final rawImages = updateData['images'] as List;
       final serverUrls = rawImages
@@ -522,10 +508,7 @@ class ProductController extends BaseController {
     }
 
     // 2. OPTIMISTIC LOCAL UPDATE (0ms)
-    final index = _products.indexWhere((p) => p.id == id || p.id.toString() == targetId);
-    ProductModel? original;
-    if (index >= 0) {
-      original = _products[index];
+    if (index >= 0 && original != null) {
       final newImages = (updateData['images'] != null
           ? List<String>.from(updateData['images'])
           : (payload['images'] as List<String>?) ?? original.images);
@@ -535,8 +518,6 @@ class ProductController extends BaseController {
         price: updateData['price'] != null ? (updateData['price'] as num).toDouble() : original.price,
         costPrice: updateData['cost_price'] != null ? (updateData['cost_price'] as num).toDouble() : original.costPrice,
         comparePrice: updateData['compare_price'] != null ? (updateData['compare_price'] as num).toDouble() : original.comparePrice,
-        floorPrice: updateData['floor_price'] != null ? (updateData['floor_price'] as num).toDouble() : original.floorPrice,
-        allowBargain: updateData['allow_bargain'] ?? original.allowBargain,
         stock: stockVal != null ? (stockVal as num).toInt() : original.stock,
         lowStockThreshold: minStockVal != null ? (minStockVal as num).toInt() : original.lowStockThreshold,
         unit: updateData['unit'] ?? original.unit,
@@ -546,12 +527,11 @@ class ProductController extends BaseController {
         sku: rawSku.isNotEmpty ? rawSku.toUpperCase() : original.sku,
         images: newImages,
         weight: updateData['weight'] != null ? (updateData['weight'] as num).toDouble() : original.weight,
-        attributes: payload['attributes'] ?? updateData['attributes'] ?? original.attributes,
+        attributes: mergedAttributes.isNotEmpty ? mergedAttributes : original.attributes,
         isActive: updateData['is_active'] ?? original.isActive,
         isFeatured: updateData['is_featured'] ?? original.isFeatured,
         isPricePublic: updateData['is_price_public'] != null ? (updateData['is_price_public'] == true) : original.isPricePublic,
       );
-      _syncBarcodesToSmartCatalog([_products[index]]);
       await LocalCacheService.saveProducts(_products);
       notifyListeners();
     }
@@ -564,7 +544,7 @@ class ProductController extends BaseController {
           if (uploadRes.success && uploadRes.data != null) {
             final serverUrls = List<String>.from(payload['images'] ?? []);
             for (final u in uploadRes.data!) {
-              if (serverUrls.length < 4 && !serverUrls.contains(u)) {
+              if (serverUrls.length < 10 && !serverUrls.contains(u)) {
                 serverUrls.add(u);
               }
             }
@@ -610,8 +590,6 @@ class ProductController extends BaseController {
             unit: updatedItem.unit.isNotEmpty && updatedItem.unit != 'piece'
                 ? updatedItem.unit
                 : _products[currentIdx].unit,
-            floorPrice: updatedItem.floorPrice > 0 ? updatedItem.floorPrice : _products[currentIdx].floorPrice,
-            allowBargain: updatedItem.allowBargain || _products[currentIdx].allowBargain,
             attributes: mergedAttr,
           );
           await LocalCacheService.saveProducts(_products);
@@ -736,6 +714,31 @@ class ProductController extends BaseController {
       await LocalCacheService.saveProducts(_products);
       notifyListeners();
     }
+  }
+
+  /// 0ms local in-memory lookup by Barcode or SKU first; if not loaded, queries shop database
+  Future<ProductModel?> findProductByBarcode(String barcode) async {
+    final cleanCode = barcode.trim();
+    if (cleanCode.isEmpty) return null;
+
+    // 1. 0ms local memory scan
+    final localMatches = _products.where((p) {
+      if (p.barcode?.trim().toLowerCase() == cleanCode.toLowerCase()) return true;
+      if (p.sku.trim().toLowerCase() == cleanCode.toLowerCase()) return true;
+      if (p.attributes['barcode']?.toString().trim().toLowerCase() == cleanCode.toLowerCase()) return true;
+      return false;
+    }).toList();
+
+    if (localMatches.isNotEmpty) {
+      return localMatches.first;
+    }
+
+    // 2. Query shop inventory via backend API
+    final res = await _repo.getProductByBarcode(cleanCode);
+    if (res.success && res.data != null) {
+      return res.data;
+    }
+    return null;
   }
 
   // --- Bulk Product Import (Excel / CSV) ---

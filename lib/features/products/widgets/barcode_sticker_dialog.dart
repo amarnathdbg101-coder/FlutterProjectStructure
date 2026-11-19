@@ -282,7 +282,7 @@ class _BarcodeStickerDialogState extends State<BarcodeStickerDialog> {
                             ),
                             const SizedBox(height: 6),
                           ] else ...[
-                            // Retail bargaining safety indicator
+                            // Price hidden indicator
                             Container(
                               margin: const EdgeInsets.symmetric(vertical: 2),
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

@@ -147,6 +147,7 @@ class AppProductImage extends StatelessWidget {
             height: effectiveHeight,
             fit: fit,
             alignment: alignment,
+            filterQuality: FilterQuality.medium,
             errorBuilder: (c, e, s) => _buildFallback(context, effectiveWidth, effectiveHeight),
           );
         } else {
@@ -160,6 +161,7 @@ class AppProductImage extends StatelessWidget {
     else {
       final formatted = formatImageUrl(raw);
       if (formatted.isNotEmpty && !isLocalFilePath(raw)) {
+        final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
         imageWidget = CachedNetworkImage(
           imageUrl: formatted,
           width: effectiveWidth,
@@ -167,10 +169,10 @@ class AppProductImage extends StatelessWidget {
           fit: fit,
           alignment: alignment,
           memCacheWidth: (effectiveWidth != null && effectiveWidth.isFinite && effectiveWidth > 0)
-              ? (effectiveWidth * 2).clamp(100, 1200).toInt()
+              ? (effectiveWidth * devicePixelRatio).clamp(100, 1600).toInt()
               : null,
           memCacheHeight: (effectiveHeight != null && effectiveHeight.isFinite && effectiveHeight > 0)
-              ? (effectiveHeight * 2).clamp(100, 1200).toInt()
+              ? (effectiveHeight * devicePixelRatio).clamp(100, 1600).toInt()
               : null,
           fadeInDuration: const Duration(milliseconds: 150),
           placeholder: (ctx, url) => _buildLoading(context, effectiveWidth, effectiveHeight),

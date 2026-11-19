@@ -375,6 +375,34 @@ class AppTranslations {
       'en': 'Register Store',
       'hi': 'दुकान पंजीकृत करें',
     },
+    'login_google_btn': {
+      'en': 'Continue with Google',
+      'hi': 'Google के साथ जारी रखें',
+    },
+    'login_google_subtitle': {
+      'en': 'No passwords to remember. 1-click instant secure login with Google.',
+      'hi': 'पासवर्ड याद रखने की कोई ज़रूरत नहीं। 1-क्लिक में Google से सुरक्षित लॉगिन करें।',
+    },
+    'login_google_connecting': {
+      'en': 'Connecting with Google...',
+      'hi': 'Google से कनेक्ट हो रहा है...',
+    },
+    'login_feature_1': {
+      'en': '1-Click Instant Sign-In',
+      'hi': '1-क्लिक तुरंत लॉगिन',
+    },
+    'login_feature_2': {
+      'en': 'Zero Password Hassle',
+      'hi': 'पासवर्ड का झंझट खत्म',
+    },
+    'login_feature_3': {
+      'en': '100% Google Secure',
+      'hi': '100% Google सुरक्षित',
+    },
+    'login_staff_pin_title': {
+      'en': 'Counter Staff? Log in with 4-Digit PIN',
+      'hi': 'काउंटर स्टाफ? 4-अंकीय पिन से लॉगिन करें',
+    },
 
     // Auth - Register
     'register_title': {
@@ -839,6 +867,134 @@ class AppTranslations {
     'inv_toast_updated': {
       'en': 'Product updated successfully!',
       'hi': 'उत्पाद सफलतापूर्वक अपडेट हो गया!',
+    },
+    'inv_camera_photo_added': {
+      'en': 'Photo added',
+      'hi': 'तस्वीर जुड़ गई',
+    },
+    'inv_camera_capture_subtitle': {
+      'en': 'Capture up to 10 photos; AI can fill in product details.',
+      'hi': 'अधिकतम 10 तस्वीरें लें; AI उत्पाद का विवरण भर सकता है।',
+    },
+    'inv_camera_photos_added': {
+      'en': 'photos added',
+      'hi': 'तस्वीरें जुड़ीं',
+    },
+    'inv_camera_capture_prompt': {
+      'en': 'Capture another photo or finish adding images.',
+      'hi': 'एक और तस्वीर लें या तस्वीरें जोड़ना पूरा करें।',
+    },
+    'inv_camera_capture_another': {
+      'en': 'Take another photo',
+      'hi': 'एक और तस्वीर लें',
+    },
+    'inv_camera_capture_done': {
+      'en': 'Done',
+      'hi': 'पूरा हुआ',
+    },
+    'product_camera_title': {
+      'en': 'Product photo guide',
+      'hi': 'उत्पाद तस्वीर मार्गदर्शिका',
+    },
+    'product_camera_count': {
+      'en': 'photos',
+      'hi': 'तस्वीरें',
+    },
+    'product_camera_compact_guide': {
+      'en': 'Center the product • Keep the camera straight • Use even light',
+      'hi': 'उत्पाद बीच में रखें • कैमरा सीधा रखें • समान रोशनी रखें',
+    },
+    'product_camera_tip_frame': {
+      'en': 'Fit the whole product inside the frame; leave a little space.',
+      'hi': 'पूरा उत्पाद फ्रेम में रखें और किनारों पर थोड़ी जगह छोड़ें।',
+    },
+    'product_camera_tip_angle': {
+      'en': 'Face the product straight-on; avoid tilted angles.',
+      'hi': 'उत्पाद के सामने कैमरा सीधा रखें; तिरछा न करें।',
+    },
+    'product_camera_tip_light': {
+      'en': 'Use soft light from the front; avoid shadows and glare.',
+      'hi': 'सामने से नरम रोशनी रखें; छाया और चमक से बचें।',
+    },
+    'product_camera_tip_steady': {
+      'en': 'Hold the phone steady and wait for focus before capture.',
+      'hi': 'फोन स्थिर रखें और तस्वीर लेने से पहले फोकस होने दें।',
+    },
+    'product_camera_light_checking': {
+      'en': 'Checking light…',
+      'hi': 'रोशनी जाँची जा रही है…',
+    },
+    'product_camera_light_dark': {
+      'en': 'Too dark — add light from the front.',
+      'hi': 'रोशनी कम है — सामने से रोशनी बढ़ाएँ।',
+    },
+    'product_camera_light_good': {
+      'en': 'Lighting looks good.',
+      'hi': 'रोशनी ठीक है।',
+    },
+    'product_camera_light_bright': {
+      'en': 'Too bright — avoid direct glare.',
+      'hi': 'रोशनी बहुत तेज़ है — सीधी चमक से बचें।',
+    },
+    'product_camera_capture': {
+      'en': 'Take photo',
+      'hi': 'तस्वीर लें',
+    },
+    'product_camera_retake': {
+      'en': 'Retake',
+      'hi': 'फिर से लें',
+    },
+    'product_camera_use_photo': {
+      'en': 'Use photo',
+      'hi': 'तस्वीर जोड़ें',
+    },
+    'product_camera_done': {
+      'en': 'Done',
+      'hi': 'पूरा हुआ',
+    },
+    'product_camera_flash': {
+      'en': 'Toggle flash',
+      'hi': 'फ्लैश बदलें',
+    },
+    'product_camera_flash_unavailable': {
+      'en': 'Flash is not available on this camera.',
+      'hi': 'इस कैमरे में फ्लैश उपलब्ध नहीं है।',
+    },
+    'product_camera_no_camera': {
+      'en': 'No camera was found on this device.',
+      'hi': 'इस डिवाइस में कैमरा नहीं मिला।',
+    },
+    'product_camera_open_error': {
+      'en': 'Could not open the camera. Check camera permission and try again.',
+      'hi': 'कैमरा नहीं खुल सका। कैमरा अनुमति जाँचें और फिर प्रयास करें।',
+    },
+    'product_camera_retry': {
+      'en': 'Try again',
+      'hi': 'फिर प्रयास करें',
+    },
+    'product_camera_capture_error': {
+      'en': 'Photo could not be captured. Please try again.',
+      'hi': 'तस्वीर नहीं ली जा सकी। कृपया फिर प्रयास करें।',
+    },
+    'product_camera_style_normal': {
+      'en': 'Original',
+      'hi': 'मूल (Original)',
+    },
+    'product_camera_style_bokeh': {
+      'en': 'DSLR Bokeh (Blur BG)',
+      'hi': 'DSLR ब्लर (बैकग्राउंड)',
+    },
+    'product_camera_style_hdr': {
+      'en': 'Studio HDR',
+      'hi': 'स्टूडियो HDR',
+    },
+    'product_camera_tap_to_focus': {
+      'en': 'Tap to focus & meter',
+      'hi': 'फोकस के लिए टैप करें',
+    },
+    'product_camera_applying_style': {
+      'en': 'Enhancing photo…',
+      'hi': 'फोटो सुधारी जा रही है…',
     },
     'inv_quick_restock': {
       'en': 'Quick Restock',
@@ -1670,10 +1826,6 @@ class AppTranslations {
       'en': 'Cost Price cannot be greater than Selling Price',
       'hi': 'लागत मूल्य विक्रय मूल्य से अधिक नहीं हो सकता',
     },
-    'inv_val_floor_more': {
-      'en': 'Minimum bargain price cannot be greater than Selling Price',
-      'hi': 'न्यूनतम सौदा मूल्य विक्रय मूल्य से अधिक नहीं हो सकता',
-    },
     'inv_val_image_failed': {
       'en': 'Failed to upload product images. Please try again.',
       'hi': 'उत्पाद छवियां अपलोड करने में विफल। कृपया पुनः प्रयास करें।',
@@ -2012,6 +2164,107 @@ class AppTranslations {
       'en': 'Add to Print Studio Sheet',
       'hi': 'प्रिंट स्टूडियो शीट में जोड़ें',
     },
+    // Merchant AI Assistant
+    'ai_copilot_title': {
+      'en': 'AI Business Assistant',
+      'hi': 'व्यापार सहायक',
+    },
+    'ai_copilot_subtitle': {
+      'en': 'Ask about sales, stock, customer credit and store operations.',
+      'hi': 'बिक्री, भंडार, ग्राहक उधार और दुकान के कामों के बारे में पूछें।',
+    },
+    'ai_copilot_session_notice': {
+      'en':
+          'This conversation is not saved and will be cleared when you leave.',
+      'hi': 'यह बातचीत सहेजी नहीं जाती और स्क्रीन छोड़ने पर हट जाएगी।',
+    },
+    'ai_copilot_context_title': {
+      'en': 'Recent context messages',
+      'hi': 'हाल के संदर्भ संदेश',
+    },
+    'ai_copilot_context_subtitle': {
+      'en': 'Up to six recent messages are included with each question.',
+      'hi': 'हर सवाल के साथ हाल के अधिकतम छह संदेश भेजे जाते हैं।',
+    },
+    'ai_copilot_suggested_title': {
+      'en': 'Suggested questions',
+      'hi': 'सुझाए गए सवाल',
+    },
+    'ai_copilot_prompt_sales': {
+      'en': 'Summarize today’s sales and suggest one action.',
+      'hi': 'आज की बिक्री का सार दें और एक सुझाव दें।',
+    },
+    'ai_copilot_prompt_restock': {
+      'en': 'Which low-stock items should I reorder first?',
+      'hi': 'कम भंडार वाली किन वस्तुओं को पहले फिर से मँगाऊँ?',
+    },
+    'ai_copilot_prompt_credit': {
+      'en': 'How should I follow up on overdue customer credit?',
+      'hi': 'ग्राहक के बकाया उधार के लिए मुझे कैसे संपर्क करना चाहिए?',
+    },
+    'ai_copilot_prompt_subtitle': {
+      'en': 'Ask the assistant',
+      'hi': 'सहायक से पूछें',
+    },
+    'ai_copilot_input_hint': {
+      'en': 'Ask about your store…',
+      'hi': 'अपनी दुकान के बारे में पूछें…',
+    },
+    'ai_copilot_send': {'en': 'Send message', 'hi': 'संदेश भेजें'},
+    'ai_copilot_new_chat': {'en': 'New chat', 'hi': 'नई बातचीत'},
+    'ai_copilot_assistant_label': {
+      'en': 'ShopSilo Assistant',
+      'hi': 'शॉपसाइलो सहायक',
+    },
+    'ai_copilot_thinking': {
+      'en': 'Preparing a response…',
+      'hi': 'जवाब तैयार हो रहा है…',
+    },
+    'ai_copilot_error_title': {
+      'en': 'Message not sent',
+      'hi': 'संदेश नहीं भेजा जा सका',
+    },
+    'ai_copilot_error_fallback': {
+      'en': 'The assistant could not respond. Please try again.',
+      'hi': 'सहायक जवाब नहीं दे पाया। कृपया फिर प्रयास करें।',
+    },
+    'ai_copilot_action_restock': {
+      'en': 'Open reorder list',
+      'hi': 'फिर से मँगाने की सूची खोलें',
+    },
+    'ai_copilot_action_offers': {
+      'en': 'View offers',
+      'hi': 'छूट योजनाएँ देखें',
+    },
+    'ai_copilot_action_analytics': {
+      'en': 'Open business reports',
+      'hi': 'व्यापार विवरण खोलें',
+    },
+    'ai_copilot_action_khata': {
+      'en': 'Open customer credit',
+      'hi': 'ग्राहक उधार खोलें',
+    },
+    'ai_copilot_action_pos': {
+      'en': 'Open billing',
+      'hi': 'बिल बनाने का पृष्ठ खोलें',
+    },
+    'ai_copilot_action_expenses': {
+      'en': 'Open expenses',
+      'hi': 'खर्च सूची खोलें',
+    },
+    'ai_copilot_action_add_product': {
+      'en': 'Open inventory',
+      'hi': 'वस्तु भंडार खोलें',
+    },
+    'ai_copilot_action_pickups': {
+      'en': 'Open pickup orders',
+      'hi': 'दुकान से लेने के आदेश खोलें',
+    },
+    'ai_copilot_language_instruction': {
+      'en': 'Reply only in clear English. Do not mix languages.',
+      'hi': 'केवल स्पष्ट और शुद्ध हिन्दी में उत्तर दें। भाषाओं को मिलाकर न लिखें।',
+    },
+
   };
 
   static String get(String key, AppLanguage language) {

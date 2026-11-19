@@ -8,7 +8,6 @@ import 'package:flutter_project_structure/features/auth/controllers/auth_control
 import 'package:flutter_project_structure/features/pos/controllers/pos_controller.dart';
 import 'package:flutter_project_structure/features/pos/controllers/cash_drawer_controller.dart';
 import 'package:flutter_project_structure/features/pos/controllers/hotkey_controller.dart';
-import 'package:flutter_project_structure/features/pos/controllers/ai_features_controller.dart';
 import 'package:flutter_project_structure/features/pos/screens/pos_screen.dart';
 import 'package:flutter_project_structure/features/products/models/product_model.dart';
 
@@ -48,7 +47,6 @@ void main() {
     final posCtrl = PosController();
     final drawerCtrl = CashDrawerController();
     final hotkeyCtrl = HotkeyController();
-    final aiCtrl = AIFeaturesController();
 
     await tester.pumpWidget(
       MultiProvider(
@@ -58,7 +56,6 @@ void main() {
           ChangeNotifierProvider<PosController>.value(value: posCtrl),
           ChangeNotifierProvider<CashDrawerController>.value(value: drawerCtrl),
           ChangeNotifierProvider<HotkeyController>.value(value: hotkeyCtrl),
-          ChangeNotifierProvider<AIFeaturesController>.value(value: aiCtrl),
         ],
         child: const MaterialApp(
           home: PosScreen(),

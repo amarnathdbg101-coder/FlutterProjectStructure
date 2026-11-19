@@ -583,8 +583,6 @@ class ProductModel {
   final double price;
   final double costPrice;
   final double comparePrice;
-  final double floorPrice;
-  final bool allowBargain;
   final int stock;
   final String unit;
   final String category;
@@ -605,8 +603,6 @@ class ProductModel {
     required this.price,
     this.costPrice = 0.0,
     this.comparePrice = 0.0,
-    this.floorPrice = 0.0,
-    this.allowBargain = false,
     required this.stock,
     this.unit = 'piece',
     required String category,
@@ -689,8 +685,6 @@ class ProductModel {
     double? price,
     double? costPrice,
     double? comparePrice,
-    double? floorPrice,
-    bool? allowBargain,
     int? stock,
     String? unit,
     String? category,
@@ -711,8 +705,6 @@ class ProductModel {
       price: price ?? this.price,
       costPrice: costPrice ?? this.costPrice,
       comparePrice: comparePrice ?? this.comparePrice,
-      floorPrice: floorPrice ?? this.floorPrice,
-      allowBargain: allowBargain ?? this.allowBargain,
       stock: stock ?? this.stock,
       unit: unit ?? this.unit,
       category: category ?? this.category,
@@ -887,8 +879,6 @@ class ProductModel {
       price: parseDouble(json['price'] ?? json['sellingPrice'], 0.0),
       costPrice: parseDouble(json['cost_price'] ?? json['purchasingPrice'] ?? json['purchase_price'], 0.0),
       comparePrice: parseDouble(json['compare_price'] ?? json['mrp'], 0.0),
-      floorPrice: parseDouble(json['floor_price'], 0.0),
-      allowBargain: parseBool(json['allow_bargain'], false),
       stock: resolvedStock,
       unit: resolvedUnit,
       category: rawCategory,
@@ -931,8 +921,6 @@ class ProductModel {
       'purchasingPrice': costPrice,
       'compare_price': comparePrice,
       'mrp': comparePrice,
-      'floor_price': floorPrice,
-      'allow_bargain': allowBargain,
       'stock': stock,
       'stock_quantity': stock,
       'min_stock': lowStockThreshold,

@@ -4,6 +4,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/storage/token_storage.dart';
+import '../../../core/utils/image_utils.dart';
 import '../../dashboard/models/shop_model.dart';
 
 class AuthRepository {
@@ -23,6 +24,32 @@ class AuthRepository {
         },
       );
       return ApiResponse.fromJson(response.data, (data) => data as Map<String, dynamic>);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> googleLogin({
+    required String idToken,
+    String? phone,
+    String? verificationToken,
+    String role = 'shop',
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiConstants.googleLogin,
+        data: {
+          'id_token': idToken.trim(),
+          'role': role,
+          if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
+          if (verificationToken != null && verificationToken.isNotEmpty)
+            'verification_token': verificationToken.trim(),
+        },
+      );
+      return ApiResponse.fromJson(
+        response.data,
+        (data) => data as Map<String, dynamic>,
+      );
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }
@@ -276,22 +303,20 @@ class AuthRepository {
   }
 
   Future<ApiResponse<Map<String, dynamic>>> uploadAvatar(String filePath) async {
-    try {
-      final formData = FormData.fromMap({
-        'avatar': await MultipartFile.fromFile(filePath),
-      });
-      final response = await _dio.post(ApiConstants.userAvatar, data: formData);
-      return ApiResponse.fromJson(response.data, (data) => data as Map<String, dynamic>);
-    } catch (e) {
-      return ApiResponse.failure(ApiClient.handleError(e));
-    }
+    return uploadUserAvatar(XFile(filePath));
   }
 
   Future<ApiResponse<Map<String, dynamic>>> uploadUserAvatar(XFile file) async {
     try {
-      final bytes = await file.readAsBytes();
+      // Compress avatar to max 800px & 80% quality (background isolate)
+      final (compressedFile, compressedBytes) = await compressAvatarOrLogo(file);
+      final finalBytes = compressedBytes.isNotEmpty ? compressedBytes : await file.readAsBytes();
+
       final formData = FormData.fromMap({
-        'avatar': MultipartFile.fromBytes(bytes, filename: file.name),
+        'avatar': MultipartFile.fromBytes(
+          finalBytes,
+          filename: compressedFile.name.isNotEmpty ? compressedFile.name : 'avatar.jpg',
+        ),
       });
       final response = await _dio.post(ApiConstants.userAvatar, data: formData);
       return ApiResponse.fromJson(response.data, (data) => data as Map<String, dynamic>);
@@ -302,9 +327,15 @@ class AuthRepository {
 
   Future<ApiResponse<Map<String, dynamic>>> uploadShopLogo(XFile file) async {
     try {
-      final bytes = await file.readAsBytes();
+      // Compress logo to max 800px & 80% quality (background isolate)
+      final (compressedFile, compressedBytes) = await compressAvatarOrLogo(file);
+      final finalBytes = compressedBytes.isNotEmpty ? compressedBytes : await file.readAsBytes();
+
       final formData = FormData.fromMap({
-        'logo': MultipartFile.fromBytes(bytes, filename: file.name),
+        'logo': MultipartFile.fromBytes(
+          finalBytes,
+          filename: compressedFile.name.isNotEmpty ? compressedFile.name : 'logo.jpg',
+        ),
       });
       final response = await _dio.post(ApiConstants.shopImages, data: formData);
       return ApiResponse.fromJson(response.data, (data) => data as Map<String, dynamic>);
@@ -317,8 +348,14 @@ class AuthRepository {
     try {
       final multipartFiles = <MultipartFile>[];
       for (final b in bannerFiles.take(2)) {
-        final bytes = await b.readAsBytes();
-        multipartFiles.add(MultipartFile.fromBytes(bytes, filename: b.name));
+        // Compress banner to max 1600px & 82% quality (background isolate)
+        final (compressedFile, compressedBytes) = await compressBannerImage(b);
+        final finalBytes = compressedBytes.isNotEmpty ? compressedBytes : await b.readAsBytes();
+
+        multipartFiles.add(MultipartFile.fromBytes(
+          finalBytes,
+          filename: compressedFile.name.isNotEmpty ? compressedFile.name : 'banner.jpg',
+        ));
       }
       final formData = FormData.fromMap({'banners': multipartFiles}, ListFormat.multi);
       final res = await _dio.post(ApiConstants.shopImages, data: formData);

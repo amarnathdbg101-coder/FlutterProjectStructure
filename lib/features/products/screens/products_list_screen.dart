@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_dialog.dart';
 import '../../../core/widgets/custom_snackbar.dart';
@@ -104,6 +105,7 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackRoute: '/merchant/inventory'),
         title: const Text('Products List'),
       ),
       floatingActionButton: FloatingActionButton(

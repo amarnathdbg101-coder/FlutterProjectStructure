@@ -8,30 +8,6 @@ import '../models/pos_features_model.dart';
 class PosAdvancedRepository {
   final Dio _dio = ApiClient().dio;
 
-  // 1. Live Margin Floor Check
-  Future<ApiResponse<MarginCheckResult>> checkMarginFloor({
-    required List<MarginCheckItem> items,
-    double billDiscount = 0.0,
-  }) async {
-    try {
-      final res = await _dio.post(
-        ApiConstants.posMarginCheck,
-        data: {
-          'items': items.map((e) => e.toJson()).toList(),
-          'bill_discount': billDiscount,
-        },
-      );
-      final raw = res.data;
-      Map<String, dynamic> data = {};
-      if (raw is Map<String, dynamic>) {
-        data = raw['data'] is Map<String, dynamic> ? raw['data'] as Map<String, dynamic> : raw;
-      }
-      return ApiResponse(success: true, data: MarginCheckResult.fromJson(data));
-    } catch (e) {
-      return ApiResponse.failure(ApiClient.handleError(e));
-    }
-  }
-
   // 1B. Touch Counter Hotkeys
   Future<ApiResponse<List<HotkeyItem>>> getHotkeys() async {
     try {
@@ -351,11 +327,23 @@ class PosAdvancedRepository {
     }
   }
 
-  // 7. Chromedp Automated End-of-Day P&L PDF
-  Future<ApiResponse<Uint8List>> downloadEndOfDayReportPdfBytes() async {
+  // 7. Pure Go gopdf Executive End-of-Day P&L PDF
+  Future<ApiResponse<Uint8List>> downloadEndOfDayReportPdfBytes({
+    int days = 1,
+    String date = '',
+  }) async {
     try {
+      final queryParams = <String, dynamic>{};
+      if (days > 1) {
+        queryParams['days'] = days;
+      }
+      if (date.isNotEmpty) {
+        queryParams['date'] = date;
+      }
+
       final res = await _dio.get<List<int>>(
         ApiConstants.posDayCloseEodPdf,
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
         options: Options(responseType: ResponseType.bytes),
       );
       if (res.data != null) {

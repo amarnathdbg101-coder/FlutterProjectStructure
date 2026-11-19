@@ -38,32 +38,21 @@ class DashboardPriceCheckerCard extends StatelessWidget {
       onTap: () => context.push('/merchant/price-checker'),
       child: Row(
         children: [
-          // Glowing Icon Container
+          // Sleek Tonal Icon Container
           Container(
-            width: 44,
-            height: 44,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary,
-                  AppColors.primary.withValues(alpha: 0.8),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+              color: context.colorPrimaryLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.15),
               ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.25),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
             ),
             child: const Icon(
               Icons.price_check_rounded,
-              color: Colors.white,
-              size: 24,
+              color: AppColors.primary,
+              size: 22,
             ),
           ),
           const SizedBox(width: 12),
@@ -89,7 +78,7 @@ class DashboardPriceCheckerCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                       decoration: BoxDecoration(
@@ -102,7 +91,7 @@ class DashboardPriceCheckerCard extends StatelessWidget {
                           fontSize: 9.0,
                           fontWeight: FontWeight.w900,
                           color: AppColors.success,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.4,
                         ),
                       ),
                     ),
@@ -133,12 +122,12 @@ class DashboardPriceCheckerCard extends StatelessWidget {
               // Quick 1-Tap Camera Scan Pill
               InkWell(
                 onTap: () => _openCameraScanner(context),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   decoration: BoxDecoration(
                     color: context.colorSurfaceSubtle,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: context.colorBorder),
                   ),
                   child: Row(
@@ -146,15 +135,15 @@ class DashboardPriceCheckerCard extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.qr_code_scanner_rounded,
-                        size: 16,
+                        size: 15,
                         color: AppColors.primary,
                       ),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: 4),
                       Text(
                         isHindi ? 'स्कैन' : 'Scan',
                         style: const TextStyle(
                           fontSize: 11.0,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.primary,
                         ),
                       ),
@@ -162,11 +151,11 @@ class DashboardPriceCheckerCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
-              const Icon(
+              const SizedBox(width: 6),
+              Icon(
                 Icons.arrow_forward_ios_rounded,
-                size: 13,
-                color: AppColors.primary,
+                size: 12,
+                color: context.colorTextMuted,
               ),
             ],
           ),

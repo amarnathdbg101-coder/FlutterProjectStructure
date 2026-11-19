@@ -410,19 +410,28 @@ class LocalCacheService {
   }
 
   // ==========================================
-  // 9. TODAY'S 24-HOUR SALES PERSISTENCE
+  // 9. 10-DAY ROLLING SALES PERSISTENCE (AUTO-PURGES OLDER THAN 10 DAYS)
   // ==========================================
   static const String _keySalesHistory = 'shopsilo_cache_sales_history';
+  static const Duration _salesRetentionWindow = Duration(days: 10);
 
-  /// Save completed POS sale to device storage history
+  /// Save completed POS sale to device storage history with automatic 10-day retention
   static Future<void> saveCompletedSale(SaleModel sale) async {
     try {
       await init();
       final current = getSalesHistory();
+      // Remove any existing entry with identical billNumber/time if present
+      current.removeWhere((s) =>
+          (sale.billNumber != null && sale.billNumber!.isNotEmpty && s.billNumber == sale.billNumber) ||
+          (s.createdAt == sale.createdAt && s.totalAmount == sale.totalAmount));
       current.insert(0, sale);
-      // Keep sales from last 48 hours max
-      final cutoff = DateTime.now().subtract(const Duration(hours: 48));
+
+      // Keep sales from last 10 days max, automatically purge records older than 10 days
+      final cutoff = DateTime.now().subtract(_salesRetentionWindow);
       final filtered = current.where((s) => s.createdAt.isAfter(cutoff)).toList();
+      filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      _memorySalesHistory = List<SaleModel>.from(filtered);
       final listJson = jsonEncode(filtered.map((s) => s.toJson()).toList());
       await _prefs!.setString(_keySalesHistory, listJson);
     } catch (e) {
@@ -430,10 +439,15 @@ class LocalCacheService {
     }
   }
 
-  /// Get sales history
+  /// Get sales history retained within the 10-day rolling window, sorted newest first
   static List<SaleModel> getSalesHistory() {
+    final cutoff = DateTime.now().subtract(_salesRetentionWindow);
+
     if (_memorySalesHistory != null && _memorySalesHistory!.isNotEmpty) {
-      return List<SaleModel>.from(_memorySalesHistory!);
+      final active = _memorySalesHistory!.where((s) => s.createdAt.isAfter(cutoff)).toList();
+      active.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _memorySalesHistory = active;
+      return List<SaleModel>.from(active);
     }
     try {
       final raw = _prefs?.getString(_keySalesHistory);
@@ -444,10 +458,11 @@ class LocalCacheService {
         final list = decoded
             .whereType<Map>()
             .map((item) => SaleModel.fromJson(Map<String, dynamic>.from(item)))
+            .where((s) => s.createdAt.isAfter(cutoff))
             .toList();
-        if (list.isNotEmpty) {
-          _memorySalesHistory = List<SaleModel>.from(list);
-        }
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        _memorySalesHistory = List<SaleModel>.from(list);
         return list;
       }
     } catch (e) {
@@ -456,23 +471,38 @@ class LocalCacheService {
     return [];
   }
 
-  /// Save full list of sales fetched from backend
+  /// Save full list of sales fetched from backend, strictly enforcing 10-day retention
   static Future<void> saveSalesList(List<SaleModel> sales) async {
     try {
-      _memorySalesHistory = List<SaleModel>.from(sales);
+      final cutoff = DateTime.now().subtract(_salesRetentionWindow);
+      final filtered = sales.where((s) => s.createdAt.isAfter(cutoff)).toList();
+      filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      _memorySalesHistory = List<SaleModel>.from(filtered);
       await init();
-      final listJson = jsonEncode(sales.map((s) => s.toJson()).toList());
+      final listJson = jsonEncode(filtered.map((s) => s.toJson()).toList());
       await _prefs!.setString(_keySalesHistory, listJson);
     } catch (e) {
       debugPrint('[LocalCacheService] Error saving sales list: $e');
     }
   }
 
-  /// Get sales completed within the last 24 hours
+  /// Get sales completed within the 10-day retention window, sorted descending by time
+  static List<SaleModel> get10DaySales() {
+    final history = getSalesHistory();
+    final cutoff = DateTime.now().subtract(_salesRetentionWindow);
+    final list = history.where((s) => s.createdAt.isAfter(cutoff)).toList();
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  /// Get sales completed within the last 24 hours, sorted descending by time
   static List<SaleModel> get24HourSales() {
     final history = getSalesHistory();
     final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-    return history.where((s) => s.createdAt.isAfter(cutoff)).toList();
+    final list = history.where((s) => s.createdAt.isAfter(cutoff)).toList();
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   // ==========================================

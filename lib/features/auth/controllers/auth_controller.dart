@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/api_constants.dart';
@@ -77,15 +78,17 @@ class AuthController extends BaseController {
   }
 
   Future<bool> login(String email, String password) async {
+    final cleanEmail = email.trim().toLowerCase();
     setLoading(true);
     clearError();
 
-    final response = await _repo.login(email: email, password: password);
+    final response = await _repo.login(email: cleanEmail, password: password);
     setLoading(false);
 
     if (response.success && response.data != null) {
       final payload = response.data!;
       final token = payload['access_token'] ?? payload['token'];
+      final refreshToken = payload['refresh_token']?.toString();
       final userData = payload['user'];
 
       if (token != null) {
@@ -94,17 +97,17 @@ class AuthController extends BaseController {
         } else {
           _currentUser = UserModel(
             id: '1',
-            name: email.split('@').first,
-            email: email,
+            name: cleanEmail.contains('@') ? cleanEmail.split('@').first : cleanEmail,
+            email: cleanEmail,
             role: 'merchant',
           );
         }
 
         // Strict role enforcement: Customers cannot access merchant portal
         if (!_currentUser!.isMerchant) {
-          // Check if this user owns a shop before rejecting
           await TokenStorage.saveSession(
             token: token.toString(),
+            refreshToken: refreshToken,
             user: _currentUser?.toJson(),
           );
           final shopRes = await _repo.getMyShop();
@@ -130,14 +133,15 @@ class AuthController extends BaseController {
 
         await TokenStorage.saveSession(
           token: token.toString(),
+          refreshToken: refreshToken,
           user: _currentUser?.toJson(),
         );
 
         // Clear any stale shop from prior user and fetch in background
         _currentShop = null;
         await TokenStorage.removeShop();
-        fetchShopDetails();
-        fetchUserProfile();
+        unawaited(fetchShopDetails(silent: true));
+        unawaited(fetchUserProfile(silent: true));
 
         notifyListeners();
         return true;
@@ -148,19 +152,82 @@ class AuthController extends BaseController {
     return false;
   }
 
+  /// 1-Tap Google Sign-In for instant zero-friction merchant authentication
+  Future<bool> loginWithGoogle(String idToken, {String role = 'shop'}) async {
+    setLoading(true);
+    clearError();
+
+    final response = await _repo.googleLogin(idToken: idToken, role: role);
+    setLoading(false);
+
+    if (response.success && response.data != null) {
+      final payload = response.data!;
+      final token = payload['access_token'] ?? payload['token'];
+      final refreshToken = payload['refresh_token']?.toString();
+      final userData = payload['user'];
+
+      if (token != null) {
+        if (userData != null && userData is Map<String, dynamic>) {
+          _currentUser = UserModel.fromJson(userData);
+        } else {
+          _currentUser = UserModel(
+            id: payload['user_id']?.toString() ?? '1',
+            name: payload['full_name']?.toString() ?? 'Shop Merchant',
+            email: payload['email']?.toString() ?? '',
+            role: 'merchant',
+          );
+        }
+
+        _isStaff = false;
+
+        await TokenStorage.saveSession(
+          token: token.toString(),
+          refreshToken: refreshToken,
+          user: _currentUser?.toJson(),
+        );
+
+        // Extract bootstrap data if provided by server
+        final bootstrap = payload['bootstrap'];
+        if (bootstrap != null && bootstrap is Map<String, dynamic>) {
+          final shopData = bootstrap['shop'];
+          if (shopData != null && shopData is Map<String, dynamic>) {
+            _currentShop = ShopModel.fromJson(shopData);
+            await TokenStorage.saveShop(_currentShop!.toJson());
+            _managedShops = [_currentShop!];
+            await LocalCacheService.saveManagedShops(_managedShops);
+          }
+        }
+
+        // Fetch latest shop details in background
+        unawaited(fetchShopDetails(silent: true));
+        unawaited(fetchUserProfile(silent: true));
+
+        notifyListeners();
+        return true;
+      }
+    }
+
+    setError(response.error ?? 'Google sign-in failed. Please try again.');
+    return false;
+  }
+
   Future<bool> register({
     required String fullName,
     required String email,
     required String phone,
     required String password,
   }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final cleanName = fullName.trim();
+
     setLoading(true);
     clearError();
 
     final response = await _repo.register(
-      fullName: fullName,
-      email: email,
-      phone: phone,
+      fullName: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
       password: password,
     );
     setLoading(false);
@@ -168,6 +235,7 @@ class AuthController extends BaseController {
     if (response.success && response.data != null) {
       final payload = response.data!;
       final token = payload['access_token'] ?? payload['token'];
+      final refreshToken = payload['refresh_token']?.toString();
       final userData = payload['user'];
 
       if (token != null) {
@@ -178,9 +246,9 @@ class AuthController extends BaseController {
         } else {
           _currentUser = UserModel(
             id: '1',
-            name: fullName,
-            email: email,
-            phone: phone,
+            name: cleanName,
+            email: cleanEmail,
+            phone: cleanPhone,
             role: 'merchant',
           );
         }
@@ -189,14 +257,15 @@ class AuthController extends BaseController {
 
         await TokenStorage.saveSession(
           token: token.toString(),
+          refreshToken: refreshToken,
           user: _currentUser?.toJson(),
         );
 
         _currentShop = null;
         await TokenStorage.removeShop();
 
-        fetchShopDetails();
-        fetchUserProfile();
+        unawaited(fetchShopDetails(silent: true));
+        unawaited(fetchUserProfile(silent: true));
         notifyListeners();
         return true;
       }

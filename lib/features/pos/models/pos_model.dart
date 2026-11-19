@@ -282,3 +282,54 @@ class PosParkedBill {
   }
 }
 
+/// Represents an individual itemized sold product for the time-sorted sales timeline (10-day retention)
+class SoldProductTimelineItem {
+  final String productName;
+  final String productSku;
+  final int quantity;
+  final double unitPrice;
+  final double totalPrice;
+  final String paymentMethod;
+  final DateTime soldAt;
+  final String billNumber;
+  final String customerPhone;
+
+  SoldProductTimelineItem({
+    required this.productName,
+    required this.productSku,
+    required this.quantity,
+    required this.unitPrice,
+    required this.totalPrice,
+    required this.paymentMethod,
+    required this.soldAt,
+    required this.billNumber,
+    this.customerPhone = '',
+  });
+
+  factory SoldProductTimelineItem.fromJson(Map<String, dynamic> json) {
+    return SoldProductTimelineItem(
+      productName: json['product_name']?.toString() ?? 'Product',
+      productSku: json['product_sku']?.toString() ?? '',
+      quantity: (json['quantity'] is num) ? (json['quantity'] as num).toInt() : 1,
+      unitPrice: (json['unit_price'] is num) ? (json['unit_price'] as num).toDouble() : 0.0,
+      totalPrice: (json['total_price'] is num) ? (json['total_price'] as num).toDouble() : 0.0,
+      paymentMethod: json['payment_method']?.toString() ?? 'cash',
+      soldAt: AppDateTimeUtils.parseToLocal(json['sold_at'] ?? json['created_at']),
+      billNumber: json['bill_number']?.toString() ?? '',
+      customerPhone: json['customer_phone']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'product_name': productName,
+    'product_sku': productSku,
+    'quantity': quantity,
+    'unit_price': unitPrice,
+    'total_price': totalPrice,
+    'payment_method': paymentMethod,
+    'sold_at': soldAt.toIso8601String(),
+    'bill_number': billNumber,
+    'customer_phone': customerPhone,
+  };
+}
+

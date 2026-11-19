@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../constants/app_colors.dart';
+import 'app_voice_icon_button.dart';
 
 /// Universal Standardized Form Input Field for ShopSilo.
 /// Replaces inconsistent Raw TextFields and TextFormFields across POS, Products, and Khata.
@@ -19,6 +20,7 @@ class AppTextInput extends StatefulWidget {
   final bool isRequired;
   final bool readOnly;
   final bool autofocus;
+  final bool enableVoice;
   final TextInputType keyboardType;
   final TextInputAction textInputAction;
   final ValueChanged<String>? onChanged;
@@ -44,6 +46,7 @@ class AppTextInput extends StatefulWidget {
     this.isRequired = false,
     this.readOnly = false,
     this.autofocus = false,
+    this.enableVoice = false,
     this.keyboardType = TextInputType.text,
     this.textInputAction = TextInputAction.next,
     this.onChanged,
@@ -150,12 +153,21 @@ class _AppTextInputState extends State<AppTextInput> {
                     ),
                     onPressed: () => setState(() => _obscureText = !_obscureText),
                   )
-                : (widget.suffixIcon != null
-                    ? IconButton(
-                        icon: Icon(widget.suffixIcon, size: 18, color: context.colorTextMuted),
-                        onPressed: widget.onSuffixIconTap,
+                : (widget.enableVoice && widget.controller != null
+                    ? AppVoiceIconButton(
+                        controller: widget.controller!,
+                        hint: widget.hint ?? widget.label,
+                        onChanged: widget.onChanged,
+                        onSubmitted: (val) {
+                          widget.onChanged?.call(val);
+                        },
                       )
-                    : null),
+                    : (widget.suffixIcon != null
+                        ? IconButton(
+                            icon: Icon(widget.suffixIcon, size: 18, color: context.colorTextMuted),
+                            onPressed: widget.onSuffixIconTap,
+                          )
+                        : null)),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: isDark ? context.colorBorder : AppColors.border),

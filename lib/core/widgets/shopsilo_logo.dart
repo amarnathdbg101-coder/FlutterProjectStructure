@@ -13,7 +13,7 @@ class ShopSiloLogo extends StatelessWidget {
   const ShopSiloLogo({
     super.key,
     this.size = 36,
-    this.showText = true,
+    this.showText = false,
     this.subtitle,
     this.textColor,
     this.iconBgColor,
@@ -22,7 +22,7 @@ class ShopSiloLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveIconBg = iconBgColor ?? context.colorPrimaryLight;
+    final effectiveIconBg = iconBgColor ?? Colors.transparent;
     final effectiveIconColor = iconColor ?? AppColors.primary;
     final effectiveTextColor = textColor ?? context.colorTextPrimary;
 
@@ -32,26 +32,16 @@ class ShopSiloLogo extends StatelessWidget {
       decoration: BoxDecoration(
         color: effectiveIconBg,
         borderRadius: BorderRadius.circular(size * 0.28),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.18),
-            blurRadius: size * 0.2,
-            offset: Offset(0, size * 0.06),
-          ),
-        ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(size * 0.28),
-        child: Image.asset(
-          'assets/images/app_logo.png',
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (ctx, err, stack) => Icon(
-            Icons.storefront_rounded,
-            size: size * 0.58,
-            color: effectiveIconColor,
-          ),
+      child: Image.asset(
+        'assets/images/app_mark.png',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        errorBuilder: (ctx, err, stack) => Icon(
+          Icons.storefront_rounded,
+          size: size * 0.58,
+          color: effectiveIconColor,
         ),
       ),
     );

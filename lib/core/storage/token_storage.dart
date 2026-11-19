@@ -10,6 +10,8 @@ class TokenStorage {
   static const String _keyLanguage = 'shopsilo_language';
   static const String _keyThemeMode = 'shopsilo_theme_mode';
   static const String _keyShowProfitMargins = 'shopsilo_show_profit_margins';
+  static const String _keyCustomServerUrl = 'shopsilo_custom_server_url';
+  static const String _keyUseProduction = 'shopsilo_use_production';
 
   static SharedPreferences? _prefs;
 
@@ -44,18 +46,49 @@ class TokenStorage {
     return _prefs?.getBool(_keyShowProfitMargins) ?? true;
   }
 
+  static Future<void> saveCustomServerUrl(String url) async {
+    await init();
+    await _prefs!.setString(_keyCustomServerUrl, url.trim());
+  }
+
+  static String? getCustomServerUrl() {
+    return _prefs?.getString(_keyCustomServerUrl);
+  }
+
+  static Future<void> saveUseProduction(bool useProd) async {
+    await init();
+    await _prefs!.setBool(_keyUseProduction, useProd);
+  }
+
+  static bool getUseProduction({bool defaultValue = false}) {
+    return _prefs?.getBool(_keyUseProduction) ?? defaultValue;
+  }
+
+  static String? _memoryToken;
+  static String? _memoryRefreshToken;
+
   static Future<void> saveToken(String token) async {
+    _memoryToken = token;
     await init();
     await _prefs!.setString(_keyToken, token);
   }
 
   static Future<void> saveRefreshToken(String refreshToken) async {
+    _memoryRefreshToken = refreshToken;
     await init();
     await _prefs!.setString(_keyRefreshToken, refreshToken);
   }
 
   static String? getRefreshToken() {
-    return _prefs?.getString(_keyRefreshToken);
+    if (_memoryRefreshToken != null && _memoryRefreshToken!.isNotEmpty) {
+      return _memoryRefreshToken;
+    }
+    final stored = _prefs?.getString(_keyRefreshToken);
+    if (stored != null && stored.isNotEmpty) {
+      _memoryRefreshToken = stored;
+      return stored;
+    }
+    return null;
   }
 
   static Future<void> saveSession({
@@ -64,6 +97,10 @@ class TokenStorage {
     Map<String, dynamic>? user,
     Map<String, dynamic>? shop,
   }) async {
+    _memoryToken = token;
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      _memoryRefreshToken = refreshToken;
+    }
     await init();
     await _prefs!.setString(_keyToken, token);
     if (refreshToken != null && refreshToken.isNotEmpty) {
@@ -98,7 +135,15 @@ class TokenStorage {
   }
 
   static String? getToken() {
-    return _prefs?.getString(_keyToken);
+    if (_memoryToken != null && _memoryToken!.isNotEmpty) {
+      return _memoryToken;
+    }
+    final stored = _prefs?.getString(_keyToken);
+    if (stored != null && stored.isNotEmpty) {
+      _memoryToken = stored;
+      return stored;
+    }
+    return null;
   }
 
   static bool hasToken() {
@@ -164,6 +209,8 @@ class TokenStorage {
   }
 
   static Future<void> clearSession() async {
+    _memoryToken = null;
+    _memoryRefreshToken = null;
     await init();
     await _prefs!.remove(_keyToken);
     await _prefs!.remove(_keyRefreshToken);

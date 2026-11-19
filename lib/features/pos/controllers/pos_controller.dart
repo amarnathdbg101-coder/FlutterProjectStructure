@@ -13,11 +13,13 @@ import '../../products/models/product_model.dart';
 import '../../products/repositories/product_repository.dart';
 import '../models/pos_model.dart';
 import '../repositories/pos_repository.dart';
+import '../repositories/pos_advanced_repository.dart';
+import '../models/pos_features_model.dart';
 import '../services/thermal_receipt_pdf_service.dart';
 import '../services/esc_pos_service.dart';
 
 class PosController extends BaseController {
-  final PosRepository _repo = PosRepository();
+  final PosRepository _repo;
 
   List<ProductModel> _products = [];
   List<ProductModel> get products => _products;
@@ -37,6 +39,9 @@ class PosController extends BaseController {
 
   bool _isLoadingBaskets = false;
   bool get isLoadingBaskets => _isLoadingBaskets;
+  bool _isCompletingSale = false;
+  bool get isCompletingSale => _isCompletingSale;
+  Future<void>? _catalogLoadInFlight;
 
   Timer? _autoSyncDebounce;
   bool _isSyncingToServer = false;
@@ -103,7 +108,16 @@ class PosController extends BaseController {
   }
 
   void setSplitCashAmount(double val) {
-    _splitCashAmount = val >= 0 ? val : 0.0;
+    if (_isCompletingSale) return;
+    if (!val.isFinite || val < 0 || val > grandTotal) {
+      setError(
+        TokenStorage.getLanguage() == 'hi'
+            ? 'नकद राशि बिल की कुल राशि से अधिक नहीं हो सकती'
+            : 'Cash portion cannot exceed the bill total',
+      );
+      return;
+    }
+    _splitCashAmount = val;
     notifyListeners();
   }
 
@@ -158,11 +172,55 @@ class PosController extends BaseController {
     return sales.length;
   }
 
-  List<Map<String, dynamic>> get24HourSoldProductsSummary() {
-    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get24HourSales();
+  /// 10-Day Sales Analytics Summary
+  double get total10DayRevenue {
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
+    return sales.fold(0.0, (sum, s) => sum + s.totalAmount);
+  }
+
+  int get total10DayBillCount {
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
+    return sales.length;
+  }
+
+  /// Get all individual sold items within the 10-day retention window, strictly sorted chronologically (newest first)
+  List<SoldProductTimelineItem> getTimeSortedSoldItems({Duration maxAge = const Duration(days: 10)}) {
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
+    final cutoff = DateTime.now().subtract(maxAge);
+    final List<SoldProductTimelineItem> items = [];
+
+    for (final sale in sales) {
+      if (sale.createdAt.isBefore(cutoff)) continue;
+      for (final cartItem in sale.items) {
+        items.add(
+          SoldProductTimelineItem(
+            productName: cartItem.product.name.trim().isNotEmpty ? cartItem.product.name.trim() : 'Product',
+            productSku: cartItem.product.sku,
+            quantity: cartItem.quantity,
+            unitPrice: cartItem.customPrice,
+            totalPrice: cartItem.total,
+            paymentMethod: sale.paymentMethod,
+            soldAt: sale.createdAt,
+            billNumber: sale.billNumber ?? '',
+            customerPhone: sale.customerPhone,
+          ),
+        );
+      }
+    }
+
+    // Strictly sort newest first
+    items.sort((a, b) => b.soldAt.compareTo(a.soldAt));
+    return items;
+  }
+
+  /// Aggregated summary of sold products (ranking by total revenue) for a given duration (default 10 days or 24h)
+  List<Map<String, dynamic>> getSoldProductsSummary({Duration maxAge = const Duration(days: 10)}) {
+    final sales = _serverSales.isNotEmpty ? _serverSales : LocalCacheService.get10DaySales();
+    final cutoff = DateTime.now().subtract(maxAge);
     final Map<String, Map<String, dynamic>> aggregated = {};
 
     for (final sale in sales) {
+      if (sale.createdAt.isBefore(cutoff)) continue;
       for (final item in sale.items) {
         final name = item.product.name.trim().isNotEmpty ? item.product.name.trim() : 'Product';
         if (aggregated.containsKey(name)) {
@@ -182,6 +240,10 @@ class PosController extends BaseController {
     final list = aggregated.values.toList();
     list.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
     return list;
+  }
+
+  List<Map<String, dynamic>> get24HourSoldProductsSummary() {
+    return getSoldProductsSummary(maxAge: const Duration(hours: 24));
   }
 
   // --- Speed-Optimized Quick Selling: Frequently Sold & Recent Products ---
@@ -295,9 +357,9 @@ class PosController extends BaseController {
   StreamSubscription<AppCacheEvent>? _reservationSub;
   StreamSubscription<AppCacheEvent>? _logoutSub;
 
-  PosController() {
+  PosController({PosRepository? repository}) : _repo = repository ?? PosRepository() {
     _initFromCache();
-    loadCatalog();
+    loadCatalog(forceRefresh: true);
     fetchBackendSales();
     CounterWebSocketService.instance.connect();
     fetchActiveBaskets();
@@ -351,7 +413,7 @@ class PosController extends BaseController {
     if (cached.isNotEmpty) {
       _products = cached;
     }
-    final cachedSales = LocalCacheService.get24HourSales();
+    final cachedSales = LocalCacheService.get10DaySales();
     if (cachedSales.isNotEmpty) {
       _serverSales = cachedSales;
     }
@@ -360,20 +422,46 @@ class PosController extends BaseController {
   /// Proactively loads catalog products for zero-lag POS search & barcode lookup
   Future<void> loadCatalog({bool forceRefresh = false}) async {
     if (_products.isNotEmpty && !forceRefresh) return;
+    final inFlight = _catalogLoadInFlight;
+    if (inFlight != null) return inFlight;
+
+    final request = _fetchCatalog(forceRefresh: forceRefresh);
+    _catalogLoadInFlight = request;
+    try {
+      await request;
+    } finally {
+      if (identical(_catalogLoadInFlight, request)) {
+        _catalogLoadInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _fetchCatalog({required bool forceRefresh}) async {
     try {
       final res = await _repo.searchProducts('');
-      if (res.success && res.data != null && res.data!.isNotEmpty) {
+      if (res.success && res.data != null) {
         _products = res.data!;
         await LocalCacheService.saveProducts(_products);
         notifyListeners();
+      } else if (forceRefresh || _products.isEmpty) {
+        setError(
+          res.error ??
+              (TokenStorage.getLanguage() == 'hi'
+                  ? 'उत्पाद कैटलॉग लोड नहीं हो सका'
+                  : 'Product catalog could not be refreshed'),
+        );
       }
-    } catch (_) {}
+    } catch (e) {
+      if (forceRefresh || _products.isEmpty) {
+        setError(e.toString());
+      }
+    }
   }
 
-  /// Fetches confirmed PostgreSQL sales for live reports and Today's Sales Screen
-  Future<void> fetchBackendSales({String date = 'today'}) async {
+  /// Fetches confirmed PostgreSQL sales for live reports and Today's Sales Screen (10-day retention window)
+  Future<void> fetchBackendSales({String date = ''}) async {
     try {
-      var res = await _repo.getSales(date: date);
+      var res = await _repo.getSales(limit: 100, date: date);
       if (res.success && res.data != null && res.data!.isNotEmpty) {
         _serverSales = res.data!;
         await LocalCacheService.saveSalesList(_serverSales);
@@ -381,9 +469,9 @@ class PosController extends BaseController {
         return;
       }
 
-      // Fallback: If date='today' returned empty, fetch all recent sales history
-      if (date == 'today') {
-        res = await _repo.getSales(date: '');
+      // Fallback: If date was specific and returned empty, fetch general 10-day history
+      if (date.isNotEmpty) {
+        res = await _repo.getSales(limit: 100, date: '');
         if (res.success && res.data != null && res.data!.isNotEmpty) {
           _serverSales = res.data!;
           await LocalCacheService.saveSalesList(_serverSales);
@@ -394,35 +482,73 @@ class PosController extends BaseController {
   }
 
   void setCustomerPhone(String phone) {
+    if (_isCompletingSale) return;
     _customerPhone = phone;
     scheduleAutoSync();
     notifyListeners();
   }
 
   void setCustomerName(String name) {
+    if (_isCompletingSale) return;
     _customerName = name;
     scheduleAutoSync();
     notifyListeners();
   }
 
   void setPaymentMethod(String method) {
+    if (_isCompletingSale) return;
+    if (!const {'cash', 'upi', 'split', 'khata'}.contains(method)) {
+      setError(
+        TokenStorage.getLanguage() == 'hi'
+            ? 'भुगतान का तरीका मान्य नहीं है'
+            : 'Unsupported payment method',
+      );
+      return;
+    }
     _paymentMethod = method;
     scheduleAutoSync();
     notifyListeners();
   }
 
   void setDiscount(double amount) {
+    if (_isCompletingSale) return;
+    if (!amount.isFinite || amount < 0 || amount > subtotal) {
+      setError(
+        TokenStorage.getLanguage() == 'hi'
+            ? 'छूट बिल की राशि से अधिक नहीं हो सकती'
+            : 'Discount cannot exceed the bill subtotal',
+      );
+      return;
+    }
     _discount = amount;
     scheduleAutoSync();
     notifyListeners();
   }
 
   void setCashTendered(double amount) {
+    if (_isCompletingSale) return;
+    if (!amount.isFinite || amount < 0) {
+      setError(
+        TokenStorage.getLanguage() == 'hi'
+            ? 'नकद राशि मान्य नहीं है'
+            : 'Enter a valid cash amount',
+      );
+      return;
+    }
     _cashTendered = amount;
     notifyListeners();
   }
 
   void addToCart(ProductModel product, {int quantity = 1}) {
+    if (_isCompletingSale) return;
+    if (quantity <= 0 || !product.price.isFinite || product.price < 0) {
+      setError(
+        TokenStorage.getLanguage() == 'hi'
+            ? 'वस्तु की कीमत या मात्रा मान्य नहीं है'
+            : 'The item price or quantity is invalid',
+      );
+      return;
+    }
     recordRecentProduct(product.id);
     final existingIndex = _cart.indexWhere((item) => item.product.id == product.id);
     if (existingIndex >= 0) {
@@ -441,9 +567,18 @@ class PosController extends BaseController {
     int quantity = 1,
     String unit = 'item',
   }) {
+    if (_isCompletingSale) return;
+    if (!price.isFinite || price <= 0 || quantity <= 0) {
+      setError(
+        TokenStorage.getLanguage() == 'hi'
+            ? 'कस्टम वस्तु की कीमत और मात्रा मान्य होनी चाहिए'
+            : 'Custom item price and quantity must be valid',
+      );
+      return;
+    }
     final cleanName = name.trim().isNotEmpty ? name.trim() : 'Custom Item';
     final customProduct = ProductModel(
-      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'custom_${DateTime.now().microsecondsSinceEpoch}',
       name: cleanName,
       price: price > 0 ? price : 0.0,
       stock: 9999,
@@ -457,7 +592,8 @@ class PosController extends BaseController {
   }
 
   void updateCartItemPrice(PosCartItem item, double newPrice) {
-    if (newPrice >= 0) {
+    if (_isCompletingSale) return;
+    if (newPrice.isFinite && newPrice >= 0 && _cart.contains(item)) {
       item.customPrice = newPrice;
       scheduleAutoSync();
       notifyListeners();
@@ -471,8 +607,12 @@ class PosController extends BaseController {
     required String selectedPieceName,
     required double selectedPiecePrice,
   }) {
+    if (_isCompletingSale) return;
     final idx = _cart.indexOf(item);
-    if (idx != -1) {
+    if (idx != -1 &&
+        selectedPieceName.trim().isNotEmpty &&
+        selectedPiecePrice.isFinite &&
+        selectedPiecePrice > 0) {
       final updatedProduct = item.product.copyWith(
         name: selectedPieceName,
         price: selectedPiecePrice,
@@ -488,12 +628,14 @@ class PosController extends BaseController {
   }
 
   void incrementQuantity(PosCartItem item) {
+    if (_isCompletingSale || !_cart.contains(item)) return;
     item.quantity += 1;
     scheduleAutoSync();
     notifyListeners();
   }
 
   void decrementQuantity(PosCartItem item) {
+    if (_isCompletingSale || !_cart.contains(item)) return;
     if (item.quantity > 1) {
       item.quantity -= 1;
     } else {
@@ -504,12 +646,18 @@ class PosController extends BaseController {
   }
 
   void removeFromCart(PosCartItem item) {
+    if (_isCompletingSale) return;
     _cart.remove(item);
     scheduleAutoSync();
     notifyListeners();
   }
 
   void clearCart({bool syncWithBackend = true}) {
+    if (_isCompletingSale) return;
+    _resetCartState(syncWithBackend: syncWithBackend);
+  }
+
+  void _resetCartState({required bool syncWithBackend}) {
     _cart.clear();
     _discount = 0.0;
     _customerPhone = '';
@@ -740,19 +888,19 @@ class PosController extends BaseController {
     notifyListeners();
   }
 
-  Future<void> searchProducts(String query) async {
-    setLoading(true);
-    clearError();
-
+  Future<List<ProductModel>> searchProducts(String query) async {
     final response = await _repo.searchProducts(query);
-    setLoading(false);
-
     if (response.success && response.data != null) {
-      _products = response.data!;
-      notifyListeners();
-    } else {
-      setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'उत्पाद लोड नहीं हो सके' : 'Failed to load products'));
+      return response.data!;
     }
+
+    setError(
+      response.error ??
+          (TokenStorage.getLanguage() == 'hi'
+              ? 'उत्पाद खोजे नहीं जा सके'
+              : 'Products could not be searched'),
+    );
+    return const [];
   }
 
   String _lastScannedActionMessage = '';
@@ -814,7 +962,13 @@ class PosController extends BaseController {
   }) async {
     final cleanBarcode = barcode.trim();
     final cleanName = name.trim().isNotEmpty ? name.trim() : 'Item $cleanBarcode';
-    if (cleanBarcode.isEmpty || price < 0) return false;
+    if (cleanBarcode.isEmpty ||
+        !price.isFinite ||
+        price <= 0 ||
+        !mrp.isFinite ||
+        mrp < 0) {
+      return false;
+    }
 
     try {
       final newProduct = ProductModel(
@@ -873,112 +1027,184 @@ class PosController extends BaseController {
   }
 
   Future<SaleModel?> completeSale() async {
+    if (_isCompletingSale) return null;
+
     if (_cart.isEmpty) {
       setError(TokenStorage.getLanguage() == 'hi' ? 'बिल कार्ट खाली है, कृपया पहले आइटम जोड़ें' : 'Bill Cart is empty, please scan or add items first');
       return null;
     }
 
-    if (_paymentMethod == 'khata' && _customerPhone.trim().length < 10) {
-      setError(TokenStorage.getLanguage() == 'hi' ? 'उधार बिलिंग के लिए 10 अंकों का मोबाइल नंबर आवश्यक है' : '10-digit customer mobile required for credit billing');
+    final isHindi = TokenStorage.getLanguage() == 'hi';
+    final customerPhone = _customerPhone.replaceAll(RegExp(r'\D'), '');
+    if (_paymentMethod == 'khata' && !RegExp(r'^\d{10}$').hasMatch(customerPhone)) {
+      setError(
+        isHindi
+            ? 'उधार बिलिंग के लिए 10 अंकों का मोबाइल नंबर आवश्यक है'
+            : 'Credit billing requires a valid 10-digit customer mobile',
+      );
       return null;
     }
 
-    setLoading(true);
-    clearError();
+    final currentSubtotal = subtotal;
+    if (!currentSubtotal.isFinite ||
+        _cart.any(
+          (item) =>
+              item.quantity <= 0 ||
+              !item.customPrice.isFinite ||
+              item.customPrice < 0 ||
+              !item.total.isFinite,
+        ) ||
+        !_discount.isFinite ||
+        _discount < 0 ||
+        _discount > currentSubtotal) {
+      setError(
+        isHindi
+            ? 'बिल में अमान्य कीमत, मात्रा या छूट है'
+            : 'The bill contains an invalid price, quantity, or discount',
+      );
+      return null;
+    }
+
+    if (_paymentMethod == 'split' &&
+        (!_splitCashAmount.isFinite ||
+            _splitCashAmount < 0 ||
+            _splitCashAmount > grandTotal)) {
+      setError(
+        isHindi
+            ? 'स्प्लिट भुगतान की नकद राशि बिल की कुल राशि से अधिक नहीं हो सकती'
+            : 'The split cash amount cannot exceed the bill total',
+      );
+      return null;
+    }
+
+    final paymentMethod = _paymentMethod;
+    final customerPhoneForSale = paymentMethod == 'khata'
+        ? customerPhone
+        : _customerPhone.trim();
+    final customerName = _customerName.trim();
+    final discountAmount = _discount;
+    final saleTotal = grandTotal;
+    final items = List<PosCartItem>.unmodifiable(
+      _cart.map(
+        (item) => PosCartItem(
+          product: item.product,
+          quantity: item.quantity,
+          customPrice: item.customPrice,
+        ),
+      ),
+    );
+    final billedToken = _currentActiveToken;
 
     PosSplitPayment? split;
-    if (_paymentMethod == 'split') {
+    if (paymentMethod == 'split') {
       split = PosSplitPayment(
         cashAmount: _splitCashAmount,
-        onlineAmount: splitUpiAmount,
+        onlineAmount: saleTotal - _splitCashAmount,
       );
     }
 
-    final checkoutSessionKey = 'pos_${_currentActiveToken}_${DateTime.now().millisecondsSinceEpoch}';
-    final response = await _repo.createSale(
-      customerPhone: _customerPhone,
-      customerName: _customerName,
-      items: _cart,
-      discountAmount: _discount,
-      paymentMethod: _paymentMethod,
-      splitPayments: split,
-      idempotencyKey: checkoutSessionKey,
-    );
-    setLoading(false);
+    final checkoutSessionKey =
+        'pos_${billedToken}_${DateTime.now().microsecondsSinceEpoch}';
+    _isCompletingSale = true;
+    notifyListeners();
+    setLoading(true);
+    clearError();
 
-    if (response.success && response.data != null) {
-      final billedToken = _currentActiveToken;
-      _lastCompletedSale = response.data;
-      await LocalCacheService.saveCompletedSale(_lastCompletedSale!);
-      _serverSales.insert(0, _lastCompletedSale!);
+    try {
+      final response = await _repo.createSale(
+        customerPhone: customerPhoneForSale,
+        customerName: customerName,
+        items: items,
+        discountAmount: discountAmount,
+        paymentMethod: paymentMethod,
+        splitPayments: split,
+        idempotencyKey: checkoutSessionKey,
+      );
 
-      // Delete the billed running basket from GoBackend so all devices clear it immediately
-      try {
+      if (response.success && response.data != null) {
+        _lastCompletedSale = response.data;
+        await LocalCacheService.saveCompletedSale(_lastCompletedSale!);
+        _insertRecentSale(_lastCompletedSale!);
+
         await _repo.deleteParkedBill(billedToken);
-      } catch (_) {}
-      _activeBaskets.removeWhere((b) => b.label.toUpperCase() == billedToken.toUpperCase());
+        _activeBaskets.removeWhere(
+          (b) => b.label.toUpperCase() == billedToken.toUpperCase(),
+        );
 
-      clearCart(syncWithBackend: false);
-      fetchBackendSales();
-      notifyListeners();
+        _resetCartState(syncWithBackend: false);
+        fetchBackendSales();
 
-      // Emit event-driven invalidation events
-      AppEventBus().emit(AppCacheEventType.posSaleCompleted, payload: _lastCompletedSale);
-      AppEventBus().emit(AppCacheEventType.inventoryMutated);
-      if (_paymentMethod == 'khata') {
-        AppEventBus().emit(AppCacheEventType.khataMutated);
+        AppEventBus().emit(
+          AppCacheEventType.posSaleCompleted,
+          payload: _lastCompletedSale,
+        );
+        AppEventBus().emit(AppCacheEventType.inventoryMutated);
+        if (paymentMethod == 'khata') {
+          AppEventBus().emit(AppCacheEventType.khataMutated);
+        }
+        return _lastCompletedSale;
       }
-      return _lastCompletedSale;
-    } else {
-      // Offline fallback: generate local offline bill and queue for background sync
-      final now = DateTime.now();
-      final offlineBillNum = 'OFF-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
 
+      final now = DateTime.now();
+      final offlineBillNum =
+          'OFF-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.microsecondsSinceEpoch.toString().substring(8)}';
       _lastCompletedSale = SaleModel(
         billNumber: offlineBillNum,
-        customerPhone: _customerPhone,
-        items: List.from(_cart),
-        subtotal: subtotal,
-        discountAmount: _discount,
-        totalAmount: grandTotal,
-        paymentMethod: _paymentMethod,
+        customerPhone: customerPhoneForSale,
+        items: items,
+        subtotal: currentSubtotal,
+        discountAmount: discountAmount,
+        totalAmount: saleTotal,
+        paymentMethod: paymentMethod,
         splitPayments: split,
         createdAt: now,
       );
 
       await LocalCacheService.saveCompletedSale(_lastCompletedSale!);
-      _serverSales.insert(0, _lastCompletedSale!);
-
-      // Enqueue to OfflineSyncService for background reconciliation with preserved idempotency key
+      _insertRecentSale(_lastCompletedSale!);
       await OfflineSyncService.instance.enqueue(
         action: SyncActionType.posSale,
         endpoint: ApiConstants.posSale,
         method: 'POST',
         idempotencyKey: checkoutSessionKey,
         payload: {
-          'customer_phone': _customerPhone,
-          'customer_name': _customerName,
-          'items': _cart.map((e) => e.toJson()).toList(),
-          'discount_amount': _discount,
-          'payment_method': _paymentMethod,
+          'customer_phone': customerPhoneForSale,
+          'customer_name': customerName,
+          'items': items.map((item) => item.toJson()).toList(),
+          'discount_amount': discountAmount,
+          'payment_method': paymentMethod,
           if (split != null) 'split_payments': split.toJson(),
         },
         title: 'POS Bill #$offlineBillNum',
-        amount: grandTotal,
+        amount: saleTotal,
       );
 
-      final billedToken = _currentActiveToken;
-      _activeBaskets.removeWhere((b) => b.label.toUpperCase() == billedToken.toUpperCase());
-      clearCart(syncWithBackend: false);
-      notifyListeners();
-
-      AppEventBus().emit(AppCacheEventType.posSaleCompleted, payload: _lastCompletedSale);
+      _activeBaskets.removeWhere(
+        (b) => b.label.toUpperCase() == billedToken.toUpperCase(),
+      );
+      _resetCartState(syncWithBackend: false);
+      AppEventBus().emit(
+        AppCacheEventType.posSaleCompleted,
+        payload: _lastCompletedSale,
+      );
       AppEventBus().emit(AppCacheEventType.inventoryMutated);
-      if (_paymentMethod == 'khata') {
+      if (paymentMethod == 'khata') {
         AppEventBus().emit(AppCacheEventType.khataMutated);
       }
       return _lastCompletedSale;
+    } finally {
+      setLoading(false);
+      _isCompletingSale = false;
+      notifyListeners();
     }
+  }
+
+  void _insertRecentSale(SaleModel sale) {
+    final billNumber = sale.billNumber;
+    if (billNumber != null && billNumber.isNotEmpty) {
+      _serverSales.removeWhere((existing) => existing.billNumber == billNumber);
+    }
+    _serverSales.insert(0, sale);
   }
 
   /// 🖨️ Direct Print 58mm / 80mm Vector Thermal Receipt via OS Spooler & Printer Drivers
@@ -1084,5 +1310,34 @@ class PosController extends BaseController {
     }
 
     return response;
+  }
+
+  // --- Receiptless Return Lookup (Search past bills by phone or barcode within 30 days) ---
+  final PosAdvancedRepository _advancedRepo = PosAdvancedRepository();
+  List<ReturnLookupItem> _lookupResults = [];
+  List<ReturnLookupItem> get lookupResults => List.unmodifiable(_lookupResults);
+  bool _isLookingUpReturns = false;
+  bool get isLookingUpReturns => _isLookingUpReturns;
+
+  Future<void> lookupReturns({String? phone, String? barcode}) async {
+    _isLookingUpReturns = true;
+    _lookupResults = [];
+    notifyListeners();
+
+    final res = await _advancedRepo.lookupReturns(phone: phone, barcode: barcode);
+    _isLookingUpReturns = false;
+
+    if (res.success && res.data != null) {
+      _lookupResults = res.data!;
+      notifyListeners();
+    } else {
+      _lookupResults = [];
+      setError(res.error ?? 'No past purchase records found for this customer or barcode');
+    }
+  }
+
+  void clearLookup() {
+    _lookupResults = [];
+    notifyListeners();
   }
 }

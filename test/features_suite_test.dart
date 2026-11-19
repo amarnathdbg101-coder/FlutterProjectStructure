@@ -12,7 +12,7 @@ void main() {
   });
 
   group('ShopSilo Advanced Features Suite Tests', () {
-    test('1. HotkeyItem & MarginCheckResult models parse JSON accurately', () {
+    test('1. HotkeyItem model parses JSON accurately', () {
       final hotkey = HotkeyItem.fromJson({
         'id': 'hk-1',
         'shop_id': 'shop-1',
@@ -30,20 +30,6 @@ void main() {
       expect(hotkey.label, 'Amul Milk 500ml');
       expect(hotkey.quickQuantity, 2.0);
       expect(hotkey.sellingPrice, 27.0);
-
-      final margin = MarginCheckResult.fromJson({
-        'allowed': true,
-        'total_sale': 54.0,
-        'total_cost': 46.0,
-        'net_margin_percentage': 14.8,
-        'min_floor_percentage': 5.0,
-        'warnings': ['Low stock remaining on batch #90'],
-        'critical_violation': false,
-      });
-
-      expect(margin.allowed, isTrue);
-      expect(margin.netMarginPercentage, 14.8);
-      expect(margin.criticalViolation, isFalse);
     });
 
     test('2. CashDrawerSession tracks opening float, safe drops, and discrepancy', () {

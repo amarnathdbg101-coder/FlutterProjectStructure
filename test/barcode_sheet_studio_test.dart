@@ -223,7 +223,6 @@ void main() {
       expect(find.textContaining('A4 • 65 Micro'), findsOneWidget);
       expect(find.textContaining('A4 • 40 Compact'), findsOneWidget);
       expect(find.textContaining('A4 • 24 Standard'), findsOneWidget);
-      expect(find.textContaining('Bargaining-Safe Layout'), findsOneWidget);
 
       // 3. Verify Bottom Action Buttons
       expect(find.text('Share PDF'), findsOneWidget);

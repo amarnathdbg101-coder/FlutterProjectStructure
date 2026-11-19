@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
-import '../../features/products/services/smart_barcode_catalog_service.dart';
 
 /// Interactive Mobile Camera Barcode Scanner Dialog.
 /// Allows floor staff & cashiers to scan physical product barcodes directly
@@ -615,14 +614,9 @@ class _MobileBarcodeScannerDialogState extends State<MobileBarcodeScannerDialog>
 
   void _showQuickAddDialog(BuildContext context, String rawBarcode) {
     final isHindi = context.isHindi;
-    final masterMatch = SmartBarcodeCatalogService.lookupSync(rawBarcode);
-    final nameCtrl = TextEditingController(text: masterMatch?.name ?? '');
-    final priceCtrl = TextEditingController(
-      text: masterMatch != null && masterMatch.sellingPrice > 0 ? masterMatch.sellingPrice.toStringAsFixed(0) : '',
-    );
-    final mrpCtrl = TextEditingController(
-      text: masterMatch != null && masterMatch.mrp > 0 ? masterMatch.mrp.toStringAsFixed(0) : '',
-    );
+    final nameCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final mrpCtrl = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -695,33 +689,6 @@ class _MobileBarcodeScannerDialogState extends State<MobileBarcodeScannerDialog>
                   ),
                 ],
               ),
-              if (masterMatch != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_awesome_rounded, color: AppColors.success, size: 15),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          isHindi
-                              ? '⚡ मास्टर कैटलॉग से विवरण लोड हुआ (${masterMatch.brand})'
-                              : '⚡ Master Catalog Auto-Match (${masterMatch.brand})',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
               const SizedBox(height: 14),
               TextField(
                 controller: nameCtrl,

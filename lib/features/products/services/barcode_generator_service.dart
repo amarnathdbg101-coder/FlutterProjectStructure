@@ -213,7 +213,7 @@ class BarcodeLabelItem {
     this.unit = '',
     this.pkdDate,
     this.showShopName = true,
-    this.showPrice = false, // Bargaining-Friendly: Hidden by default so customers can't fixate on a printed price
+    this.showPrice = false, // Hidden by default for clean label presentation
     this.showPkd = false,
   });
 
@@ -221,7 +221,7 @@ class BarcodeLabelItem {
     required ProductModel product,
     String shopName = 'SHOPSILO STORE',
     bool showShopName = true,
-    bool showPrice = false, // Bargaining-Friendly default
+    bool showPrice = false, // Clean label presentation default
     bool showPkd = false,
   }) {
     String rawBarcode = product.barcode.trim();
@@ -331,12 +331,53 @@ class BarcodeGeneratorService {
     );
   }
 
+  static pw.MemoryImage? _cachedLogo;
+
+  static Future<pw.MemoryImage?> _getLogoImage() async {
+    if (_cachedLogo != null) return _cachedLogo;
+    try {
+      ByteData data;
+      try {
+        data = await rootBundle.load('assets/images/app_mark_light.png');
+      } catch (_) {
+        final candidates = [
+          'assets/images/app_mark_light.png',
+          'Frontend/assets/images/app_mark_light.png',
+          '../assets/images/app_mark_light.png',
+          '${Directory.current.path}/assets/images/app_mark_light.png',
+          '${Directory.current.path}/Frontend/assets/images/app_mark_light.png',
+          'assets/images/app_mark.png',
+          'Frontend/assets/images/app_mark.png',
+          'assets/images/app_logo.png',
+        ];
+        File? f;
+        for (final c in candidates) {
+          final file = File(c);
+          if (file.existsSync()) {
+            f = file;
+            break;
+          }
+        }
+        if (f != null) {
+          data = ByteData.view(f.readAsBytesSync().buffer);
+        } else {
+          return null;
+        }
+      }
+      _cachedLogo = pw.MemoryImage(data.buffer.asUint8List());
+      return _cachedLogo;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Generates PDF document bytes for a list of label items in the selected format.
   static Future<Uint8List> generatePdfBytes({
     required List<BarcodeLabelItem> items,
     required BarcodeLabelFormat format,
   }) async {
     final theme = await _getTheme();
+    await _getLogoImage();
     final pdf = pw.Document(theme: theme);
 
     switch (format) {
@@ -824,6 +865,13 @@ class BarcodeGeneratorService {
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
+                if (_cachedLogo != null)
+                  pw.Container(
+                    width: 7,
+                    height: 7,
+                    margin: const pw.EdgeInsets.only(right: 2.5),
+                    child: pw.Image(_cachedLogo!),
+                  ),
                 pw.Expanded(
                   child: pw.Text(
                     item.shopName,
@@ -946,13 +994,24 @@ class BarcodeGeneratorService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       if (item.showShopName)
-                        pw.Text(
-                          item.shopName,
-                          style: pw.TextStyle(
-                            fontSize: 5,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.grey700,
-                          ),
+                        pw.Row(
+                          children: [
+                            if (_cachedLogo != null)
+                              pw.Container(
+                                width: 6.5,
+                                height: 6.5,
+                                margin: const pw.EdgeInsets.only(right: 2),
+                                child: pw.Image(_cachedLogo!),
+                              ),
+                            pw.Text(
+                              item.shopName,
+                              style: pw.TextStyle(
+                                fontSize: 5,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.grey700,
+                              ),
+                            ),
+                          ],
                         ),
                       if (item.showPkd && item.pkdDate != null)
                         pw.Text(

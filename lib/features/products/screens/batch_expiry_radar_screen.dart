@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/app_ui_components.dart';
 import '../controllers/batch_expiry_controller.dart';
 
 class BatchExpiryRadarScreen extends StatefulWidget {
@@ -185,6 +186,7 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
+        leading: const AppBackButton(fallbackRoute: '/merchant/inventory'),
         title: const Text('Batch Expiry Radar', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,

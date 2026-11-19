@@ -98,12 +98,11 @@ class MerchantShell extends StatelessWidget {
                 extended: screenWidth >= 1150,
                 minExtendedWidth: 220,
                 backgroundColor: context.colorSurface,
-                leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
+                leading: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
                   child: ShopSiloLogo(
-                    size: 36,
-                    showText: screenWidth >= 1150,
-                    subtitle: screenWidth >= 1150 ? 'Partner OS' : null,
+                    size: 38,
+                    showText: false,
                   ),
                 ),
                 destinations: [

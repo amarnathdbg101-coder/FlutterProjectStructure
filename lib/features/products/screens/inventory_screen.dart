@@ -1057,6 +1057,17 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           ? initialProduct!.brand
           : (initialProduct?.attributes['brand']?.toString() ?? ''),
     );
+    final batchCtrl = TextEditingController(
+      text: initialProduct?.attributes['batch_number']?.toString() ?? '',
+    );
+    final expiryCtrl = TextEditingController(
+      text: initialProduct?.attributes['expiry_date']?.toString() ?? '',
+    );
+
+    bool isQuickMode = !isEdit;
+    ProductModel? matchedProduct;
+    bool isCheckingBarcode = false;
+    bool didInitialCheck = false;
 
     bool isActive = initialProduct?.isActive ?? true;
     bool isFeatured = initialProduct?.isFeatured ?? false;
@@ -1128,6 +1139,178 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           final boxCostVal = double.tryParse(boxCostCtrl.text.trim()) ?? 0.0;
           final boxQtyVal = double.tryParse(boxQtyCtrl.text.trim()) ?? 0.0;
           final calculatedUnitCost = (boxCostVal > 0 && boxQtyVal > 0) ? (boxCostVal / boxQtyVal) : 0.0;
+
+          Future<void> checkBarcodeDuplicate(String code) async {
+            final clean = code.trim();
+            if (clean.isEmpty) {
+              setModalState(() {
+                matchedProduct = null;
+                isCheckingBarcode = false;
+              });
+              return;
+            }
+            setModalState(() => isCheckingBarcode = true);
+            try {
+              final prodController = Provider.of<ProductController>(context, listen: false);
+              final found = await prodController.findProductByBarcode(clean);
+              if (sheetCtx.mounted) {
+                setModalState(() {
+                  isCheckingBarcode = false;
+                  if (found != null && found.id.toString() != initialProduct?.id.toString()) {
+                    matchedProduct = found;
+                  } else {
+                    matchedProduct = null;
+                  }
+                });
+              }
+            } catch (_) {
+              if (sheetCtx.mounted) {
+                setModalState(() => isCheckingBarcode = false);
+              }
+            }
+          }
+
+          if (!didInitialCheck && initialBarcodeVal.isNotEmpty) {
+            didInitialCheck = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              checkBarcodeDuplicate(initialBarcodeVal);
+            });
+          }
+
+          Widget buildInShopDuplicateBanner(ProductModel matched) {
+            final currentStock = matched.stock;
+            final currentUnit = matched.unit.isNotEmpty ? matched.unit : 'pcs';
+            final currentPrice = matched.price > 0 ? '₹${matched.price.toStringAsFixed(0)}' : '';
+
+            return Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          sheetCtx.isHindi
+                              ? '⚡ यह उत्पाद आपकी दुकान में पहले से मौजूद है!'
+                              : '⚡ Already in your shop inventory!',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${matched.name} ${currentPrice.isNotEmpty ? '• $currentPrice' : ''}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: sheetCtx.colorTextPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    sheetCtx.isHindi
+                        ? 'वर्तमान स्टॉक: $currentStock $currentUnit'
+                        : 'Current Stock: $currentStock $currentUnit',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: sheetCtx.colorTextSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    sheetCtx.isHindi
+                        ? '🚀 1-टैप में स्टॉक बढ़ाएं (Quick Restock):'
+                        : '🚀 1-Tap Quick Restock:',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: sheetCtx.colorTextPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [5, 10, 25, 50, 100].map((addQty) {
+                      return ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          minimumSize: Size.zero,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () async {
+                          final prodController = Provider.of<ProductController>(context, listen: false);
+                          await prodController.adjustStock(matched, addQty);
+                          if (sheetCtx.mounted) {
+                            Navigator.pop(sheetCtx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        sheetCtx.isHindi
+                                            ? '✓ ${matched.name} में +$addQty स्टॉक जोड़ा गया! (नया स्टॉक: ${currentStock + addQty})'
+                                            : '✓ Added +$addQty to ${matched.name}! (New Stock: ${currentStock + addQty})',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: AppColors.success,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                        child: Text(
+                          '+$addQty',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                        ),
+                        icon: const Icon(Icons.edit_note_rounded, size: 16),
+                        label: Text(
+                          sheetCtx.isHindi ? 'इस उत्पाद को संपादित करें (Edit)' : 'Edit This Product',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _showAddProductDialog(context, initialProduct: matched);
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
           // Live Pricing Integrity Calculations
           final livePrice = double.tryParse(priceCtrl.text) ?? 0.0;
           final liveCost = double.tryParse(costPriceCtrl.text) ?? 0.0;
@@ -1740,6 +1923,404 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       ],
                     ),
                     Divider(height: 20, color: sheetCtx.colorBorder),
+
+                    // ⚡ DUAL-MODE TOGGLE: Quick 15-Sec Add vs Full Catalog Mode
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(3.5),
+                      decoration: BoxDecoration(
+                        color: sheetCtx.colorSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: sheetCtx.colorBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setModalState(() => isQuickMode = true),
+                              borderRadius: BorderRadius.circular(9),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isQuickMode ? AppColors.primary : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(9),
+                                  boxShadow: isQuickMode
+                                      ? [
+                                          BoxShadow(
+                                            color: AppColors.primary.withValues(alpha: 0.25),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                alignment: Alignment.center,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.bolt_rounded,
+                                      size: 16,
+                                      color: isQuickMode ? Colors.white : sheetCtx.colorTextSecondary,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      sheetCtx.isHindi ? '⚡ 15-सेकंड क्विक ऐड' : '⚡ 15-Sec Quick Add',
+                                      style: TextStyle(
+                                        fontWeight: isQuickMode ? FontWeight.bold : FontWeight.w600,
+                                        fontSize: 12.5,
+                                        color: isQuickMode ? Colors.white : sheetCtx.colorTextSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setModalState(() => isQuickMode = false),
+                              borderRadius: BorderRadius.circular(9),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: !isQuickMode ? AppColors.primary : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(9),
+                                  boxShadow: !isQuickMode
+                                      ? [
+                                          BoxShadow(
+                                            color: AppColors.primary.withValues(alpha: 0.25),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                alignment: Alignment.center,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.format_list_bulleted_rounded,
+                                      size: 16,
+                                      color: !isQuickMode ? Colors.white : sheetCtx.colorTextSecondary,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      sheetCtx.isHindi ? '📦 विस्तृत कैटलॉग' : '📦 Full Details',
+                                      style: TextStyle(
+                                        fontWeight: !isQuickMode ? FontWeight.bold : FontWeight.w600,
+                                        fontSize: 12.5,
+                                        color: !isQuickMode ? Colors.white : sheetCtx.colorTextSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    if (isQuickMode) ...[
+                      // 1. PRODUCT NAME (with Speech-to-Text Mic)
+                      TextField(
+                        controller: nameCtrl,
+                        decoration: InputDecoration(
+                          labelText: '${sheetCtx.tr('inv_field_name')} *',
+                          hintText: sheetCtx.isHindi
+                              ? 'उदा. Fortune Refined Sunflower Oil 1L'
+                              : 'e.g. Fortune Refined Sunflower Oil 1L',
+                          suffixIcon: AppVoiceIconButton(
+                            controller: nameCtrl,
+                            hint: sheetCtx.tr('inv_field_name'),
+                            onSubmitted: (_) => setModalState(() {}),
+                          ),
+                        ),
+                        onChanged: (_) => setModalState(() {}),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 2. BARCODE / SKU (with Scanner & In-Shop Duplicate Restock Banner)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: barcodeCtrl,
+                              onChanged: (val) {
+                                setModalState(() {});
+                                checkBarcodeDuplicate(val);
+                              },
+                              decoration: InputDecoration(
+                                labelText: sheetCtx.tr('inv_field_barcode'),
+                                hintText: 'Scan or type barcode / SKU',
+                                suffixIcon: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (isCheckingBarcode)
+                                      const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      ),
+                                    IconButton(
+                                      tooltip: sheetCtx.isHindi ? 'कैमरा से बारकोड स्कैन करें' : 'Scan Barcode with Camera',
+                                      icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 20),
+                                      onPressed: () async {
+                                        await MobileBarcodeScannerDialog.show(
+                                          sheetCtx,
+                                          title: sheetCtx.isHindi ? 'बारकोड स्कैन करें' : 'Scan Product Barcode',
+                                          autoCloseOnSuccess: true,
+                                          successMessage: sheetCtx.isHindi ? '✓ बारकोड दर्ज हुआ!' : '✓ Barcode Captured!',
+                                          onBarcodeScanned: (scanned) async {
+                                            final clean = scanned.trim();
+                                            if (clean.isNotEmpty) {
+                                              barcodeCtrl.text = clean;
+                                              await checkBarcodeDuplicate(clean);
+                                            }
+                                            return true;
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                            ),
+                            icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                            label: const Text('Auto SKU'),
+                            onPressed: () {
+                              final generatedSku = _generateSmartSku(nameCtrl.text);
+                              barcodeCtrl.text = generatedSku;
+                              checkBarcodeDuplicate(generatedSku);
+                              ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                                SnackBar(
+                                  content: Text('Auto-generated SKU: $generatedSku'),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      if (matchedProduct != null) buildInShopDuplicateBanner(matchedProduct!),
+                      const SizedBox(height: 12),
+
+                      // 3. SELLING PRICE & COST PRICE
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: priceCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                labelText: '${sheetCtx.tr('inv_field_selling_price')} *',
+                                prefixText: '₹ ',
+                              ),
+                              onChanged: (_) => setModalState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: costPriceCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Cost Price (Kharid)',
+                                prefixText: '₹ ',
+                              ),
+                              onChanged: (_) => setModalState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Auto Margin Chips (Quick Mode)
+                      if (liveCost > 0) ...[
+                        Row(
+                          children: [
+                            Text(
+                              'Auto Margin:',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: sheetCtx.colorTextMuted),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [10, 15, 20, 25, 30, 40].map((marginPct) {
+                                    final calcSellingPrice = (liveCost * (1 + marginPct / 100)).roundToDouble();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: InkWell(
+                                        onTap: () {
+                                          setModalState(() {
+                                            priceCtrl.text = calcSellingPrice.toStringAsFixed(0);
+                                          });
+                                        },
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: sheetCtx.colorPrimaryLight,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                          ),
+                                          child: Text(
+                                            '+$marginPct% (₹${calcSellingPrice.toStringAsFixed(0)})',
+                                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      // Live Margins / Error Badges
+                      if (isCostInvalid || hasProfit) ...[
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            if (isCostInvalid)
+                              AppBadge.warning(
+                                '⚠️ Kharid Price (₹${liveCost.toStringAsFixed(0)}) Selling Price se zyada hai!',
+                              ),
+                            if (hasProfit)
+                              AppBadge.success(
+                                'Est. Profit: +₹${(livePrice - liveCost).toStringAsFixed(0)} (${(((livePrice - liveCost) / livePrice) * 100).toStringAsFixed(1)}% Margin)',
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+
+                      // 4. STOCK & UNIT DROPDOWN
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: stockCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: sheetCtx.tr('inv_field_stock'),
+                                hintText: '20',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              key: ValueKey('inv_quick_unit_dropdown_$unit'),
+                              isExpanded: true,
+                              initialValue: ['g', 'gm', 'kg', 'ml', 'litre', 'l', 'pcs', 'piece', 'packet', 'pack', 'box', 'dozen'].contains(unit) ? unit : 'pcs',
+                              decoration: InputDecoration(labelText: sheetCtx.tr('inv_field_unit')),
+                              items: [
+                                DropdownMenuItem(value: 'pcs', child: Text(sheetCtx.tr('inv_unit_piece'), overflow: TextOverflow.ellipsis)),
+                                DropdownMenuItem(value: 'pack', child: Text(sheetCtx.tr('inv_unit_packet'), overflow: TextOverflow.ellipsis)),
+                                DropdownMenuItem(value: 'kg', child: Text(sheetCtx.tr('inv_unit_kg'), overflow: TextOverflow.ellipsis)),
+                                const DropdownMenuItem(value: 'g', child: Text('g (Gram)', overflow: TextOverflow.ellipsis)),
+                                DropdownMenuItem(value: 'litre', child: Text(sheetCtx.tr('inv_unit_litre'), overflow: TextOverflow.ellipsis)),
+                                DropdownMenuItem(value: 'ml', child: Text('ml (mL)', overflow: TextOverflow.ellipsis)),
+                                const DropdownMenuItem(value: 'box', child: Text('Box / Peti', overflow: TextOverflow.ellipsis)),
+                                const DropdownMenuItem(value: 'dozen', child: Text('Dozen', overflow: TextOverflow.ellipsis)),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setModalState(() {
+                                    unit = val;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Quick Stock Restock Chips
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            '${sheetCtx.tr('inv_quick_restock')}:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: sheetCtx.colorTextMuted,
+                            ),
+                          ),
+                          for (final count in [5, 10, 25, 50, 100])
+                            InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: () {
+                                final curr = int.tryParse(stockCtrl.text.trim()) ?? 0;
+                                stockCtrl.text = (curr + count).toString();
+                                setModalState(() {});
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: sheetCtx.colorPrimaryLight,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                                ),
+                                child: Text(
+                                  '+$count',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Accordion / Switch to Full Catalog Mode
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                        label: Text(
+                          sheetCtx.isHindi
+                              ? '➕ फोटो, एक्सपायरी व अतिरिक्त विवरण जोड़ें (Full Mode)'
+                              : '➕ Add Photos, Expiry, Category & Full Details',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          setModalState(() => isQuickMode = false);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ] else ...[
 
                     // SECTION 1: PRODUCT IMAGES (Max 10 Images)
                     Row(
@@ -2719,29 +3300,44 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             controller: barcodeCtrl,
                             onChanged: (val) {
                               setModalState(() {});
+                              checkBarcodeDuplicate(val);
                             },
                             decoration: InputDecoration(
                               labelText: sheetCtx.tr('inv_field_barcode'),
                               hintText: 'e.g. FORTUNE-RICE-389 or 890123456789',
-                              suffixIcon: IconButton(
-                                tooltip: sheetCtx.isHindi ? 'कैमरा से बारकोड स्कैन करें' : 'Scan Barcode with Camera',
-                                icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 20),
-                                onPressed: () async {
-                                  await MobileBarcodeScannerDialog.show(
-                                    sheetCtx,
-                                    title: sheetCtx.isHindi ? 'बारकोड स्कैन करें' : 'Scan Product Barcode',
-                                    autoCloseOnSuccess: true,
-                                    successMessage: sheetCtx.isHindi ? '✓ बारकोड दर्ज हुआ!' : '✓ Barcode Captured!',
-                                    onBarcodeScanned: (scanned) async {
-                                      final clean = scanned.trim();
-                                      if (clean.isNotEmpty) {
-                                        barcodeCtrl.text = clean;
-                                        setModalState(() {});
-                                      }
-                                      return true;
+                              suffixIcon: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isCheckingBarcode)
+                                    const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    ),
+                                  IconButton(
+                                    tooltip: sheetCtx.isHindi ? 'कैमरा से बारकोड स्कैन करें' : 'Scan Barcode with Camera',
+                                    icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 20),
+                                    onPressed: () async {
+                                      await MobileBarcodeScannerDialog.show(
+                                        sheetCtx,
+                                        title: sheetCtx.isHindi ? 'बारकोड स्कैन करें' : 'Scan Product Barcode',
+                                        autoCloseOnSuccess: true,
+                                        successMessage: sheetCtx.isHindi ? '✓ बारकोड दर्ज हुआ!' : '✓ Barcode Captured!',
+                                        onBarcodeScanned: (scanned) async {
+                                          final clean = scanned.trim();
+                                          if (clean.isNotEmpty) {
+                                            barcodeCtrl.text = clean;
+                                            await checkBarcodeDuplicate(clean);
+                                          }
+                                          return true;
+                                        },
+                                      );
                                     },
-                                  );
-                                },
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -2756,6 +3352,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           onPressed: () {
                             final generatedSku = _generateSmartSku(nameCtrl.text);
                             barcodeCtrl.text = generatedSku;
+                            checkBarcodeDuplicate(generatedSku);
                             ScaffoldMessenger.of(sheetCtx).showSnackBar(
                               SnackBar(
                                 content: Text('Auto-generated SKU: $generatedSku'),
@@ -2766,6 +3363,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         ),
                       ],
                     ),
+                    if (matchedProduct != null) buildInShopDuplicateBanner(matchedProduct!),
                     const SizedBox(height: 12),
 
                     // 🎨 INDIAN TRADE COLOR SHADE CALIBRATOR (Only for Color-Critical Products)
@@ -2794,6 +3392,57 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       ),
                       const SizedBox(height: 12),
                     ],
+
+                    // 📅 OPTIONAL BATCH NUMBER & EXPIRY DATE TRACKING (Kirana / FMCG / Perishables)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: batchCtrl,
+                            decoration: InputDecoration(
+                              labelText: sheetCtx.isHindi ? 'बैच नंबर (Batch No.)' : 'Batch Number (Optional)',
+                              hintText: 'e.g. B-102',
+                              prefixIcon: const Icon(Icons.confirmation_number_outlined, size: 18),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: expiryCtrl,
+                            readOnly: true,
+                            decoration: InputDecoration(
+                              labelText: sheetCtx.isHindi ? 'एक्सपायरी डेट (Expiry)' : 'Expiry Date (Optional)',
+                              hintText: 'YYYY-MM-DD',
+                              prefixIcon: const Icon(Icons.event_outlined, size: 18),
+                              suffixIcon: expiryCtrl.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 16),
+                                      onPressed: () {
+                                        expiryCtrl.clear();
+                                        setModalState(() {});
+                                      },
+                                    )
+                                  : null,
+                            ),
+                            onTap: () async {
+                              final now = DateTime.now();
+                              final picked = await showDatePicker(
+                                context: sheetCtx,
+                                initialDate: now.add(const Duration(days: 90)),
+                                firstDate: now.subtract(const Duration(days: 30)),
+                                lastDate: now.add(const Duration(days: 365 * 5)),
+                              );
+                              if (picked != null) {
+                                expiryCtrl.text = picked.toIso8601String().split('T').first;
+                                setModalState(() {});
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
 
                     // SECTION 5: DYNAMIC CUSTOM SPECIFICATIONS & ATTRIBUTES
                     Row(
@@ -3062,6 +3711,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         ],
                       ),
                     ),
+                    ],
                     const SizedBox(height: 20),
 
                     // Action Buttons Row (Save / Delete)
@@ -3162,6 +3812,12 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                     attr['brand'] = brandCtrl.text.trim();
                                   }
                                   attr['unit'] = unit;
+                                  if (batchCtrl.text.trim().isNotEmpty) {
+                                    attr['batch_number'] = batchCtrl.text.trim();
+                                  }
+                                  if (expiryCtrl.text.trim().isNotEmpty) {
+                                    attr['expiry_date'] = expiryCtrl.text.trim();
+                                  }
                                   for (var pair in customAttrPairs) {
                                     final k = pair.key.text.trim();
                                     final v = pair.value.text.trim();
@@ -3224,7 +3880,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                         'stock': stock,
                                         'stock_quantity': stock,
                                         'unit': unit,
-                                        'category': categoryCtrl.text.trim(),
+                                        'category': categoryCtrl.text.trim().isNotEmpty ? categoryCtrl.text.trim() : 'General Store',
                                         'barcode': barcodeCtrl.text.trim(),
                                         'sku': resolvedSku,
                                         'low_stock_threshold': lowStock,
@@ -3246,7 +3902,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                       comparePrice: comparePrice,
                                       stock: stock,
                                       unit: unit,
-                                      category: categoryCtrl.text.trim(),
+                                      category: categoryCtrl.text.trim().isNotEmpty ? categoryCtrl.text.trim() : 'General Store',
                                       barcode: barcodeCtrl.text.trim(),
                                       lowStockThreshold: lowStock,
                                       description: descriptionCtrl.text.trim(),

@@ -17,7 +17,6 @@ import '../../features/products/screens/inventory_screen.dart';
 import '../../features/products/screens/low_stock_alerts_screen.dart';
 import '../../features/products/screens/price_checker_screen.dart';
 import '../../features/products/screens/batch_expiry_radar_screen.dart';
-import '../../features/pos/screens/damage_claim_vault_screen.dart';
 import '../../features/reservations/screens/reservations_list_screen.dart';
 import '../storage/token_storage.dart';
 
@@ -38,7 +37,6 @@ class AppRoutes {
   static const String reservations = '/merchant/reservations';
   static const String barcodeStudio = '/merchant/barcode-studio';
   static const String priceChecker = '/merchant/price-checker';
-  static const String damageClaims = '/merchant/damage-claims';
   static const String batchExpiry = '/merchant/batch-expiry';
   static const String profile = '/merchant/profile';
 }
@@ -181,13 +179,6 @@ final GoRouter appRouter = GoRouter(
           initialBarcode: barcode,
           initialQuery: query,
         );
-      },
-    ),
-    GoRoute(
-      path: AppRoutes.damageClaims,
-      builder: (context, state) {
-        TokenStorage.saveLastRoute(AppRoutes.damageClaims);
-        return const DamageClaimVaultScreen();
       },
     ),
     GoRoute(

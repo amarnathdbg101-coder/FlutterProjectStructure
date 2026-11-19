@@ -16,4 +16,15 @@ class AppAudioHapticFeedback {
       HapticFeedback.vibrate();
     } catch (_) {}
   }
+
+  /// Trigger urgent alert chime and heavy tactile pulses on new incoming pickup reservation
+  static void orderAlert() {
+    try {
+      HapticFeedback.heavyImpact();
+      SystemSound.play(SystemSoundType.alert);
+      Future.delayed(const Duration(milliseconds: 180), () {
+        HapticFeedback.heavyImpact();
+      });
+    } catch (_) {}
+  }
 }

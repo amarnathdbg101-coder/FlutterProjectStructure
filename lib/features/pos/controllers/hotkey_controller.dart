@@ -9,12 +9,6 @@ class HotkeyController extends BaseController {
   List<HotkeyItem> _hotkeys = [];
   List<HotkeyItem> get hotkeys => List.unmodifiable(_hotkeys);
 
-  MarginCheckResult? _lastMarginCheck;
-  MarginCheckResult? get lastMarginCheck => _lastMarginCheck;
-
-  bool _isCheckingMargin = false;
-  bool get isCheckingMargin => _isCheckingMargin;
-
   Future<void> loadHotkeys() async {
     setLoading(true);
     final res = await _repo.getHotkeys();
@@ -83,36 +77,5 @@ class HotkeyController extends BaseController {
       setError(res.error ?? 'Failed to delete hotkey');
       return false;
     }
-  }
-
-  // Live Margin Floor Shield
-  Future<MarginCheckResult?> checkMarginFloor({
-    required List<MarginCheckItem> items,
-    double billDiscount = 0.0,
-  }) async {
-    if (items.isEmpty) {
-      _lastMarginCheck = null;
-      notifyListeners();
-      return null;
-    }
-
-    _isCheckingMargin = true;
-    notifyListeners();
-
-    final res = await _repo.checkMarginFloor(items: items, billDiscount: billDiscount);
-    _isCheckingMargin = false;
-
-    if (res.success && res.data != null) {
-      _lastMarginCheck = res.data;
-      notifyListeners();
-      return res.data;
-    } else {
-      return null;
-    }
-  }
-
-  void clearMarginCheck() {
-    _lastMarginCheck = null;
-    notifyListeners();
   }
 }

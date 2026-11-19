@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_project_structure/core/network/api_response.dart';
 import 'package:flutter_project_structure/core/storage/local_cache_service.dart';
 import 'package:flutter_project_structure/core/localization/language_controller.dart';
 import 'package:flutter_project_structure/features/auth/controllers/auth_controller.dart';
@@ -9,6 +12,7 @@ import 'package:flutter_project_structure/features/pos/controllers/pos_controlle
 import 'package:flutter_project_structure/features/pos/controllers/cash_drawer_controller.dart';
 import 'package:flutter_project_structure/features/pos/controllers/hotkey_controller.dart';
 import 'package:flutter_project_structure/features/pos/models/pos_model.dart';
+import 'package:flutter_project_structure/features/pos/repositories/pos_repository.dart';
 import 'package:flutter_project_structure/features/pos/screens/pos_screen.dart';
 import 'package:flutter_project_structure/features/products/models/product_model.dart';
 
@@ -115,6 +119,52 @@ void main() {
       expect(fromJson.khataAmount, 0.0);
     });
 
+    test('server search does not replace the locally cached catalog', () async {
+      final repository = _ControlledPosRepository();
+      final controller = PosController(repository: repository);
+      addTearDown(controller.dispose);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.products, hasLength(2));
+      final matches = await controller.searchProducts('salt');
+
+      expect(matches, hasLength(1));
+      expect(matches.single.name, 'Tata Salt');
+      expect(controller.products, hasLength(2));
+    });
+
+    test('blocks duplicate checkout and cart edits while a sale is processing', () async {
+      final repository = _ControlledPosRepository()..blockSaleRequests = true;
+      final controller = PosController(repository: repository);
+      addTearDown(controller.dispose);
+      await Future<void>.delayed(Duration.zero);
+      controller.addToCart(
+        ProductModel(
+          id: 'checkout-item',
+          name: 'Checkout Item',
+          price: 25,
+          stock: 5,
+          category: 'General',
+        ),
+      );
+
+      final firstCheckout = controller.completeSale();
+      await Future<void>.delayed(Duration.zero);
+      final duplicateCheckout = await controller.completeSale();
+      controller.addCustomItem(name: 'Late item', price: 5);
+
+      expect(repository.saleRequestCount, 1);
+      expect(duplicateCheckout, isNull);
+      expect(controller.cart, hasLength(1));
+
+      repository.finishSale.complete();
+      final completedSale = await firstCheckout;
+
+      expect(completedSale?.totalAmount, 25);
+      expect(controller.cart, isEmpty);
+      expect(controller.isCompletingSale, isFalse);
+    });
+
     testWidgets('PosScreen desktop/wide checkout renders Split and Cash change return cards without error', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -164,10 +214,92 @@ void main() {
       expect(find.text('1. Cash Portion:'), findsOneWidget);
       expect(find.text('2. UPI Portion:'), findsOneWidget);
 
+      await tester.pump(const Duration(seconds: 5));
+
       langCtrl.dispose();
       authCtrl.dispose();
       drawerCtrl.dispose();
       hotkeyCtrl.dispose();
     });
   });
+}
+
+class _ControlledPosRepository extends PosRepository {
+  final List<ProductModel> _catalog = [
+    ProductModel(
+      id: 'salt',
+      name: 'Tata Salt',
+      price: 28,
+      stock: 10,
+      category: 'Grocery',
+    ),
+    ProductModel(
+      id: 'milk',
+      name: 'Amul Milk',
+      price: 30,
+      stock: 8,
+      category: 'Dairy',
+    ),
+  ];
+
+  final Completer<void> finishSale = Completer<void>();
+  bool blockSaleRequests = false;
+  int saleRequestCount = 0;
+
+  @override
+  Future<ApiResponse<List<ProductModel>>> searchProducts(String query) async {
+    final results = query.isEmpty
+        ? _catalog
+        : _catalog
+              .where((product) => product.name.toLowerCase().contains(query))
+              .toList();
+    return ApiResponse(success: true, data: results);
+  }
+
+  @override
+  Future<ApiResponse<List<SaleModel>>> getSales({
+    int page = 1,
+    int limit = 50,
+    String date = '',
+  }) async {
+    return ApiResponse(success: true, data: []);
+  }
+
+  @override
+  Future<ApiResponse<List<Map<String, dynamic>>>> listParkedBills() async {
+    return ApiResponse(success: true, data: []);
+  }
+
+  @override
+  Future<ApiResponse<bool>> deleteParkedBill(String idOrToken) async {
+    return ApiResponse(success: true, data: true);
+  }
+
+  @override
+  Future<ApiResponse<SaleModel>> createSale({
+    required String customerPhone,
+    String customerName = '',
+    required List<PosCartItem> items,
+    required double discountAmount,
+    required String paymentMethod,
+    PosSplitPayment? splitPayments,
+    String? idempotencyKey,
+  }) async {
+    saleRequestCount++;
+    if (blockSaleRequests) await finishSale.future;
+    final subtotal = items.fold<double>(0, (total, item) => total + item.total);
+    return ApiResponse(
+      success: true,
+      data: SaleModel(
+        billNumber: 'test-bill',
+        customerPhone: customerPhone,
+        items: items,
+        subtotal: subtotal,
+        discountAmount: discountAmount,
+        totalAmount: subtotal - discountAmount,
+        paymentMethod: paymentMethod,
+        splitPayments: splitPayments,
+      ),
+    );
+  }
 }

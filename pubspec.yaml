@@ -54,6 +54,13 @@ dependencies:
   printing: ^5.15.1
   mobile_scanner: ^7.4.2
   flutter_riverpod: 2.6.1
+  camera: ^0.12.2
+  path_provider: ^2.1.6
+  package_info_plus: ^9.0.1
+  open_filex: ^5.0.0
+  shorebird_code_push: ^2.0.7
+  speech_to_text: ^7.5.0
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
