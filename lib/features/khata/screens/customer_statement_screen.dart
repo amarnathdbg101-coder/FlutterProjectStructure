@@ -114,18 +114,6 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
               ],
             ),
             actions: [
-              // Direct 1-tap Native PDF Statement Share (Bluetooth, WhatsApp, Instagram, etc.)
-              IconButton(
-                icon: const Icon(Icons.share_rounded, size: 21, color: AppColors.primary),
-                tooltip: context.isHindi ? 'लेजर शेयर करें (WhatsApp, Bluetooth...)' : 'Share Statement (WhatsApp, Bluetooth...)',
-                onPressed: () => khata.shareStatementPdf(context, liveCustomer.mobile, customer: liveCustomer),
-              ),
-              // Direct 1-tap PDF Statement Download / Print
-              IconButton(
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 21, color: AppColors.primary),
-                tooltip: context.isHindi ? 'पीडीएफ लेजर' : 'PDF Statement',
-                onPressed: () => khata.openStatementPdf(context, liveCustomer.mobile, customer: liveCustomer),
-              ),
               // Direct 1-tap WhatsApp Reminder (if dues > 0)
               if (liveCustomer.balance > 0)
                 IconButton(
@@ -133,7 +121,7 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
                   tooltip: context.isHindi ? 'व्हाट्सएप तगादा भेजें' : 'Send WhatsApp Reminder',
                   onPressed: () => khata.sendWhatsAppReminder(context, liveCustomer, transactions: allTxs),
                 ),
-              // More Menu
+              // Clean 3-Dot Progressive Disclosure Menu
               PopupMenuButton<String>(
                 icon: Icon(
                   Icons.more_vert_rounded,
@@ -141,32 +129,89 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
                   color: isDark ? Colors.white : AppColors.textPrimary,
                 ),
                 tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
                 onSelected: (val) {
-                  if (val == 'delete_customer') {
-                    KhataDialogs.showDeleteCustomerDialog(context, liveCustomer);
-                  } else if (val == 'copy_summary') {
-                    final isHindi = context.isHindi;
-                    final shop = LocalCacheService.getShop();
-                    final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
-                    final text = SmartKhataReminderService.formatReminderMessage(
-                      customer: liveCustomer,
-                      shopName: shopName,
-                      shopUpiId: shop?.upiId,
-                      recentTransactions: allTxs,
-                      isHindi: isHindi,
-                    );
-                    Clipboard.setData(ClipboardData(text: text));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(context.tr('khata_copied_summary')),
-                        backgroundColor: AppColors.success,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
+                  switch (val) {
+                    case 'share_pdf':
+                      khata.shareStatementPdf(context, liveCustomer.mobile, customer: liveCustomer);
+                      break;
+                    case 'open_pdf':
+                      khata.openStatementPdf(context, liveCustomer.mobile, customer: liveCustomer);
+                      break;
+                    case 'credit_limit':
+                      KhataDialogs.showSetCreditLimitDialog(context, liveCustomer);
+                      break;
+                    case 'promise_date':
+                      KhataDialogs.showSetPromiseDateDialog(context, liveCustomer);
+                      break;
+                    case 'copy_summary':
+                      final isHindi = context.isHindi;
+                      final shop = LocalCacheService.getShop();
+                      final shopName = shop?.name.isNotEmpty == true ? shop!.name : 'ShopSilo Partner Store';
+                      final text = SmartKhataReminderService.formatReminderMessage(
+                        customer: liveCustomer,
+                        shopName: shopName,
+                        shopUpiId: shop?.upiId,
+                        recentTransactions: allTxs,
+                        isHindi: isHindi,
+                      );
+                      Clipboard.setData(ClipboardData(text: text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.tr('khata_copied_summary')),
+                          backgroundColor: AppColors.success,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      break;
+                    case 'delete_customer':
+                      KhataDialogs.showDeleteCustomerDialog(context, liveCustomer);
+                      break;
                   }
                 },
                 itemBuilder: (menuCtx) => [
+                  PopupMenuItem<String>(
+                    value: 'share_pdf',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.share_rounded, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text(menuCtx.isHindi ? 'लेजर पासबुक PDF शेयर करें' : 'Share Statement PDF'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'open_pdf',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 8),
+                        Text(menuCtx.isHindi ? 'लेजर पासबुक PDF देखें / प्रिंट' : 'Print Statement PDF'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'credit_limit',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.shield_outlined, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text(menuCtx.isHindi ? 'उधार सीमा तय करें (Credit Limit)' : 'Set Credit Limit'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'promise_date',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.warning),
+                        const SizedBox(width: 8),
+                        Text(menuCtx.isHindi ? 'पेमेंट वादा तारीख (Promise Date)' : 'Set Promise Date'),
+                      ],
+                    ),
+                  ),
                   PopupMenuItem<String>(
                     value: 'copy_summary',
                     child: Row(
@@ -280,75 +325,55 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
                             .withValues(alpha: 0.15),
                       ),
                       const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => KhataDialogs.showSetCreditLimitDialog(context, liveCustomer),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.shield_outlined,
-                                    size: 15,
-                                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Expanded(
-                                    child: Text(
-                                      liveCustomer.creditLimit > 0
-                                          ? '${context.tr("khata_credit_limit_label")}: ₹${liveCustomer.creditLimit.toStringAsFixed(0)} (${utilization.toStringAsFixed(0)}%)'
-                                          : '${context.tr("khata_credit_limit_label")}: ₹0',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: context.colorTextSecondary,
+                      if (liveCustomer.creditLimit > 0 || liveCustomer.promiseDate != null) ...[
+                        Row(
+                          children: [
+                            if (liveCustomer.creditLimit > 0)
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => KhataDialogs.showSetCreditLimitDialog(context, liveCustomer),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.shield_outlined, size: 14, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          '${context.tr("khata_credit_limit_label")}: ₹${liveCustomer.creditLimit.toStringAsFixed(0)} (${utilization.toStringAsFixed(0)}%)',
+                                          style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    ],
                                   ),
-                                  const Icon(Icons.edit_outlined, size: 13, color: AppColors.primary),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => KhataDialogs.showSetPromiseDateDialog(context, liveCustomer),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.calendar_today_outlined,
-                                    size: 15,
-                                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Expanded(
-                                    child: Text(
-                                      liveCustomer.promiseDate != null
-                                          ? '${context.isHindi ? "वादा" : "Promise"}: ${DateFormat("dd MMM").format(liveCustomer.promiseDate!)}'
-                                          : (context.isHindi ? 'तारीख तय करें' : 'Set date'),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: liveCustomer.promiseDate != null
-                                            ? AppColors.primary
-                                            : context.colorTextMuted,
+                            if (liveCustomer.promiseDate != null)
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => KhataDialogs.showSetPromiseDateDialog(context, liveCustomer),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      const Icon(Icons.event_outlined, size: 14, color: AppColors.primary),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          '${context.isHindi ? "वादा" : "Promise"}: ${DateFormat("dd MMM").format(liveCustomer.promiseDate!)}',
+                                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    ],
                                   ),
-                                  const Icon(Icons.edit_outlined, size: 13, color: AppColors.primary),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -709,55 +734,59 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        KhataDialogs.showAddTransactionModal(
-                          context,
-                          customer: liveCustomer,
-                          isCredit: true,
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.error,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        minimumSize: const Size.fromHeight(46),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                      icon: const Icon(Icons.arrow_outward_rounded, size: 17),
-                      label: Text(
-                        context.tr('khata_dialog_give_credit'),
-                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          KhataDialogs.showAddTransactionModal(
+                            context,
+                            customer: liveCustomer,
+                            isCredit: true,
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          elevation: 1,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                        icon: const Icon(Icons.arrow_outward_rounded, size: 18),
+                        label: Text(
+                          context.isHindi ? 'उधार दिया (+ दिए)' : '+ Give Credit',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        KhataDialogs.showAddTransactionModal(
-                          context,
-                          customer: liveCustomer,
-                          isCredit: false,
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.success,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        minimumSize: const Size.fromHeight(46),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                      icon: const Icon(Icons.arrow_downward_rounded, size: 17),
-                      label: Text(
-                        context.tr('khata_dialog_receive_payment'),
-                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          KhataDialogs.showAddTransactionModal(
+                            context,
+                            customer: liveCustomer,
+                            isCredit: false,
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                          elevation: 1,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                        icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                        label: Text(
+                          context.isHindi ? 'रुपये मिले (- जमा)' : '- Receive Cash',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ),
