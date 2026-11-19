@@ -9,13 +9,15 @@ import '../../../core/utils/date_time_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../analytics/controllers/analytics_controller.dart';
+import '../../analytics/models/analytics_model.dart';
+import '../../auth/controllers/auth_controller.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
 import '../repositories/pos_advanced_repository.dart';
 import '../services/sales_pdf_service.dart';
 import '../widgets/day_close_reconciliation_sheet.dart';
 import '../widgets/pos_bill_return_modal.dart';
-import '../../auth/controllers/auth_controller.dart';
 
 class TodaySalesScreen extends StatefulWidget {
   const TodaySalesScreen({super.key});
@@ -27,7 +29,8 @@ class TodaySalesScreen extends StatefulWidget {
 class _TodaySalesScreenState extends State<TodaySalesScreen> {
   bool _isDownloadingPdf = false;
   int _selectedWindowDays = 1; // 1 = Today (24 Hours), 10 = Last 10 Days Rolling Record
-  int _activeTabIndex = 0; // 0 = Sold Items Timeline, 1 = Bills, 2 = Ranking
+  int _activeTabIndex = 0; // 0 = Sold Items, 1 = Bills, 2 = Top Ranking
+  bool _showProfitBreakdown = false; // Toggle P&L breakdown drawer
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -36,6 +39,9 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PosController>().fetchBackendSales();
+      try {
+        Provider.of<AnalyticsController>(context, listen: false).fetchAnalytics();
+      } catch (_) {}
     });
   }
 
@@ -93,7 +99,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         : 'ShopSilo Partner Store';
 
     try {
-      // ⚡ Direct 1-Tap Native Share Sheet (Bluetooth, WhatsApp, Instagram, Quick Share, etc.)
+      // ⚡ Direct 1-Tap Universal Native Share Sheet (Bluetooth, WhatsApp, Instagram, Quick Share, etc.)
       await SalesPdfService.shareSalesSheet(
         shopName: effectiveShopName,
         items: allTimeSortedItems,
@@ -139,6 +145,12 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
   @override
   Widget build(BuildContext context) {
     final pos = context.watch<PosController>();
+    AnalyticsModel? analytics;
+    try {
+      analytics = Provider.of<AnalyticsController>(context).analytics;
+    } catch (_) {
+      analytics = null;
+    }
     final maxAge = _selectedWindowDays == 1 ? const Duration(hours: 24) : const Duration(days: 10);
 
     final allTimeSortedItems = pos.getTimeSortedSoldItems(maxAge: maxAge);
@@ -166,6 +178,22 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         khataRevenue += sale.totalAmount;
       }
     }
+
+    // Dynamic Real-time COGS and Net Profit Calculation
+    double totalCogs = 0.0;
+    for (final sale in recentSales) {
+      for (final item in sale.items) {
+        final cost = item.product.costPrice > 0 ? item.product.costPrice : (item.customPrice * 0.75);
+        totalCogs += cost * item.quantity;
+      }
+    }
+    final grossProfit = totalRevenue - totalCogs;
+    final proratedExpenses = _selectedWindowDays == 1
+        ? ((analytics?.totalExpenses ?? 0.0) / 30.0)
+        : ((analytics?.totalExpenses ?? 0.0) / 3.0);
+    final effectiveExpenses = proratedExpenses > 0 ? proratedExpenses : 0.0;
+    final netProfit = grossProfit - effectiveExpenses;
+    final marginPct = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).clamp(-100.0, 100.0) : 0.0;
 
     final is10Days = _selectedWindowDays == 10;
 
@@ -213,8 +241,8 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
         ),
         title: Text(
           is10Days
-              ? (context.isHindi ? '10-दिवसीय बिक्री' : '10-Day Sales Audit')
-              : (context.isHindi ? 'आज की बिक्री' : "Today's Sales"),
+              ? (context.isHindi ? '10-दिवसीय बिक्री व मुनाफा' : '10-Day Sales & Profit')
+              : (context.isHindi ? 'आज की बिक्री व मुनाफा' : "Today's Sales & Profit"),
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w800,
@@ -223,18 +251,18 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
           ),
         ),
         actions: [
-          // Quick Native Share (Bluetooth, WhatsApp, Instagram, etc.)
+          // Quick Universal Native Share (Bluetooth, WhatsApp, Instagram, etc.)
           IconButton(
             icon: const Icon(Icons.share_rounded, color: AppColors.primary, size: 21),
             tooltip: context.isHindi ? 'सेल रिपोर्ट शेयर करें (WhatsApp, Bluetooth...)' : 'Share Sales PDF (WhatsApp, Bluetooth...)',
             onPressed: _isDownloadingPdf ? null : _downloadEodPdf,
           ),
-          // Quick PDF Download
+          // Quick PDF Download & Print Layout
           IconButton(
             icon: _isDownloadingPdf
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFDC2626)))
                 : const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 22),
-            tooltip: context.isHindi ? 'P&L PDF डाउनलोड करें' : 'Download Executive P&L PDF',
+            tooltip: context.isHindi ? 'P&L PDF डाउनलोड / प्रिंट करें' : 'Download Executive P&L PDF',
             onPressed: _isDownloadingPdf ? null : _downloadEodPdf,
           ),
           // Quick Refresh
@@ -242,11 +270,17 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
             icon: Icon(Icons.refresh_rounded, color: context.colorTextPrimary, size: 21),
             tooltip: context.isHindi ? 'डेटा रीफ्रेश करें' : 'Refresh Sales',
             onPressed: () async {
-              await context.read<PosController>().fetchBackendSales();
+              final List<Future> refreshTasks = [
+                context.read<PosController>().fetchBackendSales(),
+              ];
+              try {
+                refreshTasks.add(Provider.of<AnalyticsController>(context, listen: false).fetchAnalytics());
+              } catch (_) {}
+              await Future.wait(refreshTasks);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(context.isHindi ? '✓ बिक्री डेटा रीफ्रेश हुआ' : '✓ Sales data refreshed'),
+                    content: Text(context.isHindi ? '✓ बिक्री व मुनाफा डेटा रीफ्रेश हुआ' : '✓ Sales & Profit data refreshed'),
                     duration: const Duration(seconds: 1),
                     backgroundColor: AppColors.success,
                   ),
@@ -262,6 +296,9 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
             elevation: 4,
             onSelected: (val) async {
               switch (val) {
+                case 'analytics':
+                  context.push('/merchant/analytics');
+                  break;
                 case 'day_close':
                   DayCloseReconciliationSheet.show(context);
                   break;
@@ -271,6 +308,16 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'analytics',
+                child: Row(
+                  children: [
+                    const Icon(Icons.analytics_rounded, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 10),
+                    Text(ctx.isHindi ? 'व्यापार व मुनाफा रिपोर्ट (Analytics)' : 'Profit & Shop Analytics'),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'day_close',
                 child: Row(
@@ -300,7 +347,13 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
       child: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await context.read<PosController>().fetchBackendSales();
+            final List<Future> refreshTasks = [
+              context.read<PosController>().fetchBackendSales(),
+            ];
+            try {
+              refreshTasks.add(Provider.of<AnalyticsController>(context, listen: false).fetchAnalytics());
+            } catch (_) {}
+            await Future.wait(refreshTasks);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -310,7 +363,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Consolidated Executive Hero Card
+                  // 1. Consolidated Executive Hero Card (Sales + Profit Unified)
                   AppCard(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -333,8 +386,8 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                 const SizedBox(width: 8),
                                 Text(
                                   is10Days
-                                      ? (context.isHindi ? '10-दिवसीय कुल बिक्री' : '10-DAY TOTAL SALES')
-                                      : (context.isHindi ? 'आज की कुल बिक्री' : "TODAY'S TOTAL SALES"),
+                                      ? (context.isHindi ? '10-दिवसीय बिक्री व मुनाफा' : '10-DAY TOTAL SALES')
+                                      : (context.isHindi ? 'आज की कुल बिक्री व मुनाफा' : "TODAY'S TOTAL SALES"),
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w800,
@@ -356,7 +409,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _MiniPill(
-                                    label: context.isHindi ? 'आज (24h)' : 'Today (24h)',
+                                    label: context.isHindi ? 'आज (24h)' : 'Today',
                                     isSelected: !is10Days,
                                     onTap: () => setState(() => _selectedWindowDays = 1),
                                   ),
@@ -370,39 +423,117 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
 
-                        // Prominent Revenue & Secondary metrics
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              '₹${totalRevenue.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w900,
-                                color: context.colorTextPrimary,
-                                letterSpacing: -0.5,
+                        // Prominent Revenue & Profit Metrics
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isNarrow = constraints.maxWidth < 420;
+                            final salesCol = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.isHindi ? 'कुल बिक्री (Sales)' : 'Total Sales',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colorTextSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '₹${totalRevenue.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w900,
+                                    color: context.colorTextPrimary,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$totalBills ${context.isHindi ? 'बिल' : 'bills'} • $totalUnitsSold ${context.isHindi ? 'सामान' : 'items'}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colorTextMuted,
+                                  ),
+                                ),
+                              ],
+                            );
+
+                            final profitCol = Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppColors.success.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              '•  $totalBills ${context.isHindi ? 'बिल' : 'bills'}  •  $totalUnitsSold ${context.isHindi ? 'आइटम' : 'items'}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: context.colorTextSecondary,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.trending_up_rounded, size: 14, color: AppColors.success),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        context.isHindi ? 'शुद्ध मुनाफा' : 'Net Profit',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.success,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${netProfit >= 0 ? "+" : ""}₹${netProfit.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      color: netProfit >= 0 ? AppColors.success : AppColors.error,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  AppBadge(
+                                    label: '${marginPct.toStringAsFixed(1)}% ${context.isHindi ? 'मार्जिन' : 'margin'}',
+                                    type: netProfit >= 0 ? AppBadgeType.success : AppBadgeType.error,
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                            );
+
+                            if (isNarrow) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  salesCol,
+                                  const SizedBox(height: 12),
+                                  profitCol,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(child: salesCol),
+                                const SizedBox(width: 12),
+                                profitCol,
+                              ],
+                            );
+                          },
                         ),
 
                         const SizedBox(height: 14),
                         Divider(height: 1, color: context.colorBorder),
                         const SizedBox(height: 12),
 
-                        // Cash, UPI, Khata breakdown bar
+                        // Cash, UPI, Khata breakdown bar & Interactive Profit Toggle
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           physics: const BouncingScrollPhysics(),
@@ -428,13 +559,50 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                 color: AppColors.warning,
                                 icon: Icons.menu_book_rounded,
                               ),
-                              const SizedBox(width: 14),
+                              Container(width: 1, height: 18, color: context.colorBorder, margin: const EdgeInsets.symmetric(horizontal: 10)),
+
+                              // Interactive Profit Breakdown Toggle Pill
+                              InkWell(
+                                onTap: () => setState(() => _showProfitBreakdown = !_showProfitBreakdown),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: _showProfitBreakdown ? AppColors.primary.withValues(alpha: 0.12) : context.colorSurfaceSubtle,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: _showProfitBreakdown ? AppColors.primary : context.colorBorder,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _showProfitBreakdown ? Icons.keyboard_arrow_up_rounded : Icons.calculate_outlined,
+                                        size: 14,
+                                        color: _showProfitBreakdown ? AppColors.primary : context.colorTextSecondary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        context.isHindi ? 'मुनाफा हिसाब' : 'P&L Details',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: _showProfitBreakdown ? AppColors.primary : context.colorTextPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+
                               // Quick PDF Export Pill
                               InkWell(
                                 onTap: _isDownloadingPdf ? null : _downloadEodPdf,
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFEF2F2),
                                     borderRadius: BorderRadius.circular(8),
@@ -444,9 +612,9 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 14),
-                                      const SizedBox(width: 5),
+                                      const SizedBox(width: 4),
                                       Text(
-                                        context.isHindi ? 'PDF रिपोर्ट' : 'P&L PDF',
+                                        context.isHindi ? 'P&L PDF' : 'P&L PDF',
                                         style: const TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
@@ -460,13 +628,94 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                             ],
                           ),
                         ),
+
+                        // ⚡ Expandable Profit & Expenses Calculation Details Box
+                        if (_showProfitBreakdown) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: context.colorSurfaceSubtle,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: context.colorBorder),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      context.isHindi ? 'दुकानदार शुद्ध मुनाफा गणित' : 'SHOP PROFIT & LOSS MATHEMATICS',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                        color: context.colorTextMuted,
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => context.push('/merchant/analytics'),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            context.isHindi ? 'विस्तृत रिपोर्ट →' : 'Full Report →',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                _buildFormulaItem(
+                                  context,
+                                  title: context.isHindi ? '+ कुल बिक्री आय (Sales Revenue)' : '+ Total Sales Revenue',
+                                  value: '+₹${totalRevenue.toStringAsFixed(0)}',
+                                  color: AppColors.success,
+                                ),
+                                const SizedBox(height: 4),
+                                _buildFormulaItem(
+                                  context,
+                                  title: context.isHindi ? '- सामान खरीद लागत (Estimated COGS)' : '- Cost of Goods Sold (COGS)',
+                                  value: '-₹${totalCogs.toStringAsFixed(0)}',
+                                  color: AppColors.error,
+                                ),
+                                if (effectiveExpenses > 0) ...[
+                                  const SizedBox(height: 4),
+                                  _buildFormulaItem(
+                                    context,
+                                    title: context.isHindi ? '- दुकान खर्चे (Expenses)' : '- Store Expenses',
+                                    value: '-₹${effectiveExpenses.toStringAsFixed(0)}',
+                                    color: AppColors.error,
+                                  ),
+                                ],
+                                const SizedBox(height: 6),
+                                Divider(height: 1, color: context.colorBorder),
+                                const SizedBox(height: 6),
+                                _buildFormulaItem(
+                                  context,
+                                  title: context.isHindi ? '= शुद्ध जेब मुनाफा (Net Pocket Profit)' : '= Net Pocket Profit',
+                                  value: '${netProfit >= 0 ? "+" : ""}₹${netProfit.toStringAsFixed(0)} (${marginPct.toStringAsFixed(1)}%)',
+                                  color: netProfit >= 0 ? AppColors.success : AppColors.error,
+                                  isBold: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 12),
 
-                  // 2. Sleek 3-Tab Segmented Switcher
+                  // 2. Sleek 3-Tab Segmented Switcher (Preserves clean tab state)
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -509,7 +758,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
 
                   const SizedBox(height: 10),
 
-                  // 3. Customer Style Spacious Search Bar & Speech-to-Text
+                  // 3. Customer Style Spacious Search Bar
                   AppSearchField(
                     controller: _searchController,
                     hintText: _activeTabIndex == 0
@@ -537,66 +786,75 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
                       ...filteredSoldItems.map((item) => _buildSoldProductTimelineTile(context, item)),
                   ],
 
-                  // 5. Tab 1: Chronological Bills List
+                  // 5. Tab 1: Completed Sales Bills with Direct 1-Tap Actions
                   if (_activeTabIndex == 1) ...[
                     if (filteredBills.isEmpty)
                       _buildEmptyState(
                         context,
                         message: _searchQuery.isNotEmpty
                             ? (context.isHindi ? 'कोई मेल खाता बिल नहीं मिला' : 'No matching bills found')
-                            : (context.isHindi ? 'इस अवधि में कोई बिल नहीं कटा' : 'No bills found in this period'),
+                            : (context.isHindi ? 'इस अवधि में कोई बिल नहीं बना' : 'No sales bills recorded in this period'),
                       )
                     else
                       ...filteredBills.map((sale) => _buildSaleBillTile(context, sale)),
                   ],
 
-                  // 6. Tab 2: Sold Products Ranking
+                  // 6. Tab 2: Top Selling Products Leaderboard
                   if (_activeTabIndex == 2) ...[
                     if (filteredRanking.isEmpty)
                       _buildEmptyState(
                         context,
                         message: _searchQuery.isNotEmpty
                             ? (context.isHindi ? 'कोई मेल खाता उत्पाद नहीं मिला' : 'No matching products found')
-                            : (context.isHindi ? 'कोई रैंकिंग डेटा उपलब्ध नहीं है' : 'No product ranking data available'),
+                            : (context.isHindi ? 'रैंकिंग के लिए अभी कोई बिक्री नहीं हुई' : 'No sales data to generate ranking'),
                       )
                     else
                       ...filteredRanking.asMap().entries.map((entry) {
                         final index = entry.key;
-                        final item = entry.value;
-                        final name = item['name'] as String;
-                        final qty = item['qty'] as int;
-                        final unitPrice = (item['unit_price'] as double);
-                        final total = (item['total'] as double);
+                        final r = entry.value;
+                        final name = r['name'] as String;
+                        final qty = r['quantity'] as int;
+                        final total = (r['total_revenue'] as num).toDouble();
+                        final unitPrice = qty > 0 ? (total / qty) : 0.0;
                         final pct = totalRevenue > 0 ? (total / totalRevenue) : 0.0;
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: AppCard(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             child: Row(
                               children: [
-                                // Rank badge
+                                // Rank Badge (Clean metallic badge, strictly zero rainbow)
                                 Container(
-                                  width: 32,
-                                  height: 32,
+                                  width: 28,
+                                  height: 28,
                                   decoration: BoxDecoration(
                                     color: index == 0
-                                        ? context.colorSuccessLight
-                                        : context.colorSurfaceSubtle,
+                                        ? const Color(0xFFFEF3C7)
+                                        : (index == 1
+                                            ? const Color(0xFFF1F5F9)
+                                            : (index == 2 ? const Color(0xFFFED7AA) : context.colorSurfaceSubtle)),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
                                       color: index == 0
-                                          ? AppColors.success.withValues(alpha: 0.3)
-                                          : context.colorBorder,
+                                          ? const Color(0xFFF59E0B)
+                                          : (index == 1
+                                              ? const Color(0xFF94A3B8)
+                                              : (index == 2 ? const Color(0xFFF97316) : context.colorBorder)),
+                                      width: 1,
                                     ),
                                   ),
                                   alignment: Alignment.center,
                                   child: Text(
                                     '#${index + 1}',
                                     style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: index == 0 ? AppColors.success : context.colorTextSecondary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
+                                      color: index == 0
+                                          ? const Color(0xFFB45309)
+                                          : (index == 1
+                                              ? const Color(0xFF475569)
+                                              : (index == 2 ? const Color(0xFFC2410C) : context.colorTextSecondary)),
                                     ),
                                   ),
                                 ),
@@ -702,7 +960,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
     );
   }
 
-  /// Builds a timeline card for an individual sold product sorted by sale time
+  /// Builds an individual timeline card for a sold product
   Widget _buildSoldProductTimelineTile(BuildContext context, SoldProductTimelineItem item) {
     final isCash = item.paymentMethod.toLowerCase() == 'cash';
     final isUpi = item.paymentMethod.toLowerCase() == 'upi';
@@ -818,99 +1076,273 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
     );
   }
 
+  /// Builds a high-utility invoice passbook card for a completed bill with direct 1-tap Share & Print
   Widget _buildSaleBillTile(BuildContext context, SaleModel sale) {
     final timeStr = AppDateTimeUtils.formatTime(sale.createdAt);
     final isCash = sale.paymentMethod.toLowerCase() == 'cash';
     final isUpi = sale.paymentMethod.toLowerCase() == 'upi';
 
-    Color modeColor = isCash ? AppColors.success : (isUpi ? AppColors.primary : AppColors.warning);
+    final Color modeColor = isCash ? AppColors.success : (isUpi ? AppColors.primary : AppColors.warning);
 
-    String paymentLabel = isCash
+    final String paymentLabel = isCash
         ? (context.isHindi ? 'नकद' : 'CASH')
         : (isUpi ? 'UPI' : (context.isHindi ? 'उधार' : 'KHATA'));
 
-    String customerText = sale.customerPhone.isNotEmpty
+    final String customerText = sale.customerPhone.isNotEmpty
         ? sale.customerPhone
         : (context.isHindi ? 'काउंटर ग्राहक' : 'Walk-in Customer');
+
+    final authShop = context.read<AuthController>().currentShop;
+    final cachedShop = LocalCacheService.getShop();
+    final shop = authShop ?? cachedShop;
+    final rawShopName = (shop?.name ?? '').trim();
+    final shopName = rawShopName.isNotEmpty && rawShopName != 'ShopSilo Retail Store'
+        ? rawShopName
+        : (cachedShop?.name.trim().isNotEmpty ?? false
+            ? cachedShop!.name.trim()
+            : 'ShopSilo Retail Store');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: AppCard(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        child: Row(
+        padding: const EdgeInsets.all(12),
+        onTap: () => _showSaleActionsSheet(context, sale),
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: modeColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                isCash ? Icons.payments_rounded : (isUpi ? Icons.qr_code_2_rounded : Icons.menu_book_rounded),
-                color: modeColor,
-                size: 17,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            // Row 1: Bill Header & Amount
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: modeColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isCash ? Icons.payments_rounded : (isUpi ? Icons.qr_code_2_rounded : Icons.menu_book_rounded),
+                    color: modeColor,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          '${context.isHindi ? 'बिल' : 'Bill'} #${sale.billNumber ?? "1001"}',
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.bold,
-                            color: context.colorTextPrimary,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${context.isHindi ? 'बिल' : 'Bill'} #${sale.billNumber ?? "1001"}',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.bold,
+                                color: context.colorTextPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          const SizedBox(width: 6),
+                          Text(
+                            timeStr,
+                            style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(height: 2),
                       Text(
-                        timeStr,
-                        style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                        '${sale.items.length} ${context.isHindi ? 'सामान' : 'items'} • $customerText',
+                        style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${sale.items.length} ${context.isHindi ? 'सामान' : 'items'} • $customerText',
-                    style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '₹${sale.totalAmount.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: context.colorTextPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    AppBadge(
+                      label: paymentLabel,
+                      type: isCash
+                          ? AppBadgeType.success
+                          : (isUpi ? AppBadgeType.primary : AppBadgeType.warning),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+
+            const SizedBox(height: 10),
+            Divider(height: 1, color: context.colorBorder),
+            const SizedBox(height: 8),
+
+            // Row 2: Direct 1-Tap Quick Actions Bar (Share, Print, Return)
+            Row(
               children: [
-                Text(
-                  '₹${sale.totalAmount.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
-                    color: context.colorTextPrimary,
+                // Quick 1-Tap Universal Native Share
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      context.read<PosController>().shareThermalReceiptPdf(
+                        sale,
+                        shopName,
+                        shopAddress: shop?.address ?? '',
+                        shopPhone: shop?.phone ?? shop?.whatsappNumber ?? '',
+                        shopGstin: shop?.gstin ?? '',
+                        upiId: shop?.upiId ?? '',
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.share_rounded, size: 14, color: AppColors.primary),
+                          const SizedBox(width: 5),
+                          Text(
+                            context.isHindi ? 'शेयर' : 'Share',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                AppBadge(
-                  label: paymentLabel,
-                  type: isCash
-                      ? AppBadgeType.success
-                      : (isUpi ? AppBadgeType.primary : AppBadgeType.warning),
+                const SizedBox(width: 8),
+
+                // Quick 1-Tap Thermal Printer Layout
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      context.read<PosController>().generateThermalReceiptPdf(
+                        context,
+                        sale,
+                        shopName,
+                        shopAddress: shop?.address ?? '',
+                        shopPhone: shop?.phone ?? shop?.whatsappNumber ?? '',
+                        shopGstin: shop?.gstin ?? '',
+                        upiId: shop?.upiId ?? '',
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: context.colorSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: context.colorBorder),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.print_rounded, size: 14, color: context.colorTextPrimary),
+                          const SizedBox(width: 5),
+                          Text(
+                            context.isHindi ? 'प्रिंट' : 'Print',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: context.colorTextPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Quick 1-Tap Return Action
+                InkWell(
+                  onTap: () {
+                    PosBillReturnModal.show(
+                      context,
+                      sale: sale,
+                      onReturnSuccess: () {
+                        context.read<PosController>().fetchBackendSales();
+                      },
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.assignment_return_rounded, size: 14, color: AppColors.warning),
+                        const SizedBox(width: 4),
+                        Text(
+                          context.isHindi ? 'वापसी' : 'Return',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.warning,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
           ],
         ),
-        onTap: () => _showSaleActionsSheet(context, sale),
       ),
+    );
+  }
+
+  Widget _buildFormulaItem(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required Color color,
+    bool isBold = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: isBold ? 12 : 11.5,
+            fontWeight: isBold ? FontWeight.w800 : FontWeight.w500,
+            color: isBold ? context.colorTextPrimary : context.colorTextSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: isBold ? 13 : 12,
+            fontWeight: isBold ? FontWeight.w900 : FontWeight.w700,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1033,7 +1465,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 2. Print Thermal Receipt (Reusable AppButton)
+              // 2. Print Thermal Receipt
               AppButton.outline(
                 text: isHindi ? 'थर्मल रसीद प्रिंट करें (58mm/80mm)' : 'Print Thermal Slip (58mm/80mm)',
                 icon: Icons.print_rounded,
@@ -1053,7 +1485,7 @@ class _TodaySalesScreenState extends State<TodaySalesScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 2. Process Bill Return & Restock (Reusable AppButton)
+              // 3. Process Bill Return & Restock
               AppButton.outline(
                 text: isHindi ? 'सामान वापसी / रिफंड दर्ज करें (Return)' : 'Process Return & Restock',
                 icon: Icons.assignment_return_rounded,
@@ -1239,21 +1671,18 @@ class _SegmentTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(9),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(vertical: 7),
         decoration: BoxDecoration(
           color: isSelected ? context.colorSurface : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? AppColors.primary.withValues(alpha: 0.25) : Colors.transparent,
-          ),
+          borderRadius: BorderRadius.circular(9),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 4,
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 3,
                     offset: const Offset(0, 1),
                   ),
                 ]
@@ -1268,31 +1697,27 @@ class _SegmentTab extends StatelessWidget {
               color: isSelected ? AppColors.primary : context.colorTextMuted,
             ),
             const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: isSelected ? AppColors.primary : context.colorTextSecondary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: isSelected ? context.colorTextPrimary : context.colorTextSecondary,
               ),
             ),
             if (count > 0) ...[
-              const SizedBox(width: 5),
+              const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary.withValues(alpha: 0.12) : context.colorSurfaceSubtle,
+                  color: isSelected ? AppColors.primary.withValues(alpha: 0.12) : context.colorBorder,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '$count',
                   style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                     color: isSelected ? AppColors.primary : context.colorTextMuted,
                   ),
                 ),
