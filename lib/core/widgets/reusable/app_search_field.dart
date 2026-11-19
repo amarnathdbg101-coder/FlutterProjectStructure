@@ -1,19 +1,20 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../constants/app_colors.dart';
 import '../../localization/language_controller.dart';
 import '../../services/voice_input_service.dart';
 import 'app_voice_icon_button.dart';
 
 /// Universal Production-Grade Search Input Field for ShopSilo.
-/// Features built-in debouncing, clear button, optional barcode scanner button,
-/// speech-to-text voice search button, and consistent styling across screens.
+/// Features built-in debouncing, clear button, speech-to-text voice search,
+/// and consistent styling across screens.
 class AppSearchField extends StatefulWidget {
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final VoidCallback? onClear;
-  final VoidCallback? onBarcodeTap;
   final String hintText;
   final bool autofocus;
   final bool enableVoice;
@@ -27,7 +28,6 @@ class AppSearchField extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.onClear,
-    this.onBarcodeTap,
     this.hintText = 'Search items by name, brand, or SKU...',
     this.autofocus = false,
     this.enableVoice = true,
@@ -123,7 +123,7 @@ class _AppSearchFieldState extends State<AppSearchField> {
             : widget.hintText;
 
         return Container(
-          height: 48,
+          height: 52,
           decoration: BoxDecoration(
             color: context.colorSurface,
             borderRadius: BorderRadius.circular(12),
@@ -137,13 +137,15 @@ class _AppSearchFieldState extends State<AppSearchField> {
               BoxShadow(
                 color: isListening
                     ? AppColors.error.withValues(alpha: 0.15)
-                    : Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.03),
+                    : Colors.black.withValues(
+                        alpha: context.isDark ? 0.2 : 0.03,
+                      ),
                 blurRadius: isListening ? 8 : 4,
                 offset: const Offset(0, 1),
               ),
             ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
             children: [
               Icon(
@@ -151,11 +153,9 @@ class _AppSearchFieldState extends State<AppSearchField> {
                 size: 20,
                 color: isListening
                     ? AppColors.error
-                    : (isFocused
-                        ? AppColors.primary
-                        : context.colorTextMuted),
+                    : (isFocused ? AppColors.primary : context.colorTextMuted),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: TextField(
                   controller: _effectiveController,
@@ -182,19 +182,29 @@ class _AppSearchFieldState extends State<AppSearchField> {
                     hintText: dynamicHint,
                     hintStyle: TextStyle(
                       fontSize: 13.5,
-                      color: isListening ? AppColors.error : context.colorTextMuted,
-                      fontWeight: isListening ? FontWeight.w600 : FontWeight.normal,
+                      color: isListening
+                          ? AppColors.error
+                          : context.colorTextMuted,
+                      fontWeight: isListening
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                 ),
               ),
               if (_hasText)
-                InkWell(
-                  onTap: _handleClear,
-                  borderRadius: BorderRadius.circular(16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.cancel_rounded, size: 18, color: context.colorTextMuted),
+                IconButton(
+                  tooltip: isHindi ? 'खोज साफ़ करें' : 'Clear search',
+                  constraints: const BoxConstraints.tightFor(
+                    width: 44,
+                    height: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: _handleClear,
+                  icon: Icon(
+                    Icons.cancel_rounded,
+                    size: 18,
+                    color: context.colorTextMuted,
                   ),
                 ),
               if (widget.enableVoice) ...[
@@ -213,49 +223,32 @@ class _AppSearchFieldState extends State<AppSearchField> {
                   },
                 ),
               ],
-              if (widget.onBarcodeTap != null) ...[
-                const SizedBox(width: 2),
-                InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: widget.onBarcodeTap,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: const Icon(
-                      Icons.qr_code_scanner_rounded,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
               if (widget.showSubmitButton) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
                 Material(
-                  color: context.isDark ? const Color(0xFF334155) : const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(10),
+                  color: context.isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(12),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     onTap: () {
                       _debounceTimer?.cancel();
                       widget.onChanged?.call(_effectiveController.text.trim());
-                      widget.onSubmitted?.call(_effectiveController.text.trim());
+                      widget.onSubmitted?.call(
+                        _effectiveController.text.trim(),
+                      );
                     },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.search_rounded, size: 15, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(
-                            isHindi ? 'सर्च' : 'Search',
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Tooltip(
+                        message: isHindi ? 'खोजें' : 'Search',
+                        child: const Icon(
+                          Icons.search_rounded,
+                          size: 20,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),

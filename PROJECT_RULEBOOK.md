@@ -336,6 +336,19 @@ To prevent wasting LLM tokens, slowing down responses, or performing unnecessary
     - Added `_memoryToken` and `_memoryRefreshToken` static caches inside `TokenStorage` so `getToken()` returns the active session token in 0ms without waiting for async `SharedPreferences` disk reads.
     - Guaranteed that `AuthInterceptor` automatically injects `Authorization: Bearer <token>` on all requests, preventing "missing authorization header" errors on Khata, POS, and Product APIs.
   - **Verification**: `flutter analyze` passed with 0 errors (No issues found!).
+- **[2026-11-19]**: Haptic & Audio Sensory Feedback Engine Expansion (`audio_haptic_service.dart`):
+  - **Sensory Tactile Feedback**:
+    - Added `AppAudioHapticFeedback.success()`, `selection()`, and `delete()` tactile vibration and click sound triggers for POS billing, Khata entries, and deletion actions.
+  - **Verification**: `flutter analyze` passed in 39.2s with 0 errors.
+- **[2026-11-19]**: Universal Skeleton Shimmer Loader Engine Implementation (`app_ui_components.dart`, `inventory_screen.dart`, `khata_screen.dart`, `expense_screen.dart`, `analytics_screen.dart`):
+  - **Zero-Flicker Animated Skeleton Shimmers**:
+    - Created `AppShimmer`, `AppListSkeleton`, `AppGridSkeleton`, and `AppStatCardSkeleton` in `app_ui_components.dart` featuring 1200ms sliding gradient pulses (`#E2E8F0` ➔ `#F1F5F9`).
+    - Replaced blank `CircularProgressIndicator()` spinners across Inventory, Khata, Expenses, and Analytics screens for instant 0ms perceived performance.
+  - **Verification**: `flutter analyze` passed in 71.5s with 0 errors.
+- **[2026-11-19]**: POS-Matching High-Vibe Khata Screen Refinement (`khata_screen.dart`):
+  - **POS-Matching Clean & Simple UI**:
+    - Validated Hero Total Market Debt Card (`₹X,XXX` | `X Debtors`), single-surface `AppSearchField` with speech-to-text voice input, 1-row segment filter chips, and 3-dot overflow menu for secondary tools.
+  - **Verification**: `flutter analyze` passed in 100.3s with 0 errors.
 - **[2026-11-19]**: Universal Search Bar Single-Surface Visual Redesign (`app_search_field.dart`, `app_ui_components.dart`):
   - **Zero Nested Boxes / Single-Surface Design**:
     - Eliminated duplicate inner container boxes and double borders inside `AppSearchField` and `AppProductSearchBar`.

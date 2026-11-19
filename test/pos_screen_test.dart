@@ -71,6 +71,23 @@ void main() {
     expect(find.text('POS Billing Counter Ready'), findsOneWidget);
     expect(find.text('+ Add Loose Charge'), findsOneWidget);
 
+    tester.view.physicalSize = const Size(320, 844);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip('Scan barcode'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Tooltip &&
+            (w.message == 'Voice Search / Dictation' ||
+                w.message == 'बोलकर खोजें / लिखें' ||
+                (w.message?.toLowerCase().contains('voice') ?? false)),
+      ),
+      findsWidgets,
+    );
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+
     // 2. Add an item to cart and verify _PosCartItemTile renders cleanly
     posCtrl.addToCart(testProducts[0]);
     await tester.pumpAndSettle();

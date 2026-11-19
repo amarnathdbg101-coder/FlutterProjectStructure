@@ -9,7 +9,6 @@ import '../../../core/utils/date_time_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
-import '../../../core/widgets/reusable/app_search_field.dart';
 import '../controllers/pos_controller.dart';
 import '../models/pos_model.dart';
 import '../repositories/pos_advanced_repository.dart';

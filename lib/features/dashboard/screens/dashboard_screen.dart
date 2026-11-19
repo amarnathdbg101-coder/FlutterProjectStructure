@@ -12,6 +12,7 @@ import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/widgets/merchant_drawer.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../../../core/widgets/store_qr_dialog.dart';
 import '../../../core/services/data_sync_service.dart';
 import '../../../core/storage/local_cache_service.dart';
@@ -45,6 +46,26 @@ class _DashboardScreenState extends State<DashboardScreen>
       DataSyncService().runBackgroundSync(context);
       AppUpdateDialog.showIfAvailable(context);
     });
+  }
+
+  void _openBarcodeScanner(BuildContext context) {
+    MobileBarcodeScannerDialog.show(
+      context,
+      title: context.isHindi ? 'बारकोड स्कैन करें' : 'Scan Product Barcode',
+      subtitle: context.isHindi
+          ? 'रेट व स्टॉक तुरंत देखने के लिए स्कैन करें'
+          : 'Scan barcode to check live rate & stock',
+      autoCloseOnSuccess: true,
+      onBarcodeScanned: (barcode) async {
+        final clean = barcode.trim();
+        if (clean.isNotEmpty) {
+          context.push(
+            '/merchant/price-checker?barcode=${Uri.encodeComponent(clean)}',
+          );
+        }
+        return true;
+      },
+    );
   }
 
   @override
@@ -99,6 +120,16 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           overflow: TextOverflow.ellipsis,
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.qr_code_scanner_rounded,
+              color: AppColors.primary,
+            ),
+            tooltip: context.isHindi ? 'बारकोड स्कैन करें' : 'Scan barcode',
+            onPressed: () => _openBarcodeScanner(context),
+          ),
+        ],
       ),
       drawer: MerchantDrawer(
         onShowQr: (slug, name) => showStoreQrDialog(context, shop),

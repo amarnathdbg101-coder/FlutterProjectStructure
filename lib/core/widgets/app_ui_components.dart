@@ -2,11 +2,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
-import '../services/voice_input_service.dart';
 import '../utils/image_utils.dart';
-import 'reusable/app_voice_icon_button.dart';
+import 'reusable/app_search_field.dart';
 
 export 'reusable/app_reusable.dart';
 
@@ -100,7 +100,12 @@ class AppStatCard extends StatelessWidget {
     return AppCard(
       padding: const EdgeInsets.all(13),
       onTap: onTap,
-      border: isAlert ? Border.all(color: AppColors.error.withValues(alpha: 0.5), width: 1.2) : null,
+      border: isAlert
+          ? Border.all(
+              color: AppColors.error.withValues(alpha: 0.5),
+              width: 1.2,
+            )
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -127,11 +132,7 @@ class AppStatCard extends StatelessWidget {
                   color: effectiveIconBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  icon,
-                  size: 15,
-                  color: effectiveIconColor,
-                ),
+                child: Icon(icon, size: 15, color: effectiveIconColor),
               ),
             ],
           ),
@@ -163,7 +164,9 @@ class AppStatCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: isAlert ? AppColors.error : context.colorTextMuted,
+                        color: isAlert
+                            ? AppColors.error
+                            : context.colorTextMuted,
                       ),
                     ),
                   ),
@@ -210,10 +213,7 @@ class AppSectionHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
     );
@@ -325,7 +325,11 @@ class AppActionTile extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_right_rounded, size: 18, color: context.colorTextMuted),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: context.colorTextMuted,
+          ),
         ],
       ),
     );
@@ -384,7 +388,11 @@ class AppSummaryBanner extends StatelessWidget {
                         color: context.colorSurfaceSubtle,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(icon, size: 16, color: context.colorTextSecondary),
+                      child: Icon(
+                        icon,
+                        size: 16,
+                        color: context.colorTextSecondary,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -429,7 +437,10 @@ class AppSummaryBanner extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(110, 38),
                 padding: const EdgeInsets.symmetric(horizontal: 14),
-                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               child: Text(actionLabel!),
             ),
@@ -438,7 +449,6 @@ class AppSummaryBanner extends StatelessWidget {
     );
   }
 }
-
 
 /// Standard, production-grade Avatar component.
 /// Seamlessly handles network images with caching, fallback initials, loading state, and edit camera badge.
@@ -500,7 +510,8 @@ class AppAvatar extends StatelessWidget {
                 ),
               );
             },
-            errorBuilder: (ctx, url, error) => _buildInitials(context, initial, size),
+            errorBuilder: (ctx, url, error) =>
+                _buildInitials(context, initial, size),
           ),
         );
       } else {
@@ -525,7 +536,8 @@ class AppAvatar extends StatelessWidget {
                 ),
               ),
             ),
-            errorWidget: (ctx, url, error) => _buildInitials(context, initial, size),
+            errorWidget: (ctx, url, error) =>
+                _buildInitials(context, initial, size),
           ),
         );
       }
@@ -565,10 +577,7 @@ class AppAvatar extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.primary,
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: context.colorSurface,
-                  width: 2,
-                ),
+                border: Border.all(color: context.colorSurface, width: 2),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.15),
@@ -605,10 +614,7 @@ class AppAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: backgroundColor ?? context.colorPrimaryLight,
-        border: Border.all(
-          color: context.colorBorder,
-          width: 1,
-        ),
+        border: Border.all(color: context.colorBorder, width: 1),
       ),
       child: Center(
         child: Text(
@@ -624,15 +630,12 @@ class AppAvatar extends StatelessWidget {
   }
 }
 
-/// Universal Reusable Product Search Bar with 1-Tap Clear & Barcode Scanner Integration.
-/// Guarantees 100% design consistency across POS Billing, Inventory, Sales, and Procurement screens.
-class AppProductSearchBar extends StatefulWidget {
+/// Product-search alias that preserves the shared search-field appearance.
+class AppProductSearchBar extends StatelessWidget {
   final TextEditingController controller;
   final String? hintText;
   final ValueChanged<String>? onChanged;
   final VoidCallback? onClear;
-  final VoidCallback? onBarcodeScan;
-  final bool showBarcodeScanner;
   final bool autoFocus;
   final bool enableVoice;
   final FocusNode? focusNode;
@@ -644,8 +647,6 @@ class AppProductSearchBar extends StatefulWidget {
     this.hintText,
     this.onChanged,
     this.onClear,
-    this.onBarcodeScan,
-    this.showBarcodeScanner = false,
     this.autoFocus = false,
     this.enableVoice = true,
     this.focusNode,
@@ -653,145 +654,148 @@ class AppProductSearchBar extends StatefulWidget {
   });
 
   @override
-  State<AppProductSearchBar> createState() => _AppProductSearchBarState();
+  Widget build(BuildContext context) {
+    var isHindi = false;
+    try {
+      isHindi = context.isHindi;
+    } catch (_) {
+      isHindi = false;
+    }
+
+    return AppSearchField(
+      controller: controller,
+      hintText:
+          hintText ??
+          (isHindi ? 'सामान खोजें...' : 'Search products...'),
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      onClear: onClear,
+      autofocus: autoFocus,
+      enableVoice: enableVoice,
+      debounceDuration: Duration.zero,
+      focusNode: focusNode,
+    );
+  }
 }
 
-class _AppProductSearchBarState extends State<AppProductSearchBar> {
+/// Universal Production-Grade Shimmer Skeleton Animation Widget.
+/// Renders smooth animated gradient placeholder boxes for zero-flicker loading.
+class AppShimmer extends StatefulWidget {
+  final double? width;
+  final double? height;
+  final BorderRadius? borderRadius;
+
+  const AppShimmer({
+    super.key,
+    this.width,
+    this.height,
+    this.borderRadius,
+  });
+
+  @override
+  State<AppShimmer> createState() => _AppShimmerState();
+}
+
+class _AppShimmerState extends State<AppShimmer> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
   @override
   void initState() {
     super.initState();
-    widget.controller.addListener(_onTextChanged);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _controller.repeat();
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_onTextChanged);
+    _controller.dispose();
     super.dispose();
-  }
-
-  void _onTextChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasText = widget.controller.text.isNotEmpty;
-    final voiceService = AppVoiceInputService.instance;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
+    final highlightColor = isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9);
 
-    return ListenableBuilder(
-      listenable: voiceService,
-      builder: (context, _) {
-        final isListening = voiceService.isListeningTo(widget.controller);
-        bool isHindi = false;
-        try {
-          isHindi = context.isHindi;
-        } catch (_) {
-          isHindi = false;
-        }
-
-        final dynamicHint = isListening
-            ? (isHindi ? 'सुन रहे हैं... बोलिए' : 'Listening... speak now')
-            : (widget.hintText ?? (isHindi ? 'सामान खोजें...' : 'Search products...'));
-
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
         return Container(
-          height: 48,
+          width: widget.width,
+          height: widget.height,
           decoration: BoxDecoration(
-            color: context.colorSurface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isListening
-                  ? AppColors.error
-                  : (widget.focusNode?.hasFocus == true ? AppColors.primary : context.colorBorder),
-              width: isListening || widget.focusNode?.hasFocus == true ? 1.5 : 1.0,
+            borderRadius: widget.borderRadius ?? BorderRadius.circular(10),
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [baseColor, highlightColor, baseColor],
+              stops: const [0.0, 0.5, 1.0],
+              transform: _SlidingGradientTransform(slidePercent: _animation.value),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: isListening
-                    ? AppColors.error.withValues(alpha: 0.15)
-                    : Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.03),
-                blurRadius: isListening ? 8 : 4,
-                offset: const Offset(0, 1),
-              ),
-            ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+        );
+      },
+    );
+  }
+}
+
+class _SlidingGradientTransform extends GradientTransform {
+  final double slidePercent;
+  const _SlidingGradientTransform({required this.slidePercent});
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
+    return Matrix4.translationValues(bounds.width * slidePercent, 0.0, 0.0);
+  }
+}
+
+/// Shimmer Skeleton List Placeholder
+class AppListSkeleton extends StatelessWidget {
+  final int itemCount;
+  final double itemHeight;
+
+  const AppListSkeleton({
+    super.key,
+    this.itemCount = 6,
+    this.itemHeight = 72,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          height: itemHeight,
           child: Row(
             children: [
-              Icon(
-                isListening ? Icons.graphic_eq_rounded : Icons.search_rounded,
-                size: 20,
-                color: isListening
-                    ? AppColors.error
-                    : (widget.focusNode?.hasFocus == true
-                        ? AppColors.primary
-                        : context.colorTextMuted),
-              ),
-              const SizedBox(width: 8),
+              const AppShimmer(width: 48, height: 48, borderRadius: BorderRadius.all(Radius.circular(12))),
+              const SizedBox(width: 12),
               Expanded(
-                child: TextField(
-                  controller: widget.controller,
-                  focusNode: widget.focusNode,
-                  autofocus: widget.autoFocus,
-                  onSubmitted: widget.onSubmitted,
-                  textAlignVertical: TextAlignVertical.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: context.colorTextPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: dynamicHint,
-                    hintStyle: TextStyle(
-                      fontSize: 13.5,
-                      color: isListening ? AppColors.error : context.colorTextMuted,
-                      fontWeight: isListening ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onChanged: widget.onChanged,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AppShimmer(width: MediaQuery.of(context).size.width * 0.4, height: 14),
+                    const SizedBox(height: 8),
+                    AppShimmer(width: MediaQuery.of(context).size.width * 0.25, height: 11),
+                  ],
                 ),
               ),
-              if (hasText)
-                InkWell(
-                  onTap: () {
-                    widget.controller.clear();
-                    if (widget.onChanged != null) widget.onChanged!('');
-                    if (widget.onClear != null) widget.onClear!();
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.cancel_rounded, size: 18, color: context.colorTextMuted),
-                  ),
-                ),
-              if (widget.enableVoice) ...[
-                const SizedBox(width: 2),
-                AppVoiceIconButton(
-                  controller: widget.controller,
-                  hint: widget.hintText,
-                  size: 20,
-                  styledButton: false,
-                  onChanged: widget.onChanged,
-                  onSubmitted: widget.onSubmitted,
-                ),
-              ],
-              if (widget.showBarcodeScanner && widget.onBarcodeScan != null) ...[
-                const SizedBox(width: 2),
-                InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: widget.onBarcodeScan,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: const Icon(
-                      Icons.qr_code_scanner_rounded,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
+              const SizedBox(width: 12),
+              const AppShimmer(width: 60, height: 18),
             ],
           ),
         );
@@ -800,4 +804,84 @@ class _AppProductSearchBarState extends State<AppProductSearchBar> {
   }
 }
 
+/// Shimmer Skeleton Grid Placeholder
+class AppGridSkeleton extends StatelessWidget {
+  final int itemCount;
+  final int crossAxisCount;
 
+  const AppGridSkeleton({
+    super.key,
+    this.itemCount = 8,
+    this.crossAxisCount = 2,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.1,
+      ),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: context.colorSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.colorBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Expanded(child: AppShimmer(borderRadius: BorderRadius.all(Radius.circular(8)))),
+              SizedBox(height: 8),
+              AppShimmer(width: 100, height: 12),
+              SizedBox(height: 6),
+              AppShimmer(width: 60, height: 14),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Shimmer Skeleton KPI Stat Card Placeholder
+class AppStatCardSkeleton extends StatelessWidget {
+  const AppStatCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.colorSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.colorBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: const [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              AppShimmer(width: 80, height: 12),
+              AppShimmer(width: 24, height: 24, borderRadius: BorderRadius.all(Radius.circular(8))),
+            ],
+          ),
+          SizedBox(height: 12),
+          AppShimmer(width: 110, height: 22),
+          SizedBox(height: 6),
+          AppShimmer(width: 70, height: 10),
+        ],
+      ),
+    );
+  }
+}

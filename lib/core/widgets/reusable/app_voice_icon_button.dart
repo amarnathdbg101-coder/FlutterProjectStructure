@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../constants/app_colors.dart';
 import '../../localization/language_controller.dart';
 import '../../services/voice_input_service.dart';
@@ -96,17 +97,23 @@ class _AppVoiceIconButtonState extends State<AppVoiceIconButton>
         }
 
         final activeCol = widget.activeColor ?? AppColors.error;
-        final idleCol = widget.color ?? (context.isDark ? Colors.white70 : const Color(0xFF475569));
+        final idleCol =
+            widget.color ??
+            (context.isDark ? Colors.white70 : const Color(0xFF475569));
 
         if (widget.styledButton) {
           return Tooltip(
             message: isListening
-                ? (isHindi ? 'सुन रहे हैं... (रोकने के लिए टैप करें)' : 'Listening... (tap to stop)')
-                : (isHindi ? 'बोलकर खोजें / लिखें' : 'Voice Search / Dictation'),
+                ? (isHindi
+                      ? 'सुन रहे हैं... (रोकने के लिए टैप करें)'
+                      : 'Listening... (tap to stop)')
+                : (isHindi
+                      ? 'बोलकर खोजें / लिखें'
+                      : 'Voice Search / Dictation'),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 onLongPress: () => _openDictationSheet(context),
                 onTap: () {
                   if (widget.useModal) {
@@ -123,35 +130,44 @@ class _AppVoiceIconButtonState extends State<AppVoiceIconButton>
                 child: AnimatedBuilder(
                   animation: _scaleAnimation,
                   builder: (context, child) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isListening
-                            ? AppColors.error.withValues(alpha: 0.12)
-                            : context.colorSurfaceSubtle,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
+                    return SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Container(
+                        decoration: BoxDecoration(
                           color: isListening
-                              ? AppColors.error.withValues(alpha: 0.45)
-                              : context.colorBorder,
-                          width: 1.0,
+                              ? AppColors.error.withValues(alpha: 0.12)
+                              : context.colorSurfaceSubtle,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isListening
+                                ? AppColors.error.withValues(alpha: 0.45)
+                                : context.colorBorder,
+                            width: 1.0,
+                          ),
+                          boxShadow: isListening
+                              ? [
+                                  BoxShadow(
+                                    color: AppColors.error.withValues(
+                                      alpha: 0.25,
+                                    ),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ]
+                              : null,
                         ),
-                        boxShadow: isListening
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.error.withValues(alpha: 0.25),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Transform.scale(
-                        scale: isListening ? _scaleAnimation.value : 1.0,
-                        child: Icon(
-                          isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
-                          size: widget.size,
-                          color: isListening ? activeCol : idleCol,
+                        child: Center(
+                          child: Transform.scale(
+                            scale: isListening ? _scaleAnimation.value : 1.0,
+                            child: Icon(
+                              isListening
+                                  ? Icons.graphic_eq_rounded
+                                  : Icons.mic_rounded,
+                              size: widget.size,
+                              color: isListening ? activeCol : idleCol,
+                            ),
+                          ),
                         ),
                       ),
                     );
@@ -164,10 +180,12 @@ class _AppVoiceIconButtonState extends State<AppVoiceIconButton>
 
         return Tooltip(
           message: isListening
-              ? (isHindi ? 'सुन रहे हैं... (रोकने के लिए टैप करें)' : 'Listening... (tap to stop)')
+              ? (isHindi
+                    ? 'सुन रहे हैं... (रोकने के लिए टैप करें)'
+                    : 'Listening... (tap to stop)')
               : (isHindi ? 'बोलकर खोजें / लिखें' : 'Voice Search / Dictation'),
           child: InkWell(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(22),
             onLongPress: () => _openDictationSheet(context),
             onTap: () {
               if (widget.useModal) {
@@ -181,36 +199,41 @@ class _AppVoiceIconButtonState extends State<AppVoiceIconButton>
                 );
               }
             },
-            child: Padding(
-              padding: const EdgeInsets.all(5),
-              child: AnimatedBuilder(
-                animation: _scaleAnimation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: isListening ? _scaleAnimation.value : 1.0,
-                    child: Container(
-                      decoration: isListening
-                          ? BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: activeCol.withValues(alpha: 0.15),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: activeCol.withValues(alpha: 0.35),
-                                  blurRadius: 8,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            )
-                          : null,
-                      padding: EdgeInsets.all(isListening ? 3 : 0),
-                      child: Icon(
-                        isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
-                        size: widget.size,
-                        color: isListening ? activeCol : idleCol,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Center(
+                child: AnimatedBuilder(
+                  animation: _scaleAnimation,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: isListening ? _scaleAnimation.value : 1.0,
+                      child: Container(
+                        decoration: isListening
+                            ? BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: activeCol.withValues(alpha: 0.15),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: activeCol.withValues(alpha: 0.35),
+                                    blurRadius: 8,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              )
+                            : null,
+                        padding: EdgeInsets.all(isListening ? 3 : 0),
+                        child: Icon(
+                          isListening
+                              ? Icons.graphic_eq_rounded
+                              : Icons.mic_rounded,
+                          size: widget.size,
+                          color: isListening ? activeCol : idleCol,
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),

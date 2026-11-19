@@ -83,14 +83,14 @@ void main() {
   }
 
   group('Instant Price Checker Tests', () {
-    testWidgets('DashboardPriceCheckerCard renders title, FAST badge, and scan action', (tester) async {
+    testWidgets('DashboardPriceCheckerCard renders title and opens the checker', (tester) async {
       await tester.pumpWidget(buildTestWidget(const DashboardPriceCheckerCard()));
       await tester.pumpAndSettle();
 
       expect(find.text('Instant Price & Stock Checker'), findsOneWidget);
       expect(find.text('FAST'), findsOneWidget);
       expect(find.byIcon(Icons.price_check_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.qr_code_scanner_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_ios_rounded), findsOneWidget);
     });
 
     testWidgets('PriceCheckerScreen renders search bar, filters and finds product by barcode', (tester) async {
@@ -99,6 +99,7 @@ void main() {
 
       // Verify search field is displayed
       expect(find.byType(TextField), findsOneWidget);
+      expect(find.byTooltip('Scan barcode'), findsOneWidget);
 
       // Verify initial guide card is displayed
       expect(find.text('Instant Counter Price Lookup'), findsOneWidget);

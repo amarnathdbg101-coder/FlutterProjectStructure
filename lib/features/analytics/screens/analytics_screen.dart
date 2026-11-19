@@ -100,10 +100,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (controller.isLoading && data == null)
-                    const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
+                    const AppStatCardSkeleton()
                   else if (data != null) ...[
                     // Hero Net Pocket Profit Card
                     Container(

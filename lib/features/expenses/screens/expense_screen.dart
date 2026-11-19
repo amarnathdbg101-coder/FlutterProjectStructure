@@ -809,7 +809,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
               // 3. EXPENSES LIST
               Expanded(
                 child: expController.isLoading && expController.expenses.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const AppListSkeleton()
                     : displayExpenses.isEmpty
                         ? Center(
                             child: Column(

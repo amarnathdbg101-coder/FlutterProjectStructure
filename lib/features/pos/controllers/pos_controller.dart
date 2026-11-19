@@ -91,6 +91,33 @@ class PosController extends BaseController {
     return diff > 0 ? diff : 0.0;
   }
 
+  /// Total estimated cost price of items in active cart
+  double get cartCostTotal {
+    return _cart.fold(0.0, (sum, item) {
+      final cp = item.product.costPrice;
+      return sum + (cp > 0 ? (cp * item.quantity) : (item.product.price * 0.8 * item.quantity));
+    });
+  }
+
+  /// Estimated gross profit on active cart
+  double get cartGrossProfit {
+    if (_cart.isEmpty) return 0.0;
+    return grandTotal - cartCostTotal;
+  }
+
+  /// Estimated gross profit margin percentage on active cart
+  double get cartProfitMarginPct {
+    if (grandTotal <= 0 || _cart.isEmpty) return 0.0;
+    return (cartGrossProfit / grandTotal) * 100;
+  }
+
+  /// Detects if current discount exceeds gross profit (Loss warning)
+  bool get isDiscountLossWarning {
+    if (_discount <= 0 || _cart.isEmpty) return false;
+    final profitBeforeDiscount = subtotal - cartCostTotal;
+    return _discount > profitBeforeDiscount;
+  }
+
   /// Cash shortage when customer gives less than grand total in cash mode
   double get cashShortage {
     if (_paymentMethod != 'cash') return 0.0;
@@ -957,7 +984,10 @@ class PosController extends BaseController {
     required String barcode,
     required String name,
     required double price,
+    double costPrice = 0.0,
     double mrp = 0.0,
+    int stock = 50,
+    String unit = 'pcs',
     String category = 'General Store',
   }) async {
     final cleanBarcode = barcode.trim();
@@ -977,10 +1007,11 @@ class PosController extends BaseController {
         barcode: cleanBarcode,
         sku: cleanBarcode,
         price: price,
+        costPrice: costPrice,
         comparePrice: mrp > 0 ? mrp : price,
-        stock: 999,
+        stock: stock,
         category: category,
-        unit: 'piece',
+        unit: unit,
         isActive: true,
       );
 
@@ -998,10 +1029,13 @@ class PosController extends BaseController {
         'barcode': cleanBarcode,
         'sku': cleanBarcode,
         'price': price,
+        if (costPrice > 0) 'cost_price': costPrice,
+        'compare_price': mrp > 0 ? mrp : price,
         'mrp': mrp > 0 ? mrp : price,
-        'stock': 999,
+        'stock': stock,
+        'stock_quantity': stock,
         'category': category,
-        'unit': 'piece',
+        'unit': unit,
         'is_active': true,
       };
 

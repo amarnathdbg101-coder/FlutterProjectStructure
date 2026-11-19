@@ -388,9 +388,7 @@ class _AppVoiceDictationSheetState extends State<AppVoiceDictationSheet>
           // Live Transcript Display Card
           Container(
             width: double.infinity,
-            constraints: const Duration(milliseconds: 100) == null
-                ? const BoxConstraints()
-                : const BoxConstraints(minHeight: 74),
+            constraints: const BoxConstraints(minHeight: 74),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: context.colorSurfaceSubtle,

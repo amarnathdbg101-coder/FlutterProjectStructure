@@ -82,6 +82,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(find.byTooltip('Scan barcode'), findsOneWidget);
+
     // Verify all products are visible in catalog
     expect(find.text('Basmati Rice Premium 5kg'), findsOneWidget);
     expect(find.text('Mustard Oil Pure 1L'), findsOneWidget);

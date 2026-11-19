@@ -2263,10 +2263,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
 
                                 // 6. Transactions Passbook List (Zero nested scroll-fighting)
                                 if (khata.isStatementLoading)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 36),
-                                    child: Center(child: CircularProgressIndicator()),
-                                  )
+                                  const AppListSkeleton(itemCount: 4)
                                 else if (filteredTxs.isEmpty)
                                   Container(
                                     padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
@@ -2938,7 +2935,7 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                 // Customer Ledger List / Grid
                 Expanded(
                   child: khata.isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const AppListSkeleton()
                       : khata.filteredCustomers.isEmpty
                           ? Center(
                               child: SingleChildScrollView(

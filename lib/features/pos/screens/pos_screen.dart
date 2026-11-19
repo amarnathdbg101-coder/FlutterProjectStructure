@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/voice_input_service.dart';
 import '../../../core/utils/whatsapp_share_helper.dart';
 
 import '../../../core/localization/language_controller.dart';
@@ -53,6 +52,8 @@ import '../widgets/pos_break_set_modal.dart';
 import '../widgets/cash_drawer_modals.dart';
 
 import '../widgets/no_bill_return_dialog.dart';
+
+import '../widgets/pos_quick_add_modal.dart';
 
 import '../../dashboard/repositories/ai_repository.dart';
 
@@ -2030,6 +2031,12 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
           actions: [
 
+            IconButton(
+              icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary),
+              tooltip: context.isHindi ? 'बारकोड स्कैन करें' : 'Scan barcode',
+              onPressed: () => _openCameraScanner(context, pos),
+            ),
+
             // On wide desktop terminals: Show fast auto-print and scratchpad chips
 
             if (isWide) ...[
@@ -2717,7 +2724,6 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   /// Fast Scan & Search Bar with Auto-Add and Live Overlay Matches
 
   Widget _buildFastScanBar(BuildContext context, PosController pos) {
-
     return Column(
 
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2809,12 +2815,8 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   autoFocus: true,
 
                   hintText: context.isHindi
-
-                      ? 'बारकोड, SKU स्कैन करें या नाम लिखें...'
-
-                      : 'Scan Barcode, SKU or type item name...',
-
-                  showBarcodeScanner: false,
+                      ? 'बारकोड, SKU या नाम खोजें...'
+                      : 'Search by barcode, SKU or product name...',
 
                   onChanged: (val) => _onSearchQueryChanged(val, pos),
 
@@ -2840,127 +2842,6 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
               ),
 
-            ),
-
-            const SizedBox(width: 8),
-
-            Material(
-
-              color: AppColors.primary,
-
-              borderRadius: BorderRadius.circular(10),
-
-              child: InkWell(
-
-                onTap: () => _openCameraScanner(context, pos),
-
-                borderRadius: BorderRadius.circular(10),
-
-                child: Container(
-
-                  height: 42,
-
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-
-                  alignment: Alignment.center,
-
-                  child: Row(
-
-                    mainAxisSize: MainAxisSize.min,
-
-                    children: [
-
-                      const Icon(Icons.qr_code_scanner_rounded, size: 20, color: Colors.white),
-
-                      const SizedBox(width: 6),
-
-                      Text(
-
-                        context.isHindi ? 'स्कैन' : 'Scan',
-
-                        style: const TextStyle(
-
-                          fontSize: 13,
-
-                          fontWeight: FontWeight.bold,
-
-                          color: Colors.white,
-
-                          letterSpacing: 0.2,
-
-                        ),
-
-                      ),
-
-                    ],
-
-                  ),
-
-                ),
-
-              ),
-
-            ),
-
-            const SizedBox(width: 6),
-
-            ListenableBuilder(
-              listenable: AppVoiceInputService.instance,
-              builder: (context, _) {
-                final isListening = AppVoiceInputService.instance.isListeningTo(_scanController);
-                return Material(
-                  color: isListening ? AppColors.error.withValues(alpha: 0.12) : context.colorSurfaceSubtle,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    onTap: () async {
-                      await AppVoiceInputService.instance.listenAndFill(
-                        context: context,
-                        controller: _scanController,
-                        onChanged: (val) => _onSearchQueryChanged(val, pos),
-                        onSubmitted: (val) {
-                          _onSearchQueryChanged(val, pos);
-                          _handleSearchSubmit(pos);
-                        },
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      height: 42,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isListening ? AppColors.error : context.colorBorder,
-                          width: isListening ? 1.5 : 1.0,
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
-                            size: 20,
-                            color: isListening ? AppColors.error : AppColors.primary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            isListening
-                                ? (context.isHindi ? 'सुन रहे हैं...' : 'Listening...')
-                                : (context.isHindi ? 'बोलें' : 'Voice'),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: isListening ? AppColors.error : context.colorTextPrimary,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
             ),
 
             if (MediaQuery.of(context).size.width > 650) ...[
@@ -3480,21 +3361,45 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
                       ),
 
-                      icon: const Icon(Icons.add_circle_outline_rounded, size: 15, color: AppColors.primary),
+                      icon: const Icon(Icons.bolt_rounded, size: 15, color: AppColors.primary),
 
                       label: Text(
 
-                        context.isHindi ? '+ इन्वेंट्री में बनाएं' : '+ Create in Inventory',
+                        context.isHindi ? '⚡ तुरंत नया सामान बनाएं' : '⚡ Quick Add Product',
 
                         style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
 
                       ),
 
-                      onPressed: () {
+                      onPressed: () async {
 
                         final query = _scanController.text.trim();
 
-                        context.push('/merchant/inventory?filter=add&name=${Uri.encodeComponent(query)}');
+                        final added = await PosQuickAddModal.show(
+
+                          context: context,
+
+                          pos: pos,
+
+                          initialQuery: query,
+
+                        );
+
+                        if (added == true && mounted) {
+
+                          _scanController.clear();
+
+                          setState(() {
+
+                            _matchingSearchResults = [];
+
+                            _isSearchingLocal = false;
+
+                          });
+
+                          _searchFocusNode.requestFocus();
+
+                        }
 
                       },
 
@@ -5207,6 +5112,90 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   ],
 
                 ),
+
+                if (pos.cart.isNotEmpty && pos.cartCostTotal > 0) ...[
+
+                  const SizedBox(height: 6),
+
+                  Row(
+
+                    mainAxisAlignment: MainAxisAlignment.end,
+
+                    children: [
+
+                      Container(
+
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+
+                        decoration: BoxDecoration(
+
+                          color: pos.isDiscountLossWarning
+
+                              ? AppColors.error.withValues(alpha: 0.1)
+
+                              : AppColors.success.withValues(alpha: 0.1),
+
+                          borderRadius: BorderRadius.circular(6),
+
+                        ),
+
+                        child: Row(
+
+                          mainAxisSize: MainAxisSize.min,
+
+                          children: [
+
+                            Icon(
+
+                              pos.isDiscountLossWarning
+
+                                  ? Icons.warning_amber_rounded
+
+                                  : Icons.trending_up_rounded,
+
+                              size: 13,
+
+                              color: pos.isDiscountLossWarning ? AppColors.error : AppColors.success,
+
+                            ),
+
+                            const SizedBox(width: 4),
+
+                            Text(
+
+                              pos.isDiscountLossWarning
+
+                                  ? (context.isHindi ? 'चेतावनी: छूट से नुकसान हो रहा है!' : 'Warning: Discount exceeds margin!')
+
+                                  : (context.isHindi
+
+                                      ? 'अनुमानित मुनाफ़ा: +₹${pos.cartGrossProfit.toStringAsFixed(0)} (${pos.cartProfitMarginPct.toStringAsFixed(0)}%)'
+
+                                      : 'Est. Margin: +₹${pos.cartGrossProfit.toStringAsFixed(0)} (${pos.cartProfitMarginPct.toStringAsFixed(0)}%)'),
+
+                              style: TextStyle(
+
+                                fontSize: 11,
+
+                                fontWeight: FontWeight.w600,
+
+                                color: pos.isDiscountLossWarning ? AppColors.error : AppColors.success,
+
+                              ),
+
+                            ),
+
+                          ],
+
+                        ),
+
+                      ),
+
+                    ],
+
+                  ),
+
+                ],
 
               ],
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -29,11 +30,7 @@ class PriceCheckerScreen extends StatefulWidget {
   final String? initialBarcode;
   final String? initialQuery;
 
-  const PriceCheckerScreen({
-    super.key,
-    this.initialBarcode,
-    this.initialQuery,
-  });
+  const PriceCheckerScreen({super.key, this.initialBarcode, this.initialQuery});
 
   @override
   State<PriceCheckerScreen> createState() => _PriceCheckerScreenState();
@@ -49,7 +46,8 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
   bool _hasSearched = false;
 
   String _selectedCategory = 'All';
-  String _selectedStockFilter = 'All'; // 'All', 'In Stock', 'Low Stock', 'Discounted'
+  String _selectedStockFilter =
+      'All'; // 'All', 'In Stock', 'Low Stock', 'Discounted'
   bool _hideCostMargin = false; // Privacy mode for counter
   final List<ProductModel> _recentLookups = [];
 
@@ -102,12 +100,18 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
     // Apply active category and stock filters if set
     List<ProductModel> candidates = allProducts;
     if (_selectedCategory != 'All') {
-      candidates = candidates.where((p) => p.category.toLowerCase() == _selectedCategory.toLowerCase()).toList();
+      candidates = candidates
+          .where(
+            (p) => p.category.toLowerCase() == _selectedCategory.toLowerCase(),
+          )
+          .toList();
     }
     if (_selectedStockFilter == 'In Stock') {
       candidates = candidates.where((p) => p.stock > 0).toList();
     } else if (_selectedStockFilter == 'Low Stock') {
-      candidates = candidates.where((p) => p.stock > 0 && p.stock <= p.lowStockThreshold).toList();
+      candidates = candidates
+          .where((p) => p.stock > 0 && p.stock <= p.lowStockThreshold)
+          .toList();
     } else if (_selectedStockFilter == 'Discounted') {
       candidates = candidates.where((p) => p.comparePrice > p.price).toList();
     }
@@ -129,7 +133,10 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
     }
 
     // 3. Multi-token text matching across Name, Brand, Category, Barcode, SKU
-    final tokens = clean.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    final tokens = clean
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
     final matches = candidates.where((p) {
       final name = p.name.toLowerCase();
       final brand = p.brand.toLowerCase();
@@ -137,12 +144,14 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
       final barcode = p.barcode.toLowerCase();
       final sku = p.sku.toLowerCase();
 
-      return tokens.every((token) =>
-          name.contains(token) ||
-          brand.contains(token) ||
-          cat.contains(token) ||
-          barcode.contains(token) ||
-          sku.contains(token));
+      return tokens.every(
+        (token) =>
+            name.contains(token) ||
+            brand.contains(token) ||
+            cat.contains(token) ||
+            barcode.contains(token) ||
+            sku.contains(token),
+      );
     }).toList();
 
     setState(() {
@@ -222,14 +231,21 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         content: Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 context.isHindi
                     ? '${p.name} POS बिल में जोड़ा गया'
                     : '${p.name} added to POS Bill',
-                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -256,15 +272,25 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
     buffer.writeln('--------------------------------');
     buffer.writeln('📦 *${p.name}*');
     if (p.brand.isNotEmpty) buffer.writeln('🏷️ ब्रांड: ${p.brand}');
-    buffer.writeln('💰 *रेट (Price): ₹${p.price.toStringAsFixed(0)}* ${p.unit.isNotEmpty ? "/ ${p.unit}" : ""}');
+    buffer.writeln(
+      '💰 *रेट (Price): ₹${p.price.toStringAsFixed(0)}* ${p.unit.isNotEmpty ? "/ ${p.unit}" : ""}',
+    );
     if (p.comparePrice > p.price) {
       final savings = p.comparePrice - p.price;
-      buffer.writeln('🏷️ MRP: ~₹${p.comparePrice.toStringAsFixed(0)}~ (बचत: ₹${savings.toStringAsFixed(0)})');
+      buffer.writeln(
+        '🏷️ MRP: ~₹${p.comparePrice.toStringAsFixed(0)}~ (बचत: ₹${savings.toStringAsFixed(0)})',
+      );
     }
-    buffer.writeln('📦 स्टॉक: ${p.stock > 0 ? "उपलब्ध (In Stock)" : "सम्पर्क करें"}');
+    buffer.writeln(
+      '📦 स्टॉक: ${p.stock > 0 ? "उपलब्ध (In Stock)" : "सम्पर्क करें"}',
+    );
     if (shopPhone.isNotEmpty) buffer.writeln('📞 सम्पर्क: $shopPhone');
     buffer.writeln('--------------------------------');
-    buffer.writeln(isHindi ? 'खरीदने हेतु काउंटर पर आएं या ऑर्डर करें!' : 'Visit counter to purchase or place order!');
+    buffer.writeln(
+      isHindi
+          ? 'खरीदने हेतु काउंटर पर आएं या ऑर्डर करें!'
+          : 'Visit counter to purchase or place order!',
+    );
 
     final quoteText = buffer.toString();
     await WhatsAppShareHelper.shareToWhatsApp(
@@ -274,11 +300,9 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
   }
 
   void _openEditProduct(ProductModel p) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ProductDetailScreen(product: p),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ProductDetailScreen(product: p)));
   }
 
   @override
@@ -308,7 +332,11 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
           child: Container(color: context.colorBorder, height: 1.0),
         ),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: context.colorTextPrimary, size: 22),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: context.colorTextPrimary,
+            size: 22,
+          ),
           tooltip: isHindi ? 'वापस जाएं' : 'Back',
           onPressed: () {
             if (Navigator.of(context).canPop()) {
@@ -322,7 +350,9 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isHindi ? 'तुरंत भाव व स्टॉक जांचें' : 'Instant Price & Stock Checker',
+              isHindi
+                  ? 'तुरंत भाव व स्टॉक जांचें'
+                  : 'Instant Price & Stock Checker',
               style: TextStyle(
                 fontSize: 16.5,
                 fontWeight: FontWeight.w800,
@@ -332,10 +362,7 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
             ),
             Text(
               '${allProducts.length} ${isHindi ? "कुल उत्पाद" : "Store Products"}',
-              style: TextStyle(
-                fontSize: 11,
-                color: context.colorTextMuted,
-              ),
+              style: TextStyle(fontSize: 11, color: context.colorTextMuted),
             ),
           ],
         ),
@@ -343,13 +370,19 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
           // Privacy Shield: 1-Tap Toggle to hide Wholesale Profit Margin from customer view
           IconButton(
             icon: Icon(
-              _hideCostMargin ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-              color: _hideCostMargin ? AppColors.warning : context.colorTextSecondary,
+              _hideCostMargin
+                  ? Icons.visibility_off_rounded
+                  : Icons.visibility_rounded,
+              color: _hideCostMargin
+                  ? AppColors.warning
+                  : context.colorTextSecondary,
               size: 21,
             ),
             tooltip: _hideCostMargin
                 ? (isHindi ? 'मार्जिन दिखाएं' : 'Show Margin')
-                : (isHindi ? 'मार्जिन छुपाएं (ग्राहक मोड)' : 'Hide Margin (Customer View)'),
+                : (isHindi
+                      ? 'मार्जिन छुपाएं (ग्राहक मोड)'
+                      : 'Hide Margin (Customer View)'),
             onPressed: () {
               setState(() {
                 _hideCostMargin = !_hideCostMargin;
@@ -359,8 +392,12 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
           ),
           // Camera Barcode Scanner Trigger
           IconButton(
-            icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 22),
-            tooltip: isHindi ? 'बारकोड स्कैन करें' : 'Scan Barcode',
+            icon: const Icon(
+              Icons.qr_code_scanner_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
+            tooltip: isHindi ? 'बारकोड स्कैन करें' : 'Scan barcode',
             onPressed: () => _openCameraScanner(context),
           ),
           const SizedBox(width: 6),
@@ -376,108 +413,19 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
               color: context.colorSurface,
               child: Column(
                 children: [
-                  Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: context.colorSurface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _searchFocusNode.hasFocus ? AppColors.primary : context.colorBorder,
-                        width: _searchFocusNode.hasFocus ? 1.5 : 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: context.isDark ? 0.25 : 0.04),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.search_rounded,
-                          size: 20,
-                          color: _searchFocusNode.hasFocus
-                              ? AppColors.primary
-                              : (context.isDark ? Colors.white70 : const Color(0xFF0F172A)),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            style: TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                              color: context.colorTextPrimary,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: isHindi
-                                  ? 'नाम, बारकोड, SKU या ब्रांड से खोजें (उदा. Parle, Oil)...'
-                                  : 'Search by Name, Barcode, SKU, Brand (e.g. Parle, Oil)...',
-                              hintStyle: TextStyle(
-                                fontSize: 14,
-                                color: context.colorTextMuted,
-                                fontWeight: FontWeight.normal,
-                              ),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            onChanged: _onQueryChanged,
-                          ),
-                        ),
-                        if (_searchController.text.isNotEmpty)
-                          AppIconButton(
-                            icon: Icons.close_rounded,
-                            size: AppIconButtonSize.sm,
-                            tooltip: isHindi ? 'हटाएं' : 'Clear',
-                            onPressed: _clearSearch,
-                          ),
-                        AppVoiceIconButton(
-                          controller: _searchController,
-                          hint: isHindi
-                              ? 'सामान का नाम बोलें...'
-                              : 'Speak product name...',
-                          styledButton: true,
-                          onChanged: _onQueryChanged,
-                          onSubmitted: (val) {
-                            _onQueryChanged(val);
-                            _lookupProduct(val);
-                          },
-                        ),
-                        const SizedBox(width: 4),
-                        // Quick Camera Scan Pill
-                        InkWell(
-                          onTap: () => _openCameraScanner(context),
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.qr_code_scanner_rounded, size: 17, color: AppColors.primary),
-                                const SizedBox(width: 5),
-                                Text(
-                                  isHindi ? 'स्कैन' : 'Scan',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  AppSearchField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    hintText: isHindi
+                        ? 'नाम, बारकोड, SKU या ब्रांड से खोजें...'
+                        : 'Search name, barcode, SKU or brand...',
+                    debounceDuration: Duration.zero,
+                    onChanged: _onQueryChanged,
+                    onSubmitted: (val) {
+                      _onQueryChanged(val);
+                      _lookupProduct(val);
+                    },
+                    onClear: _clearSearch,
                   ),
                   const SizedBox(height: 10),
 
@@ -490,7 +438,9 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                         // Stock status filters
                         AppFilterChip(
                           label: isHindi ? 'सभी' : 'All',
-                          isSelected: _selectedStockFilter == 'All' && _selectedCategory == 'All',
+                          isSelected:
+                              _selectedStockFilter == 'All' &&
+                              _selectedCategory == 'All',
                           onSelected: () {
                             setState(() {
                               _selectedStockFilter = 'All';
@@ -507,7 +457,10 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                           isSelected: _selectedStockFilter == 'In Stock',
                           onSelected: () {
                             setState(() {
-                              _selectedStockFilter = _selectedStockFilter == 'In Stock' ? 'All' : 'In Stock';
+                              _selectedStockFilter =
+                                  _selectedStockFilter == 'In Stock'
+                                  ? 'All'
+                                  : 'In Stock';
                             });
                             if (_searchController.text.isNotEmpty) {
                               _lookupProduct(_searchController.text);
@@ -520,7 +473,10 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                           isSelected: _selectedStockFilter == 'Low Stock',
                           onSelected: () {
                             setState(() {
-                              _selectedStockFilter = _selectedStockFilter == 'Low Stock' ? 'All' : 'Low Stock';
+                              _selectedStockFilter =
+                                  _selectedStockFilter == 'Low Stock'
+                                  ? 'All'
+                                  : 'Low Stock';
                             });
                             if (_searchController.text.isNotEmpty) {
                               _lookupProduct(_searchController.text);
@@ -533,7 +489,10 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                           isSelected: _selectedStockFilter == 'Discounted',
                           onSelected: () {
                             setState(() {
-                              _selectedStockFilter = _selectedStockFilter == 'Discounted' ? 'All' : 'Discounted';
+                              _selectedStockFilter =
+                                  _selectedStockFilter == 'Discounted'
+                                  ? 'All'
+                                  : 'Discounted';
                             });
                             if (_searchController.text.isNotEmpty) {
                               _lookupProduct(_searchController.text);
@@ -541,12 +500,18 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                           },
                         ),
                         const SizedBox(width: 8),
-                        Container(width: 1, height: 20, color: context.colorBorder),
+                        Container(
+                          width: 1,
+                          height: 20,
+                          color: context.colorBorder,
+                        ),
                         const SizedBox(width: 8),
 
                         // Dynamic Category chips
                         ...categories.where((c) => c != 'All').map((cat) {
-                          final isSelected = _selectedCategory.toLowerCase() == cat.toLowerCase();
+                          final isSelected =
+                              _selectedCategory.toLowerCase() ==
+                              cat.toLowerCase();
                           return Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: AppFilterChip(
@@ -589,7 +554,11 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                     if (_matchingProducts.length > 1) ...[
                       Row(
                         children: [
-                          Icon(Icons.format_list_bulleted_rounded, size: 16, color: context.colorTextMuted),
+                          Icon(
+                            Icons.format_list_bulleted_rounded,
+                            size: 16,
+                            color: context.colorTextMuted,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             isHindi
@@ -612,7 +581,12 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                         itemBuilder: (ctx, index) {
                           final match = _matchingProducts[index];
                           final isSelected = p?.id == match.id;
-                          return _buildMatchingListItem(ctx, match, isSelected, isHindi);
+                          return _buildMatchingListItem(
+                            ctx,
+                            match,
+                            isSelected,
+                            isHindi,
+                          );
                         },
                       ),
                       const SizedBox(height: 16),
@@ -630,10 +604,16 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                       if (_recentLookups.isNotEmpty) ...[
                         Row(
                           children: [
-                            const Icon(Icons.history_rounded, size: 16, color: AppColors.primary),
+                            const Icon(
+                              Icons.history_rounded,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
                             const SizedBox(width: 6),
                             Text(
-                              isHindi ? 'हाल ही में देखे गए भाव' : 'Recently Checked Items',
+                              isHindi
+                                  ? 'हाल ही में देखे गए भाव'
+                                  : 'Recently Checked Items',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -648,8 +628,14 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                           runSpacing: 8,
                           children: _recentLookups.map((item) {
                             return ActionChip(
-                              avatar: const Icon(Icons.price_check_rounded, size: 16, color: AppColors.primary),
-                              label: Text('${item.name} (₹${item.price.toStringAsFixed(0)})'),
+                              avatar: const Icon(
+                                Icons.price_check_rounded,
+                                size: 16,
+                                color: AppColors.primary,
+                              ),
+                              label: Text(
+                                '${item.name} (₹${item.price.toStringAsFixed(0)})',
+                              ),
                               backgroundColor: context.colorSurfaceSubtle,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -677,13 +663,21 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
   // --------------------------------------------------------------------------
   // HERO PRICE CARD: ULTRA-CLEAN HIGH-CONTRAST SELLING RATE DISPLAY
   // --------------------------------------------------------------------------
-  Widget _buildHeroPriceCard(BuildContext context, ProductModel p, bool isHindi) {
+  Widget _buildHeroPriceCard(
+    BuildContext context,
+    ProductModel p,
+    bool isHindi,
+  ) {
     final hasSavings = p.comparePrice > p.price;
     final savings = hasSavings ? p.comparePrice - p.price : 0.0;
-    final discountPercent = hasSavings ? ((savings / p.comparePrice) * 100).round() : 0;
+    final discountPercent = hasSavings
+        ? ((savings / p.comparePrice) * 100).round()
+        : 0;
     final hasCost = p.costPrice > 0;
     final margin = hasCost ? p.price - p.costPrice : 0.0;
-    final marginPercent = hasCost && p.costPrice > 0 ? ((margin / p.costPrice) * 100).round() : 0;
+    final marginPercent = hasCost && p.costPrice > 0
+        ? ((margin / p.costPrice) * 100).round()
+        : 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -734,7 +728,10 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                   children: [
                     if (p.brand.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2.5,
+                        ),
                         margin: const EdgeInsets.only(bottom: 4),
                         decoration: BoxDecoration(
                           color: context.colorPrimaryLight,
@@ -765,12 +762,19 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                       children: [
                         Text(
                           p.category,
-                          style: TextStyle(fontSize: 11.5, color: context.colorTextMuted, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: context.colorTextMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         if (p.barcode.isNotEmpty)
                           Text(
                             '• #${p.barcode}',
-                            style: TextStyle(fontSize: 11.5, color: context.colorTextMuted),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: context.colorTextMuted,
+                            ),
                           ),
                       ],
                     ),
@@ -798,7 +802,9 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isHindi ? 'बिक्री मूल्य (Selling Price)' : 'Customer Selling Price',
+                        isHindi
+                            ? 'बिक्री मूल्य (Selling Price)'
+                            : 'Customer Selling Price',
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
@@ -847,9 +853,14 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.12),
+                                color: AppColors.success.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -907,9 +918,13 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
               child: Row(
                 children: [
                   Icon(
-                    _hideCostMargin ? Icons.visibility_off_rounded : Icons.trending_up_rounded,
+                    _hideCostMargin
+                        ? Icons.visibility_off_rounded
+                        : Icons.trending_up_rounded,
                     size: 16,
-                    color: _hideCostMargin ? context.colorTextMuted : AppColors.primary,
+                    color: _hideCostMargin
+                        ? context.colorTextMuted
+                        : AppColors.primary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -1047,14 +1062,21 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
   // --------------------------------------------------------------------------
   // MATCHING PRODUCT LIST ITEM CARD
   // --------------------------------------------------------------------------
-  Widget _buildMatchingListItem(BuildContext context, ProductModel item, bool isSelected, bool isHindi) {
+  Widget _buildMatchingListItem(
+    BuildContext context,
+    ProductModel item,
+    bool isSelected,
+    bool isHindi,
+  ) {
     return InkWell(
       onTap: () => _selectProduct(item),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? context.colorPrimaryLight.withValues(alpha: 0.3) : context.colorSurface,
+          color: isSelected
+              ? context.colorPrimaryLight.withValues(alpha: 0.3)
+              : context.colorSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.primary : context.colorBorder,
@@ -1089,7 +1111,9 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                     item.name,
                     style: TextStyle(
                       fontSize: 13.5,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w600,
                       color: context.colorTextPrimary,
                     ),
                     maxLines: 1,
@@ -1098,7 +1122,10 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
                   const SizedBox(height: 2),
                   Text(
                     '${item.category} • ${item.stock > 0 ? "${item.stock} left" : "Out of stock"}',
-                    style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.colorTextMuted,
+                    ),
                   ),
                 ],
               ),
@@ -1132,7 +1159,6 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
     );
   }
 
-
   // --------------------------------------------------------------------------
   // NOT FOUND CARD
   // --------------------------------------------------------------------------
@@ -1146,7 +1172,11 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
       ),
       child: Column(
         children: [
-          Icon(Icons.search_off_rounded, size: 48, color: context.colorTextMuted),
+          Icon(
+            Icons.search_off_rounded,
+            size: 48,
+            color: context.colorTextMuted,
+          ),
           const SizedBox(height: 12),
           Text(
             isHindi ? 'कोई उत्पाद नहीं मिला' : 'No Product Found',
@@ -1188,11 +1218,17 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
               color: context.colorPrimaryLight,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.price_check_rounded, color: AppColors.primary, size: 32),
+            child: const Icon(
+              Icons.price_check_rounded,
+              color: AppColors.primary,
+              size: 32,
+            ),
           ),
           const SizedBox(height: 14),
           Text(
-            isHindi ? 'काउंटर तुरंत भाव जांच (Fast Price Lookup)' : 'Instant Counter Price Lookup',
+            isHindi
+                ? 'काउंटर तुरंत भाव जांच (Fast Price Lookup)'
+                : 'Instant Counter Price Lookup',
             style: TextStyle(
               fontSize: 15.5,
               fontWeight: FontWeight.bold,
@@ -1204,15 +1240,12 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
             isHindi
                 ? 'ग्राहक को तुरंत सही भाव, MRP व छूट बताने के लिए ऊपर बारकोड गन से स्कैन करें या नाम लिखें।'
                 : 'Quote exact selling prices, MRP & savings to customers instantly by scanning or typing above.',
-            style: TextStyle(fontSize: 12.5, color: context.colorTextMuted, height: 1.35),
+            style: TextStyle(
+              fontSize: 12.5,
+              color: context.colorTextMuted,
+              height: 1.35,
+            ),
             textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 14),
-          AppButton.outline(
-            text: isHindi ? 'कैमरा स्कैनर खोलें' : 'Open Camera Scanner',
-            icon: Icons.qr_code_scanner_rounded,
-            size: AppButtonSize.md,
-            onPressed: () => _openCameraScanner(context),
           ),
         ],
       ),

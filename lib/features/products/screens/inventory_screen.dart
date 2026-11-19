@@ -4590,6 +4590,16 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary),
+              tooltip: context.isHindi ? 'बारकोड स्कैन करें' : 'Scan barcode',
+              onPressed: () {
+                PriceCheckerDialog.show(
+                  context,
+                  initialQuery: _searchController.text.trim(),
+                );
+              },
+            ),
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
               tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'More Options',
@@ -4705,10 +4715,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         hintText: context.isHindi
                             ? 'नाम, बारकोड, SKU, ब्रांड से खोजें...'
                             : 'Search by Name, Barcode, SKU, Brand...',
-                        showBarcodeScanner: true,
-                        onBarcodeScan: () {
-                          PriceCheckerDialog.show(context, initialQuery: _searchController.text.trim());
-                        },
                         onChanged: (query) {
                           setState(() {
                             _searchQuery = query.trim();
@@ -4961,7 +4967,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               // 4. Products Catalog Grid / List
               Expanded(
                 child: prodController.isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const AppGridSkeleton()
                     : allProducts.isEmpty
                         ? Center(
                             child: Column(
