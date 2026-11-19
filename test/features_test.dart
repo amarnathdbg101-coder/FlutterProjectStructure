@@ -8,6 +8,7 @@ import 'package:flutter_project_structure/features/khata/models/khata_model.dart
 import 'package:flutter_project_structure/features/pos/controllers/pos_controller.dart';
 import 'package:flutter_project_structure/features/pos/models/pos_model.dart';
 import 'package:flutter_project_structure/features/products/models/product_model.dart';
+import 'package:flutter_project_structure/features/products/controllers/product_controller.dart';
 import 'package:flutter_project_structure/features/products/screens/inventory_screen.dart';
 
 import 'package:flutter_project_structure/features/khata/repositories/khata_repository.dart';
@@ -362,6 +363,7 @@ void main() {
         costPrice: 130.0,
         stock: 15,
         unit: 'litre',
+        category: 'Cooking Essentials',
         barcode: '8901234567890',
         sku: 'FORT-OIL-1L',
       );
@@ -372,6 +374,7 @@ void main() {
         costPrice: 22.0,
         stock: 40,
         unit: 'kg',
+        category: 'Spices & Seasoning',
         barcode: '8901030000000',
         sku: 'TATA-SALT-1KG',
       );

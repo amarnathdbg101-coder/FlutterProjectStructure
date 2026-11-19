@@ -694,23 +694,23 @@ class _AppProductSearchBarState extends State<AppProductSearchBar> {
             : (widget.hintText ?? (isHindi ? 'सामान खोजें...' : 'Search products...'));
 
         return Container(
-          height: 50,
+          height: 48,
           decoration: BoxDecoration(
             color: context.colorSurface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isListening
                   ? AppColors.error
                   : (widget.focusNode?.hasFocus == true ? AppColors.primary : context.colorBorder),
-              width: isListening || widget.focusNode?.hasFocus == true ? 1.5 : 1.2,
+              width: isListening || widget.focusNode?.hasFocus == true ? 1.5 : 1.0,
             ),
             boxShadow: [
               BoxShadow(
                 color: isListening
-                    ? AppColors.error.withValues(alpha: 0.18)
-                    : Colors.black.withValues(alpha: context.isDark ? 0.25 : 0.04),
-                blurRadius: isListening ? 10 : 8,
-                offset: const Offset(0, 2),
+                    ? AppColors.error.withValues(alpha: 0.15)
+                    : Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.03),
+                blurRadius: isListening ? 8 : 4,
+                offset: const Offset(0, 1),
               ),
             ],
           ),
@@ -724,9 +724,9 @@ class _AppProductSearchBarState extends State<AppProductSearchBar> {
                     ? AppColors.error
                     : (widget.focusNode?.hasFocus == true
                         ? AppColors.primary
-                        : (context.isDark ? Colors.white70 : const Color(0xFF0F172A))),
+                        : context.colorTextMuted),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: widget.controller,
@@ -735,14 +735,14 @@ class _AppProductSearchBarState extends State<AppProductSearchBar> {
                   onSubmitted: widget.onSubmitted,
                   textAlignVertical: TextAlignVertical.center,
                   style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                     color: context.colorTextPrimary,
                   ),
                   decoration: InputDecoration(
                     hintText: dynamicHint,
                     hintStyle: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13.5,
                       color: isListening ? AppColors.error : context.colorTextMuted,
                       fontWeight: isListening ? FontWeight.w600 : FontWeight.normal,
                     ),
@@ -754,52 +754,40 @@ class _AppProductSearchBarState extends State<AppProductSearchBar> {
                 ),
               ),
               if (hasText)
-                GestureDetector(
+                InkWell(
                   onTap: () {
                     widget.controller.clear();
                     if (widget.onChanged != null) widget.onChanged!('');
                     if (widget.onClear != null) widget.onClear!();
                   },
-                  child: Container(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
                     padding: const EdgeInsets.all(4),
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: context.colorSurfaceSubtle,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.close_rounded, size: 14, color: context.colorTextMuted),
+                    child: Icon(Icons.cancel_rounded, size: 18, color: context.colorTextMuted),
                   ),
                 ),
               if (widget.enableVoice) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: 2),
                 AppVoiceIconButton(
                   controller: widget.controller,
                   hint: widget.hintText,
-                  size: 19,
-                  styledButton: true,
+                  size: 20,
+                  styledButton: false,
                   onChanged: widget.onChanged,
                   onSubmitted: widget.onSubmitted,
                 ),
               ],
               if (widget.showBarcodeScanner && widget.onBarcodeScan != null) ...[
-                const SizedBox(width: 6),
-                Material(
-                  color: context.colorSurfaceSubtle,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: widget.onBarcodeScan,
-                    child: Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: context.colorBorder),
-                      ),
-                      child: const Icon(
-                        Icons.qr_code_scanner_rounded,
-                        size: 19,
-                        color: AppColors.primary,
-                      ),
+                const SizedBox(width: 2),
+                InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: widget.onBarcodeScan,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(
+                      Icons.qr_code_scanner_rounded,
+                      size: 20,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
