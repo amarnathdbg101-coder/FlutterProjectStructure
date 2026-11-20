@@ -185,16 +185,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                   const SizedBox(height: 14),
                 ],
 
-                _FastPosBillingDock(),
+                _TodaySalesHeroCard(stats: stats),
                 const SizedBox(height: 14),
 
-                AppSectionHeader(title: context.tr('dash_section_summary')),
-                _DashboardMetrics(stats: stats),
-                const SizedBox(height: 20),
-
-                AppSectionHeader(title: context.tr('dash_section_actions')),
-                const _OperationsGrid(),
-                const SizedBox(height: 20),
+                _CoreOperationsGrid(stats: stats),
+                const SizedBox(height: 16),
 
                 const DashboardPriceCheckerCard(),
                 const SizedBox(height: 12),
@@ -212,201 +207,261 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 }
 
-/// Fast POS entry point for starting a sale.
-class _FastPosBillingDock extends StatelessWidget {
+/// Calm, high-contrast Hero Card displaying today's total sales and bills.
+class _TodaySalesHeroCard extends StatelessWidget {
+  final DashboardStats stats;
+
+  const _TodaySalesHeroCard({required this.stats});
+
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      color: AppColors.primary,
-      border: Border.all(color: AppColors.primary),
-      padding: const EdgeInsets.all(14),
-      onTap: () => context.go('/merchant/pos'),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(12),
+    final isHindi = context.isHindi;
+
+    return InkWell(
+      onTap: () => context.push('/merchant/today-sales'),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: context.colorSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.colorBorder),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: context.isDark ? 0.2 : 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            child: const Icon(
-              Icons.point_of_sale_rounded,
-              color: Colors.white,
-              size: 26,
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.successLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.currency_rupee_rounded, size: 16, color: AppColors.success),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isHindi ? 'आज की कुल कमाई' : "Today's Gross Sales",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: context.colorTextMuted,
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isHindi ? 'विस्तृत रिपोर्ट' : 'P&L Report',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.primary),
+                  ],
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  '₹${stats.todaySales.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.success,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${stats.salesCount} ${isHindi ? "बिल कटे • आज का गल्ला" : "bills recorded today"}',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.colorTextMuted,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The 4 Core Counter Operations (Mummy-Papa Mode: POS, Khata, Stock, Expenses)
+class _CoreOperationsGrid extends StatelessWidget {
+  final DashboardStats stats;
+
+  const _CoreOperationsGrid({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final isHindi = context.isHindi;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final crossAxisCount = width < 480 ? 2 : 4;
+        final aspectRatio = width < 480 ? 1.45 : 1.7;
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: aspectRatio,
+          children: [
+            // 1. BILLING COUNTER (POS)
+            _buildGiantTile(
+              context,
+              title: isHindi ? 'बिलिंग काउंटर' : 'Billing (POS)',
+              subtitle: isHindi ? '⚡ नया बिल बनाएं' : '⚡ Start new sale',
+              icon: Icons.point_of_sale_rounded,
+              tileColor: const Color(0xFF16A34A),
+              badge: isHindi ? 'नया' : 'NEW',
+              onTap: () => context.go('/merchant/pos'),
+            ),
+
+            // 2. KHATA REGISTER
+            _buildGiantTile(
+              context,
+              title: isHindi ? 'खाता बही' : 'Khata Ledger',
+              subtitle: '₹${stats.totalUdhar.toStringAsFixed(0)} ${isHindi ? "बाज़ार बाकी" : "dues"}',
+              icon: Icons.menu_book_rounded,
+              tileColor: const Color(0xFFD97706),
+              onTap: () => context.go('/merchant/khata'),
+            ),
+
+            // 3. INVENTORY & STOCK
+            _buildGiantTile(
+              context,
+              title: isHindi ? 'दुकान का सामान' : 'Stock & Samaan',
+              subtitle: stats.lowStockCount > 0
+                  ? '⚠️ ${stats.lowStockCount} ${isHindi ? "कम स्टॉक" : "low"}'
+                  : '${stats.catalogCount} ${isHindi ? "सामान" : "items"}',
+              icon: Icons.inventory_2_rounded,
+              tileColor: const Color(0xFF2563EB),
+              onTap: () => context.go('/merchant/inventory'),
+            ),
+
+            // 4. EXPENSES
+            _buildGiantTile(
+              context,
+              title: isHindi ? 'दुकान खर्चा' : 'Expenses',
+              subtitle: isHindi ? 'दैनिक दुकान खर्च' : 'Daily shop spends',
+              icon: Icons.receipt_long_rounded,
+              tileColor: const Color(0xFF7C3AED),
+              onTap: () => context.go('/merchant/expenses'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildGiantTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color tileColor,
+    required VoidCallback onTap,
+    String? badge,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.colorSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: tileColor.withValues(alpha: 0.25), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: tileColor.withValues(alpha: context.isDark ? 0.15 : 0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: tileColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon, size: 20, color: tileColor),
+                ),
+                if (badge != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: tileColor,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      badge,
+                      style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  context.isHindi ? 'नया बिल बनाएं' : 'Start a new sale',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                  title,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: context.colorTextPrimary,
                   ),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
-                  context.isHindi
-                      ? 'बारकोड स्कैन, आइटम सर्च व तुरंत चेकआउट'
-                      : 'Barcode scan, quick search & instant checkout',
+                  subtitle,
                   style: TextStyle(
-                    fontSize: 11.5,
-                    color: Colors.white.withValues(alpha: 0.84),
-                    fontWeight: FontWeight.w500,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.colorTextMuted,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(
-            Icons.arrow_forward_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-        ],
+          ],
+        ),
       ),
-    );
-  }
-}
-
-class _DashboardMetrics extends StatelessWidget {
-  final DashboardStats stats;
-
-  const _DashboardMetrics({required this.stats});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final crossAxisCount = width >= 760 ? 4 : 2;
-        final aspectRatio = width < 360
-            ? 1.18
-            : (width < 500 ? 1.35 : (width < 760 ? 1.55 : 1.8));
-
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: aspectRatio,
-          children: [
-            AppStatCard(
-              title: context.tr('dash_kpi_sales'),
-              value: '₹${stats.todaySales.toStringAsFixed(0)}',
-              subtitle: '${stats.salesCount} ${context.tr('dash_kpi_bills')}',
-              icon: Icons.currency_rupee_rounded,
-              iconColor: AppColors.success,
-              iconBgColor: context.colorSuccessLight,
-              onTap: () => context.push('/merchant/today-sales'),
-            ),
-            AppStatCard(
-              title: context.tr('dash_kpi_udhar'),
-              value: '₹${stats.totalUdhar.toStringAsFixed(0)}',
-              subtitle:
-                  '${stats.udharCustomersCount} ${context.tr('dash_kpi_debtors')}',
-              icon: Icons.menu_book_rounded,
-              iconColor: AppColors.primary,
-              iconBgColor: context.colorPrimaryLight,
-              onTap: () => context.go('/merchant/khata'),
-            ),
-            AppStatCard(
-              title: context.tr('dash_kpi_catalog'),
-              value: '${stats.catalogCount}',
-              subtitle: context.isHindi ? 'सक्रिय उत्पाद' : 'Active Products',
-              icon: Icons.inventory_2_rounded,
-              onTap: () => context.go('/merchant/inventory'),
-            ),
-            AppStatCard(
-              title: context.tr('dash_kpi_low_stock'),
-              value: '${stats.lowStockCount}',
-              subtitle: stats.lowStockCount > 0
-                  ? (context.isHindi ? 'पुनः ऑर्डर करें' : 'Reorder needed')
-                  : (context.isHindi ? 'स्टॉक पर्याप्त' : 'Stock OK'),
-              icon: Icons.warning_amber_rounded,
-              iconColor: AppColors.warning,
-              iconBgColor: context.colorWarningLight,
-              isAlert: stats.lowStockCount > 0,
-              onTap: () => context.push('/merchant/low-stock'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _OperationsGrid extends StatelessWidget {
-  const _OperationsGrid();
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final crossAxisCount = width < 520 ? 1 : (width < 900 ? 2 : 4);
-        final aspectRatio = width < 520 ? 4.0 : (width < 900 ? 2.7 : 2.3);
-
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: aspectRatio,
-          children: [
-            AppActionTile(
-              icon: Icons.inventory_2_rounded,
-              title: context.isHindi
-                  ? 'इन्वेंटरी व स्टॉक'
-                  : 'Inventory & Stock',
-              subtitle: context.isHindi
-                  ? 'सामान, मूल्य व बारकोड'
-                  : 'Products & Stock',
-              onTap: () => context.go('/merchant/inventory'),
-            ),
-
-            AppActionTile(
-              icon: Icons.menu_book_rounded,
-              title: context.tr('dash_khata_title'),
-              subtitle: context.isHindi
-                  ? 'उधार वसूली व तगादा'
-                  : 'Customer Credit Ledger',
-              onTap: () => context.go('/merchant/khata'),
-            ),
-
-            AppActionTile(
-              icon: Icons.receipt_long_rounded,
-              title: context.tr('dash_expenses_title'),
-              subtitle: context.isHindi
-                  ? 'दुकान के दैनिक खर्च'
-                  : 'Daily Expense Records',
-              onTap: () => context.go('/merchant/expenses'),
-            ),
-
-            AppActionTile(
-              icon: Icons.insights_rounded,
-              title: context.isHindi
-                  ? 'मुनाफा व रिपोर्ट्स'
-                  : 'Profit & Reports',
-              subtitle: context.isHindi
-                  ? 'दैनिक लाभ व बिक्री चार्ट'
-                  : 'Sales & Margins',
-              onTap: () => context.push('/merchant/today-sales'),
-            ),
-          ],
-        );
-      },
     );
   }
 }
