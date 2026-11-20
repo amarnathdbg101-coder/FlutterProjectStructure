@@ -694,7 +694,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                     Expanded(
                                       flex: 3,
                                       child: DropdownButtonFormField<String>(
-                                        value: _kWholesaleUnits.contains(state.unit) ? state.unit : _kWholesaleUnits.first,
+                                        initialValue: _kWholesaleUnits.contains(state.unit) ? state.unit : _kWholesaleUnits.first,
                                         isExpanded: true,
                                         style: TextStyle(fontSize: 12, color: ctx.colorTextPrimary, fontWeight: FontWeight.w500),
                                         decoration: InputDecoration(
@@ -1420,35 +1420,16 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     return MerchantShell(
       currentIndex: -1,
       showBottomNav: false,
-      floatingActionButton: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 1. AI Mandi Camera Scan Button
-          FloatingActionButton.extended(
-            heroTag: 'ai_mandi_scan_fab',
-            elevation: 4,
-            backgroundColor: const Color(0xFF673AB7),
-            onPressed: () => _openAiMandiScanner(context, controller, prodController),
-            icon: const Icon(Icons.document_scanner_rounded, color: Colors.white, size: 20),
-            label: Text(
-              context.isHindi ? '📸 AI स्कैन' : '📸 AI Scan',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
-            ),
-          ),
-          const SizedBox(width: 10),
-          // 2. Manual Add Sourcing Item Button
-          FloatingActionButton.extended(
-            heroTag: 'add_mandi_item_fab',
-            elevation: 3,
-            backgroundColor: AppColors.primary,
-            onPressed: () => _showAddEditSourcingItemSheet(context, controller, prodController),
-            icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 20),
-            label: Text(
-              context.isHindi ? 'नया सामान' : 'Add Item',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
-            ),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'add_mandi_item_fab',
+        elevation: 4,
+        backgroundColor: AppColors.primary,
+        onPressed: () => _showAddEditSourcingItemSheet(context, controller, prodController),
+        icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 20),
+        label: Text(
+          context.isHindi ? 'नया सामान जोड़ें' : 'Add Sourcing Item',
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13.5),
+        ),
       ),
       appBar: AppBar(
         elevation: 0,
@@ -1473,6 +1454,13 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
           style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
         ),
         actions: [
+          // AI Scan Action
+          IconButton(
+            icon: const Icon(Icons.document_scanner_rounded, size: 21, color: Color(0xFF673AB7)),
+            tooltip: context.isHindi ? '📸 AI मंडी खरीद स्कैन' : 'AI Mandi Scan',
+            onPressed: () => _openAiMandiScanner(context, controller, prodController),
+          ),
+
           // Refresh Action
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
@@ -2035,45 +2023,72 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               ),
                             ),
 
-                            // Actions
-                            if (item.dealerPhone.isNotEmpty) ...[
+                            // Actions with comfortable 42px touch targets
+                            if (item.dealerPhone.isNotEmpty)
                               IconButton(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                icon: const Icon(Icons.phone_rounded, size: 17, color: AppColors.primary),
-                                tooltip: context.isHindi ? 'डीलर को कॉल करें' : 'Call Wholesaler',
-                                onPressed: () => _callDealer(item.dealerPhone),
-                              ),
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17, color: Color(0xFF128C7E)),
-                                tooltip: context.isHindi ? 'डीलर को व्हाट्सएप भेजें' : 'WhatsApp Wholesaler',
+                                constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+                                padding: const EdgeInsets.all(8),
+                                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 19, color: Color(0xFF128C7E)),
+                                tooltip: context.isHindi ? 'डीलर को व्हाट्सएप' : 'WhatsApp Wholesaler',
                                 onPressed: () => _messageDealerWhatsApp(context, item),
                               ),
-                            ],
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                              icon: Icon(Icons.edit_outlined, size: 17, color: context.colorTextMuted),
-                              tooltip: 'Edit Item',
-                              onPressed: () => _showAddEditSourcingItemSheet(
-                                context,
-                                controller,
-                                prodController,
-                                editItem: item,
-                              ),
-                            ),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                              icon: Icon(Icons.delete_outline_rounded, size: 17, color: context.colorTextMuted),
-                              tooltip: 'Remove Item',
-                              onPressed: () => controller.removeItem(item.id),
+                            PopupMenuButton<String>(
+                              icon: Icon(Icons.more_vert_rounded, size: 20, color: context.colorTextMuted),
+                              tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'Options',
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 3,
+                              onSelected: (val) {
+                                switch (val) {
+                                  case 'edit':
+                                    _showAddEditSourcingItemSheet(
+                                      context,
+                                      controller,
+                                      prodController,
+                                      editItem: item,
+                                    );
+                                    break;
+                                  case 'call':
+                                    _callDealer(item.dealerPhone);
+                                    break;
+                                  case 'delete':
+                                    controller.removeItem(item.id);
+                                    break;
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                PopupMenuItem<String>(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                                      const SizedBox(width: 10),
+                                      Text(ctx.isHindi ? 'विवरण बदलें' : 'Edit Item'),
+                                    ],
+                                  ),
+                                ),
+                                if (item.dealerPhone.isNotEmpty)
+                                  PopupMenuItem<String>(
+                                    value: 'call',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.phone_outlined, size: 18, color: AppColors.success),
+                                        const SizedBox(width: 10),
+                                        Text(ctx.isHindi ? 'डीलर को कॉल करें' : 'Call Wholesaler'),
+                                      ],
+                                    ),
+                                  ),
+                                const PopupMenuDivider(),
+                                PopupMenuItem<String>(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
+                                      const SizedBox(width: 10),
+                                      Text(ctx.isHindi ? 'लिस्ट से हटाएं' : 'Remove Item', style: const TextStyle(color: AppColors.error)),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
