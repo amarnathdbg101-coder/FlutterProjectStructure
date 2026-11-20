@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/whatsapp_share_helper.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
+import '../../auth/controllers/auth_controller.dart';
 import '../controllers/analytics_controller.dart';
+import '../models/analytics_model.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -17,10 +20,63 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AnalyticsController>().fetchAnalytics();
+    });
+  }
+
+  void _sharePnLSummaryOnWhatsApp(BuildContext context, AnalyticsModel data, String shopName) {
+    final isHindi = context.isHindi;
+    final now = DateTime.now();
+    final dateStr = '${now.day}/${now.month}/${now.year}';
+
+    final buffer = StringBuffer();
+    buffer.writeln(isHindi ? '📊 *दुकान मुनाफा व वित्तीय रिपोर्ट*' : '📊 *Store Profit & Loss Report*');
+    if (shopName.isNotEmpty) {
+      buffer.writeln('🏪 *$shopName*');
+    }
+    buffer.writeln('📅 $dateStr\n');
+
+    buffer.writeln(isHindi ? '💰 *कुल बिक्री आय:* ₹${data.totalRevenue.toStringAsFixed(0)}' : '💰 *Gross Sales:* ₹${data.totalRevenue.toStringAsFixed(0)}');
+    buffer.writeln(isHindi ? '📦 *सामान खरीद लागत:* -₹${data.totalCost.toStringAsFixed(0)}' : '📦 *Inventory Cost (COGS):* -₹${data.totalCost.toStringAsFixed(0)}');
+    buffer.writeln(isHindi ? '💸 *दुकान खर्चे:* -₹${data.totalExpenses.toStringAsFixed(0)}' : '💸 *Store Expenses:* -₹${data.totalExpenses.toStringAsFixed(0)}');
+    buffer.writeln('━━━━━━━━━━━━━━━━━━');
+    final profitPrefix = data.netPocketProfit >= 0 ? '+' : '';
+    buffer.writeln(isHindi
+        ? '🏆 *शुद्ध जेब बचत:* $profitPrefix₹${data.netPocketProfit.toStringAsFixed(0)} (${data.averageMarginPct.toStringAsFixed(1)}% मार्जिन)'
+        : '🏆 *Net In-Hand Profit:* $profitPrefix₹${data.netPocketProfit.toStringAsFixed(0)} (${data.averageMarginPct.toStringAsFixed(1)}% Margin)');
+    buffer.writeln(isHindi
+        ? '🧾 *कुल बिल:* ${data.totalSalesCount} बिल'
+        : '🧾 *Total Bills:* ${data.totalSalesCount} cleared bills');
+
+    if (data.bestProfitable.isNotEmpty) {
+      buffer.writeln(isHindi ? '\n🔥 *सर्वाधिक मुनाफे वाले सामान:*' : '\n🔥 *Top Profitable Items:*');
+      for (int i = 0; i < data.bestProfitable.take(3).length; i++) {
+        final p = data.bestProfitable[i];
+        buffer.writeln('${i + 1}. ${p.name} (+₹${p.profitAmount.toStringAsFixed(0)})');
+      }
+    }
+
+    WhatsAppShareHelper.shareToWhatsApp(
+      context: context,
+      message: buffer.toString(),
+      successToast: isHindi ? 'व्हाट्सएप पर रिपोर्ट भेजी जा रही है...' : 'Sharing report to WhatsApp...',
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final controller = context.watch<AnalyticsController>();
     final data = controller.analytics;
     final isHindi = context.isHindi;
+
+    AuthController? authCtrl;
+    try {
+      authCtrl = context.watch<AuthController>();
+    } catch (_) {}
+    final shopName = authCtrl?.currentShop?.name ?? '';
 
     return MerchantShell(
       currentIndex: -1,
@@ -77,6 +133,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             elevation: 4,
             onSelected: (val) {
               switch (val) {
+                case 'share':
+                  if (data != null) {
+                    _sharePnLSummaryOnWhatsApp(context, data, shopName);
+                  }
+                  break;
                 case 'today_sales':
                   context.push('/merchant/today-sales');
                   break;
@@ -89,6 +150,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              if (data != null)
+                PopupMenuItem<String>(
+                  value: 'share',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.share_rounded, color: Color(0xFF25D366), size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'व्हाट्सएप पर रिपोर्ट भेजें' : 'Share on WhatsApp'),
+                    ],
+                  ),
+                ),
               PopupMenuItem<String>(
                 value: 'today_sales',
                 child: Row(
@@ -139,7 +211,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   if (controller.isLoading && data == null)
                     const AppStatCardSkeleton()
                   else if (data != null) ...[
-                    // 1. Executive Clean Net Pocket Profit Card (Zero robotic gradients)
+                    // 1. Executive Clean Net Pocket Profit Card
                     AppCard(
                       padding: const EdgeInsets.all(18),
                       child: Column(
@@ -151,21 +223,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               Row(
                                 children: [
                                   Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: AppColors.success,
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: data.netPocketProfit >= 0 ? AppColors.success : AppColors.error,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    isHindi ? 'शुद्ध जेब मुनाफा' : 'NET POCKET PROFIT',
+                                    isHindi ? 'शुद्ध जेब मुनाफा (NET IN-HAND)' : 'NET POCKET PROFIT',
                                     style: TextStyle(
-                                      fontSize: 11.5,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w800,
                                       color: context.colorTextMuted,
-                                      letterSpacing: 0.8,
+                                      letterSpacing: 0.6,
                                     ),
                                   ),
                                 ],
@@ -181,7 +253,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '₹${data.netPocketProfit.toStringAsFixed(0)}',
+                              '${data.netPocketProfit >= 0 ? "+" : ""}₹${data.netPocketProfit.toStringAsFixed(0)}',
                               style: TextStyle(
                                 fontSize: 34,
                                 fontWeight: FontWeight.w900,
@@ -193,7 +265,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           const SizedBox(height: 6),
                           Text(
                             isHindi
-                                ? 'कुल ${data.totalSalesCount} बिलों के हिसाब से शुद्ध बचत'
+                                ? 'कुल ${data.totalSalesCount} बिलों के हिसाब से शुद्ध बचत (खर्चे व खरीद निकाल कर)'
                                 : 'Net profit calculated from ${data.totalSalesCount} cleared counter bills',
                             style: TextStyle(
                               fontSize: 12,
@@ -225,7 +297,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           const Divider(height: 16),
                           _buildFormulaRow(
                             context,
-                            label: isHindi ? '- सामान खरीद लागत (Inventory COGS)' : '- Inventory Cost (COGS)',
+                            label: isHindi ? '- सामान खरीद लागत (Wholesale Cost)' : '- Inventory Cost (COGS)',
                             value: '-₹${data.totalCost.toStringAsFixed(0)}',
                             valueColor: AppColors.error,
                           ),
@@ -239,8 +311,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           Divider(height: 22, thickness: 1.2, color: context.colorBorder),
                           _buildFormulaRow(
                             context,
-                            label: isHindi ? '= शुद्ध जेब मुनाफा (Net Pocket Profit)' : '= Net Pocket Profit',
-                            value: '₹${data.netPocketProfit.toStringAsFixed(0)}',
+                            label: isHindi ? '= शुद्ध जेब बचत (Net Profit)' : '= Net Pocket Profit',
+                            value: '${data.netPocketProfit >= 0 ? "+" : ""}₹${data.netPocketProfit.toStringAsFixed(0)}',
                             valueColor: data.netPocketProfit >= 0 ? AppColors.success : AppColors.error,
                             isBold: true,
                           ),
@@ -250,7 +322,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
                     const SizedBox(height: 14),
 
-                    // 3. Quick High-Utility Action Cards
+                    // 3. Quick High-Utility Action Cards (Min 52px height)
                     Row(
                       children: [
                         Expanded(
@@ -350,7 +422,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     // 4. Best Profitable Products
                     if (data.bestProfitable.isNotEmpty) ...[
                       AppSectionHeader(
-                        title: isHindi ? 'सबसे ज्यादा मुनाफा देने वाले उत्पाद' : 'TOP PROFITABLE PRODUCTS',
+                        title: isHindi ? 'सबसे ज्यादा मुनाफा देने वाले सामान' : 'TOP PROFITABLE PRODUCTS',
                         trailing: const Icon(Icons.trending_up_rounded, color: AppColors.success, size: 20),
                       ),
                       const SizedBox(height: 6),
@@ -366,8 +438,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                             return Row(
                               children: [
                                 Container(
-                                  width: 24,
-                                  height: 24,
+                                  width: 26,
+                                  height: 26,
                                   decoration: BoxDecoration(
                                     color: index == 0 ? const Color(0xFFFEF3C7) : context.colorSurfaceSubtle,
                                     borderRadius: BorderRadius.circular(6),
@@ -379,7 +451,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                   child: Text(
                                     '#${index + 1}',
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w800,
                                       color: index == 0 ? const Color(0xFFB45309) : context.colorTextSecondary,
                                     ),
@@ -403,7 +475,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                       const SizedBox(height: 2),
                                       Text(
                                         isHindi
-                                            ? '${item.soldQty} बिक्री • ${item.marginPct.toStringAsFixed(1)}% मार्जिन'
+                                            ? '${item.soldQty} पीस बिके • ${item.marginPct.toStringAsFixed(1)}% मार्जिन'
                                             : '${item.soldQty} sold • ${item.marginPct.toStringAsFixed(1)}% margin',
                                         style: TextStyle(fontSize: 11, color: context.colorTextSecondary),
                                       ),
@@ -430,7 +502,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     // 5. Dead Stock Alert
                     if (data.deadStock.isNotEmpty) ...[
                       AppSectionHeader(
-                        title: isHindi ? 'रुका हुआ / धीमा स्टॉक (DEAD STOCK)' : 'DEAD STOCK ALERT',
+                        title: isHindi ? 'धीमा / रुका हुआ स्टॉक (DEAD STOCK)' : 'DEAD STOCK ALERT',
                         trailing: const Icon(Icons.inventory_2_outlined, color: AppColors.warning, size: 20),
                       ),
                       const SizedBox(height: 6),
@@ -463,7 +535,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                       Text(
                                         isHindi
                                             ? 'स्टॉक: ${item.currentStock} पीस • ${item.daysInStock} दिनों से बिना बिक्री'
-                                            : 'Stock: ${item.currentStock} pcs • ${item.daysInStock} days in stock',
+                                            : 'Stock: ${item.currentStock} pcs • ${item.daysInStock} days idle',
                                         style: TextStyle(fontSize: 11, color: context.colorTextSecondary),
                                       ),
                                     ],
@@ -473,15 +545,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.warning,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    foregroundColor: Colors.white,
+                                    minimumSize: const Size(110, 42),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
-                                  icon: const Icon(Icons.bolt_rounded, size: 14, color: Colors.white),
+                                  icon: const Icon(Icons.bolt_rounded, size: 16, color: Colors.white),
                                   label: Text(
-                                    isHindi ? 'ऑफर बनाएं' : 'Clearance Deal',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                                    isHindi ? 'ऑफर बनाएं' : 'Clearance',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                                   ),
                                   onPressed: () {
                                     context.go('/merchant/offers');
@@ -547,7 +619,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                              minimumSize: const Size(140, 44),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                             onPressed: () => context.go('/merchant/pos'),
