@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/language_controller.dart';
+import '../../../core/utils/date_time_utils.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/merchant_shell.dart';
@@ -34,13 +35,92 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
     });
   }
 
-  void _showAddExpenseDialog(BuildContext context, {String? defaultCategory, String? defaultNotes, double? defaultAmount}) {
+  Color _getCategoryColor(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'chai_nashta':
+        return const Color(0xFF8D6E63); // Warm Coffee Brown
+      case 'electricity':
+        return const Color(0xFFF57C00); // Amber Orange
+      case 'rent':
+        return const Color(0xFF1E88E5); // Royal Blue
+      case 'salary':
+        return const Color(0xFF8E24AA); // Purple
+      case 'transport':
+        return const Color(0xFF00897B); // Teal
+      case 'packaging':
+        return const Color(0xFFD81B60); // Pink/Rose
+      case 'maintenance':
+        return const Color(0xFF546E7A); // Slate Blue
+      default:
+        return const Color(0xFF6D4C41); // Slate Brown
+    }
+  }
+
+  IconData _getCategoryIcon(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'chai_nashta':
+        return Icons.coffee_rounded;
+      case 'electricity':
+        return Icons.bolt_rounded;
+      case 'rent':
+        return Icons.storefront_rounded;
+      case 'salary':
+        return Icons.badge_outlined;
+      case 'transport':
+        return Icons.local_shipping_outlined;
+      case 'packaging':
+        return Icons.shopping_bag_outlined;
+      case 'maintenance':
+        return Icons.cleaning_services_rounded;
+      default:
+        return Icons.receipt_long_rounded;
+    }
+  }
+
+  String _formatCategoryName(BuildContext context, String cat) {
+    switch (cat.toLowerCase()) {
+      case 'chai_nashta':
+        return context.tr('exp_cat_tea');
+      case 'electricity':
+        return context.tr('exp_cat_electricity');
+      case 'rent':
+        return context.tr('exp_cat_rent');
+      case 'salary':
+        return context.tr('exp_cat_salary');
+      case 'transport':
+        return context.tr('exp_cat_transport');
+      case 'packaging':
+        return context.tr('exp_cat_packaging');
+      case 'maintenance':
+        return context.tr('exp_cat_maintenance');
+      default:
+        return context.tr('exp_cat_other');
+    }
+  }
+
+  void _showAddExpenseDialog(
+    BuildContext context, {
+    String? defaultCategory,
+    String? defaultNotes,
+    double? defaultAmount,
+  }) {
     String category = defaultCategory ?? 'chai_nashta';
     String paymentMethod = 'cash';
     final amountCtrl = TextEditingController(
       text: defaultAmount != null && defaultAmount > 0 ? defaultAmount.toStringAsFixed(0) : '',
     );
     final notesCtrl = TextEditingController(text: defaultNotes ?? '');
+
+    final availableCategories = [
+      {'key': 'chai_nashta', 'icon': Icons.coffee_rounded, 'label': context.tr('exp_cat_tea')},
+      {'key': 'electricity', 'icon': Icons.bolt_rounded, 'label': context.tr('exp_cat_electricity')},
+      {'key': 'rent', 'icon': Icons.storefront_rounded, 'label': context.tr('exp_cat_rent')},
+      {'key': 'salary', 'icon': Icons.badge_outlined, 'label': context.tr('exp_cat_salary')},
+      {'key': 'transport', 'icon': Icons.local_shipping_outlined, 'label': context.tr('exp_cat_transport')},
+      {'key': 'packaging', 'icon': Icons.shopping_bag_outlined, 'label': context.tr('exp_cat_packaging')},
+      {'key': 'maintenance', 'icon': Icons.cleaning_services_rounded, 'label': context.tr('exp_cat_maintenance')},
+      {'key': 'other', 'icon': Icons.receipt_long_rounded, 'label': context.tr('exp_cat_other')},
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -54,14 +134,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
           ),
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
-            top: 20,
+            top: 16,
             left: 20,
             right: 20,
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(sheetCtx).size.height * 0.85,
-              maxWidth: 580,
+              maxHeight: MediaQuery.of(sheetCtx).size.height * 0.90,
+              maxWidth: 600,
             ),
             child: SingleChildScrollView(
               child: Column(
@@ -71,9 +151,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                   // Drag Handle & Header
                   Center(
                     child: Container(
-                      width: 40,
+                      width: 44,
                       height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
+                      margin: const EdgeInsets.only(bottom: 14),
                       decoration: BoxDecoration(
                         color: sheetCtx.colorBorder,
                         borderRadius: BorderRadius.circular(2),
@@ -94,7 +174,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                       Expanded(
                         child: Text(
                           sheetCtx.tr('exp_dialog_title'),
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: sheetCtx.colorTextPrimary),
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: sheetCtx.colorTextPrimary),
                         ),
                       ),
                       IconButton(
@@ -103,44 +183,78 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                       ),
                     ],
                   ),
-                  Divider(height: 24, color: sheetCtx.colorBorder),
+                  Divider(height: 20, color: sheetCtx.colorBorder),
 
-                  // Category Selector
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('exp_category_$category'),
-                    isExpanded: true,
-                    initialValue: category,
-                    decoration: InputDecoration(labelText: sheetCtx.tr('exp_field_category')),
-                    items: [
-                      DropdownMenuItem(value: 'chai_nashta', child: Text(sheetCtx.tr('exp_cat_tea'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'electricity', child: Text(sheetCtx.tr('exp_cat_electricity'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'rent', child: Text(sheetCtx.tr('exp_cat_rent'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'salary', child: Text(sheetCtx.tr('exp_cat_salary'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'transport', child: Text(sheetCtx.tr('exp_cat_transport'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'packaging', child: Text(sheetCtx.tr('exp_cat_packaging'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'maintenance', child: Text(sheetCtx.tr('exp_cat_maintenance'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'other', child: Text(sheetCtx.tr('exp_cat_other'), overflow: TextOverflow.ellipsis)),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) setModalState(() => category = val);
-                    },
+                  // 1. 1-Tap Category Selector Chips
+                  Text(
+                    sheetCtx.tr('exp_field_category'),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: sheetCtx.colorTextSecondary),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: availableCategories.map((c) {
+                      final isSelected = category == c['key'];
+                      final catKey = c['key'] as String;
+                      final catColor = _getCategoryColor(catKey);
+                      return InkWell(
+                        onTap: () {
+                          setModalState(() => category = catKey);
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? catColor : sheetCtx.colorSurfaceSubtle,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected ? catColor : sheetCtx.colorBorder,
+                              width: isSelected ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                c['icon'] as IconData,
+                                size: 16,
+                                color: isSelected ? Colors.white : catColor,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                c['label'] as String,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                  color: isSelected ? Colors.white : sheetCtx.colorTextPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
 
-                  // Amount
+                  // 2. Amount Input
                   TextField(
                     controller: amountCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    autofocus: true,
+                    autofocus: defaultAmount == null,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                     decoration: InputDecoration(
                       labelText: '${sheetCtx.tr('exp_field_amount')} *',
                       prefixText: '₹ ',
+                      prefixStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onChanged: (_) => setModalState(() {}),
                   ),
                   const SizedBox(height: 8),
 
-                  // 1-Tap Quick Amount Chips
+                  // 1-Tap Quick Amount Chips (Min 42px touch target)
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
@@ -154,7 +268,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                             });
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            constraints: const BoxConstraints(minHeight: 38),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: (double.tryParse(amountCtrl.text) == preset)
                                   ? AppColors.primary
@@ -169,7 +284,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                             child: Text(
                               '₹${preset.toStringAsFixed(0)}',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: (double.tryParse(amountCtrl.text) == preset)
                                     ? Colors.white
@@ -180,80 +295,156 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
 
-                  // Notes
+                  // 3. Payment Mode Selection (44px touch targets)
+                  Text(
+                    sheetCtx.tr('exp_field_payment_mode'),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: sheetCtx.colorTextSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setModalState(() => paymentMethod = 'cash'),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: paymentMethod == 'cash' ? AppColors.success.withValues(alpha: 0.15) : sheetCtx.colorSurfaceSubtle,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: paymentMethod == 'cash' ? AppColors.success : sheetCtx.colorBorder,
+                                width: paymentMethod == 'cash' ? 1.5 : 1.0,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.payments_rounded, size: 18, color: paymentMethod == 'cash' ? AppColors.success : sheetCtx.colorTextSecondary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  sheetCtx.tr('exp_mode_cash'),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: paymentMethod == 'cash' ? AppColors.success : sheetCtx.colorTextPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setModalState(() => paymentMethod = 'upi'),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: paymentMethod == 'upi' ? AppColors.primary.withValues(alpha: 0.15) : sheetCtx.colorSurfaceSubtle,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: paymentMethod == 'upi' ? AppColors.primary : sheetCtx.colorBorder,
+                                width: paymentMethod == 'upi' ? 1.5 : 1.0,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.qr_code_scanner_rounded, size: 18, color: paymentMethod == 'upi' ? AppColors.primary : sheetCtx.colorTextSecondary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  sheetCtx.tr('exp_mode_online'),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: paymentMethod == 'upi' ? AppColors.primary : sheetCtx.colorTextPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 4. Notes
                   TextField(
                     controller: notesCtrl,
                     decoration: InputDecoration(
                       labelText: sheetCtx.tr('exp_field_notes'),
-                      hintText: 'e.g. Samosa & tea for staff',
+                      hintText: sheetCtx.isHindi ? 'उदा. दुकान स्टाफ के लिए चाय नाश्ता' : 'e.g. Samosa & tea for staff',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       suffixIcon: AppVoiceIconButton(
                         controller: notesCtrl,
                         hint: sheetCtx.tr('exp_field_notes'),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 22),
 
-                  // Payment Method
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('exp_payment_mode_$paymentMethod'),
-                    isExpanded: true,
-                    initialValue: paymentMethod,
-                    decoration: InputDecoration(labelText: sheetCtx.tr('exp_field_payment_mode')),
-                    items: [
-                      DropdownMenuItem(value: 'cash', child: Text(sheetCtx.tr('exp_mode_cash'), overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'upi', child: Text(sheetCtx.tr('exp_mode_online'), overflow: TextOverflow.ellipsis)),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) setModalState(() => paymentMethod = val);
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Submit Buttons
+                  // 5. Submit Buttons (48px primary action)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(sheetCtx),
-                        child: Text(sheetCtx.tr('btn_cancel')),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          minimumSize: const Size(120, 46),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      Expanded(
+                        flex: 1,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => Navigator.pop(sheetCtx),
+                          child: Text(sheetCtx.tr('btn_cancel'), style: const TextStyle(fontWeight: FontWeight.bold)),
                         ),
-                        onPressed: () async {
-                          final amount = double.tryParse(amountCtrl.text) ?? 0.0;
-                          if (amount <= 0) {
-                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
-                              SnackBar(content: Text(sheetCtx.tr('exp_val_amount'))),
-                            );
-                            return;
-                          }
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            minimumSize: const Size.fromHeight(48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            final amount = double.tryParse(amountCtrl.text) ?? 0.0;
+                            if (amount <= 0) {
+                              ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                                SnackBar(content: Text(sheetCtx.tr('exp_val_amount'))),
+                              );
+                              return;
+                            }
 
-                          final success = await context.read<ExpenseController>().addExpense(
-                            category: category,
-                            amount: amount,
-                            notes: notesCtrl.text.trim(),
-                            paymentMethod: paymentMethod,
-                          );
-
-                          if (success && sheetCtx.mounted) {
-                            Navigator.pop(sheetCtx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(sheetCtx.tr('exp_toast_saved')),
-                                backgroundColor: AppColors.success,
-                              ),
+                            final success = await context.read<ExpenseController>().addExpense(
+                              category: category,
+                              amount: amount,
+                              notes: notesCtrl.text.trim(),
+                              paymentMethod: paymentMethod,
                             );
-                          }
-                        },
-                        child: Text(sheetCtx.tr('btn_save'), style: const TextStyle(fontWeight: FontWeight.bold)),
+
+                            if (success && sheetCtx.mounted) {
+                              Navigator.pop(sheetCtx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(sheetCtx.tr('exp_toast_saved')),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            }
+                          },
+                          child: Text(
+                            sheetCtx.isHindi ? '✓ खर्च सेव करें' : sheetCtx.tr('btn_save'),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -308,7 +499,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: ctx.colorSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -379,30 +570,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
     );
   }
 
-  String _formatCategoryName(BuildContext context, String cat) {
-    switch (cat.toLowerCase()) {
-      case 'chai_nashta':
-        return context.tr('exp_cat_tea');
-      case 'electricity':
-        return context.tr('exp_cat_electricity');
-      case 'rent':
-        return context.tr('exp_cat_rent');
-      case 'salary':
-        return context.tr('exp_cat_salary');
-      case 'transport':
-        return context.tr('exp_cat_transport');
-      case 'packaging':
-        return context.tr('exp_cat_packaging');
-      case 'maintenance':
-        return context.tr('exp_cat_maintenance');
-      default:
-        return context.tr('exp_cat_other');
-    }
-  }
-
   Widget _buildQuickPresetChip(BuildContext context, String label, String cat, String defaultNotes, double? defaultAmt) {
     return Padding(
-      padding: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.only(right: 8),
       child: InkWell(
         onTap: () => _showAddExpenseDialog(
           context,
@@ -410,17 +580,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
           defaultNotes: defaultNotes,
           defaultAmount: defaultAmt,
         ),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: context.colorSurfaceSubtle,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: context.colorBorder),
           ),
+          alignment: Alignment.center,
           child: Text(
             label,
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
           ),
         ),
       ),
@@ -628,83 +800,181 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
           maxWidth: 1200,
           child: Column(
             children: [
-              // 1. CLEAN HERO TODAY'S EXPENSE CASHBOOK CARD
+              // 1. DUAL CASHBOOK HERO CARD (TODAY'S SPENDS + THIS MONTH'S EXPENSES)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: AppCard(
                   padding: const EdgeInsets.all(14),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: context.colorErrorLight,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.receipt_long_rounded,
-                          color: AppColors.error,
-                          size: 24,
-                        ),
+                      Row(
+                        children: [
+                          // Left: Today's Spends
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: context.colorErrorLight.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.receipt_long_rounded, size: 16, color: AppColors.error),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          context.isHindi ? 'आज का खर्चा' : context.tr('exp_kpi_today'),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.error,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      '₹${expController.todayExpenses.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        color: AppColors.error,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    context.isHindi
+                                        ? (profitSummary.netProfit >= 0
+                                            ? 'बचत: +₹${profitSummary.netProfit.toStringAsFixed(0)}'
+                                            : 'घाटा: -₹${profitSummary.netProfit.abs().toStringAsFixed(0)}')
+                                        : 'Sales: ₹${todaySales.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: profitSummary.isLoss ? AppColors.error : AppColors.success,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Right: This Month's Spends
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: context.colorPrimaryLight.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.primary),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          context.isHindi ? 'इस महीने का खर्च' : context.tr('exp_kpi_monthly'),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      '₹${expController.monthlyExpenses.toStringAsFixed(0)}',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        color: context.colorTextPrimary,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${expController.expenses.length} ${context.isHindi ? 'खर्चे दर्ज' : 'Records'}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.colorTextSecondary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              context.tr('exp_kpi_today'),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: context.colorTextSecondary,
+                      const SizedBox(height: 10),
+                      // Action Row: Quick add + Monthly report button (40px touch targets)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showMonthlySummarySheet(context, expController, todaySales, profitSummary),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(40),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.analytics_outlined, size: 16),
+                              label: Text(
+                                context.isHindi ? 'महीने की रिपोर्ट' : 'Monthly Summary',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '₹${expController.todayExpenses.toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: context.colorTextPrimary,
-                                  letterSpacing: -0.5,
-                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _showAddExpenseDialog(context),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(40),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: Text(
+                                context.isHindi ? '+ नया खर्च' : '+ Add Expense',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Sales: ₹${todaySales.toStringAsFixed(0)} • Net: ${profitSummary.netProfit < 0 ? "-" : "+"}₹${profitSummary.netProfit.abs().toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: profitSummary.isLoss ? AppColors.error : AppColors.success,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddExpenseDialog(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(100, 36),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 16),
-                        label: Text(context.isHindi ? 'खर्च जोड़ें' : '+ Add Expense'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ),
 
-              // 2. ⚡ ROZ KE KHARCHE 1-TAP QUICK PRESETS BAR
+              // 2. ⚡ ROZ KE KHARCHE 1-TAP QUICK PRESETS BAR (Min 40px Height)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
@@ -716,7 +986,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                         const SizedBox(width: 4),
                         Text(
                           context.tr('exp_quick_entry_title'),
-                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colorTextMuted),
                         ),
                       ],
                     ),
@@ -729,8 +999,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                           _buildQuickPresetChip(context, context.isHindi ? '⚡ बिजली बिल' : '⚡ Electricity Bill', 'electricity', 'Monthly Power Bill', null),
                           _buildQuickPresetChip(context, context.isHindi ? '🏬 दुकान किराया' : '🏬 Store Rent', 'rent', 'Monthly Shop Rent', null),
                           _buildQuickPresetChip(context, context.isHindi ? '👨‍🍳 स्टाफ वेतन' : '👨‍🍳 Staff Salary', 'salary', 'Staff Salary Advance', null),
-                          _buildQuickPresetChip(context, context.isHindi ? '⛽ पेट्रोल / परिवहन' : '⛽ Petrol / Transport', 'transport', 'Delivery / Auto Fare', 100.0),
-                          _buildQuickPresetChip(context, context.isHindi ? '📦 पैकेजिंग / बैग' : '📦 Packaging Bags', 'packaging', 'Packing Material', 500.0),
+                          _buildQuickPresetChip(context, context.isHindi ? '⛽ भाड़ा / ऑटो (₹100)' : '⛽ Goods Auto / Fare', 'transport', 'Delivery / Auto Fare', 100.0),
+                          _buildQuickPresetChip(context, context.isHindi ? '📦 पैकिंग थैली (₹500)' : '📦 Packaging Bags', 'packaging', 'Packing Bags Material', 500.0),
                         ],
                       ),
                     ),
@@ -764,49 +1034,49 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                       label: context.tr('exp_cat_electricity'),
                       count: expController.expenses.where((e) => e.category.toLowerCase() == 'electricity').length,
                       isSelected: _selectedFilter == 'electricity',
-                      onSelected: () => setState(() => _selectedFilter = 'electricity'),
+                      onSelected: () => setState(() => _selectedFilter == 'electricity'),
                     ),
                     _buildFilterChip(
                       context: context,
                       label: context.tr('exp_cat_rent'),
                       count: expController.expenses.where((e) => e.category.toLowerCase() == 'rent').length,
                       isSelected: _selectedFilter == 'rent',
-                      onSelected: () => setState(() => _selectedFilter = 'rent'),
+                      onSelected: () => setState(() => _selectedFilter == 'rent'),
                     ),
                     _buildFilterChip(
                       context: context,
                       label: context.tr('exp_cat_salary'),
                       count: expController.expenses.where((e) => e.category.toLowerCase() == 'salary').length,
                       isSelected: _selectedFilter == 'salary',
-                      onSelected: () => setState(() => _selectedFilter = 'salary'),
+                      onSelected: () => setState(() => _selectedFilter == 'salary'),
                     ),
                     _buildFilterChip(
                       context: context,
                       label: context.tr('exp_cat_transport'),
                       count: expController.expenses.where((e) => e.category.toLowerCase() == 'transport').length,
                       isSelected: _selectedFilter == 'transport',
-                      onSelected: () => setState(() => _selectedFilter = 'transport'),
+                      onSelected: () => setState(() => _selectedFilter == 'transport'),
                     ),
                     _buildFilterChip(
                       context: context,
                       label: context.tr('exp_cat_packaging'),
                       count: expController.expenses.where((e) => e.category.toLowerCase() == 'packaging').length,
                       isSelected: _selectedFilter == 'packaging',
-                      onSelected: () => setState(() => _selectedFilter = 'packaging'),
+                      onSelected: () => setState(() => _selectedFilter == 'packaging'),
                     ),
                     _buildFilterChip(
                       context: context,
                       label: context.tr('exp_cat_other'),
                       count: expController.expenses.where((e) => e.category.toLowerCase() == 'other').length,
                       isSelected: _selectedFilter == 'other',
-                      onSelected: () => setState(() => _selectedFilter = 'other'),
+                      onSelected: () => setState(() => _selectedFilter == 'other'),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 8),
 
-              // 3. EXPENSES LIST
+              // 4. EXPENSES LIST
               Expanded(
                 child: expController.isLoading && expController.expenses.isEmpty
                     ? const AppListSkeleton()
@@ -823,7 +1093,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                                 ),
                                 const SizedBox(height: 12),
                                 ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    minimumSize: const Size(140, 44),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
                                   icon: const Icon(Icons.add_rounded, color: Colors.white),
                                   label: Text(context.tr('exp_add_btn')),
                                   onPressed: () => _showAddExpenseDialog(context),
@@ -874,17 +1148,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
   }
 
   Widget _buildExpenseCard(BuildContext context, ExpenseModel exp, ExpenseController controller) {
+    final catColor = _getCategoryColor(exp.category);
+    final catIcon = _getCategoryIcon(exp.category);
+    final isCash = exp.paymentMethod.toLowerCase() == 'cash';
+    final formattedDate = AppDateTimeUtils.formatRelativeDate(exp.expenseDate);
+
     return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: context.colorPrimaryLight,
-              borderRadius: BorderRadius.circular(10),
+              color: catColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 20),
+            child: Icon(catIcon, color: catColor, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -892,32 +1171,68 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  _formatCategoryName(context, exp.category),
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: context.colorTextPrimary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _formatCategoryName(context, exp.category),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.colorTextPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isCash ? AppColors.success.withValues(alpha: 0.12) : AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isCash ? (context.isHindi ? 'नकद' : 'CASH') : (context.isHindi ? 'ऑनलाइन' : 'UPI'),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: isCash ? AppColors.success : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  exp.notes.isNotEmpty ? exp.notes : 'Mode: ${exp.paymentMethod.toUpperCase()}',
-                  style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Text(
+                      formattedDate,
+                      style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                    ),
+                    if (exp.notes.isNotEmpty) ...[
+                      Text(' • ', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
+                      Expanded(
+                        child: Text(
+                          exp.notes,
+                          style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 10),
           Text(
             '₹${exp.amount.toStringAsFixed(0)}',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: context.colorTextPrimary),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: context.colorTextPrimary),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           IconButton(
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            padding: EdgeInsets.zero,
-            icon: Icon(Icons.delete_outline_rounded, size: 18, color: context.colorTextMuted),
-            tooltip: 'Delete Record',
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            padding: const EdgeInsets.all(10),
+            icon: Icon(Icons.delete_outline_rounded, size: 20, color: context.colorTextMuted),
+            tooltip: context.isHindi ? 'हटाएं' : 'Delete',
             onPressed: () => _confirmDeleteExpense(context, exp.id),
           ),
         ],
