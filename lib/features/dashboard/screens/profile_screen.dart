@@ -636,7 +636,7 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                               ),
                             ),
                             trailing: Container(
-                              height: 32,
+                              height: 38,
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
                                 color: context.colorSurfaceSubtle,
@@ -729,7 +729,7 @@ class _ProfileScreenState extends State<ProfileScreen> with AutomaticKeepAliveCl
                               ),
                             ),
                             trailing: Container(
-                              height: 32,
+                              height: 38,
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
                                 color: context.colorSurfaceSubtle,
@@ -2036,14 +2036,14 @@ class _IconTogglePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: isSelected ? AppColors.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(
             icon,
-            size: 15,
+            size: 16,
             color: isSelected ? Colors.white : context.colorTextSecondary,
           ),
         ),
@@ -2070,7 +2070,7 @@ class _TextTogglePill extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -2078,7 +2078,7 @@ class _TextTogglePill extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
             color: isSelected ? Colors.white : context.colorTextSecondary,
           ),
