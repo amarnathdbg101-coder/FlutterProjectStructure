@@ -237,9 +237,9 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
             }
           },
         ),
-        title: const Text(
-          'Customer Pickup Orders',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        title: Text(
+          context.isHindi ? 'ग्राहक पिकअप ऑर्डर्स' : 'Customer Pickup Orders',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: context.colorTextPrimary),
         ),
         actions: [
           IconButton(
@@ -1036,59 +1036,82 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
               ],
               const SizedBox(height: 12),
 
-              // Action Footer
+              // Action Footer with comfortable 42px touch targets
               Row(
                 children: [
                   if (r.customerMobile.isNotEmpty) ...[
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      icon: const Icon(Icons.phone_rounded, size: 14, color: AppColors.primary),
-                      label: Text(context.isHindi ? 'कॉल' : 'Call', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    IconButton(
+                      constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+                      padding: const EdgeInsets.all(8),
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, size: 19, color: Color(0xFF128C7E)),
+                      tooltip: context.isHindi ? 'ग्राहक को व्हाट्सएप' : 'WhatsApp Customer',
+                      onPressed: () => resCtrl.openWhatsAppChat(context, r),
+                    ),
+                    IconButton(
+                      constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+                      padding: const EdgeInsets.all(8),
+                      icon: const Icon(Icons.phone_outlined, size: 19, color: AppColors.primary),
+                      tooltip: context.isHindi ? 'ग्राहक को कॉल करें' : 'Call Customer',
                       onPressed: () => resCtrl.makeCustomerCall(context, r),
                     ),
+                  ],
+                  const Spacer(),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert_rounded, size: 20, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                    tooltip: context.isHindi ? 'विकल्प' : 'Options',
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 3,
+                    onSelected: (val) {
+                      switch (val) {
+                        case 'detail':
+                          _showReservationDetailSheet(context, r, resCtrl, isDark);
+                          break;
+                        case 'cancel':
+                          _confirmCancelReservation(context, r);
+                          break;
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem<String>(
+                        value: 'detail',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
+                            const SizedBox(width: 10),
+                            Text(context.isHindi ? 'पूरा विवरण देखें' : 'View Details'),
+                          ],
+                        ),
+                      ),
+                      if (r.isPending || r.isReady) ...[
+                        const PopupMenuDivider(),
+                        PopupMenuItem<String>(
+                          value: 'cancel',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.cancel_outlined, size: 18, color: AppColors.error),
+                              const SizedBox(width: 10),
+                              Text(context.isHindi ? 'ऑर्डर रद्द करें' : 'Cancel Order', style: const TextStyle(color: AppColors.error)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (r.isPending || r.isReady) ...[
                     const SizedBox(width: 6),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF25D366),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      icon: const Icon(Icons.chat_rounded, size: 14, color: Colors.white),
-                      label: const Text('WhatsApp', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-                      onPressed: () => resCtrl.openWhatsAppChat(context, r),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-
-                  const Spacer(),
-
-                  if (r.isPending || r.isReady) ...[
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () => _confirmCancelReservation(context, r),
-                      child: Text(context.isHindi ? 'रद्द करें' : 'Cancel', style: const TextStyle(fontSize: 11, color: AppColors.error)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.success,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(120, 42),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      icon: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
-                      label: Text(context.isHindi ? 'कोड सत्यापित करें' : 'Verify Code', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                      icon: const Icon(Icons.check_rounded, size: 18, color: Colors.white),
+                      label: Text(
+                        context.isHindi ? 'पिन सत्यापित करें' : 'Verify Code',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
                       onPressed: () => _showVerifyCodeDialog(context, prefillReservation: r),
                     ),
                   ],
