@@ -302,8 +302,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
         ),
       );
 
-      // Fast image compression for fast network upload (800px, 75% quality saves ~75% bandwidth & speeds up AI inference)
-      final (_, normalizedBytes) = await normalizeXFile(picked, maxDimension: 800, quality: 75);
+      // Fast image compression for fast network upload (512px, 65% quality saves ~85% bandwidth & speeds up AI inference)
+      final (_, normalizedBytes) = await normalizeXFile(picked, maxDimension: 512, quality: 65);
       final base64String = base64Encode(normalizedBytes);
       final mime = picked.path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
