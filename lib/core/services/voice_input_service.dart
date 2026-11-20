@@ -307,8 +307,8 @@ class AppVoiceInputService extends ChangeNotifier {
         onResult: (SpeechRecognitionResult result) {
           _onSpeechResult(result, silenceTimeout);
         },
-        localeId: effectiveLocale,
         listenOptions: SpeechListenOptions(
+          localeId: effectiveLocale,
           partialResults: true,
           cancelOnError: false,
           listenMode: ListenMode.search,
@@ -431,8 +431,8 @@ class AppVoiceInputService extends ChangeNotifier {
             onDone?.call();
           }
         },
-        localeId: effectiveLocale,
         listenOptions: SpeechListenOptions(
+          localeId: effectiveLocale,
           partialResults: true,
           cancelOnError: false,
           listenMode: ListenMode.dictation,

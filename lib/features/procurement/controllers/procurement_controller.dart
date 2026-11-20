@@ -1,14 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:printing/printing.dart';
 import '../../../core/localization/language_controller.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
-import '../../../core/widgets/app_ui_components.dart';
 import '../../products/models/product_model.dart';
-import '../../products/repositories/product_repository.dart';
 import '../models/procurement_model.dart';
 import '../repositories/procurement_repository.dart';
 import '../services/procurement_pdf_service.dart';
