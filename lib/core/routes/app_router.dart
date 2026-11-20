@@ -16,6 +16,7 @@ import '../../features/products/screens/barcode_sheet_studio_screen.dart';
 import '../../features/products/screens/inventory_screen.dart';
 import '../../features/products/screens/low_stock_alerts_screen.dart';
 import '../../features/products/screens/price_checker_screen.dart';
+import '../../features/products/screens/products_list_screen.dart';
 import '../../features/products/screens/batch_expiry_radar_screen.dart';
 import '../../features/reservations/screens/reservations_list_screen.dart';
 import '../storage/token_storage.dart';
@@ -37,6 +38,7 @@ class AppRoutes {
   static const String reservations = '/merchant/reservations';
   static const String barcodeStudio = '/merchant/barcode-studio';
   static const String priceChecker = '/merchant/price-checker';
+  static const String productsList = '/merchant/products/list';
   static const String batchExpiry = '/merchant/batch-expiry';
   static const String profile = '/merchant/profile';
 }
@@ -179,6 +181,13 @@ final GoRouter appRouter = GoRouter(
           initialBarcode: barcode,
           initialQuery: query,
         );
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.productsList,
+      builder: (context, state) {
+        TokenStorage.saveLastRoute(AppRoutes.productsList);
+        return const ProductsListScreen();
       },
     ),
     GoRoute(
