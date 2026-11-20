@@ -485,63 +485,65 @@ class _LowStockAlertsScreenState extends State<LowStockAlertsScreen> {
                                 // Card Bottom Actions: Wholesale Reorder & Edit
                                 Row(
                                   children: [
-                                    // 1-Tap Reorder to Wholesale Procurement List
+                                    // 1-Tap Reorder to Wholesale Procurement List (Height 42)
                                     Expanded(
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          side: BorderSide(color: AppColors.primary.withValues(alpha: 0.6)),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          backgroundColor: context.colorPrimaryLight.withValues(alpha: 0.4),
-                                        ),
-                                        icon: const Icon(Icons.playlist_add_rounded, size: 16, color: AppColors.primary),
-                                        label: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          alignment: Alignment.centerLeft,
-                                          child: Text(
-                                            '${context.tr('stock_reorder_btn')} (+${SmartStockReorderService.getRecommendedReorderQuantity(p)})',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.primary,
+                                      child: SizedBox(
+                                        height: 42,
+                                        child: OutlinedButton.icon(
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                                            side: BorderSide(color: AppColors.primary.withValues(alpha: 0.6)),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                            backgroundColor: context.colorPrimaryLight.withValues(alpha: 0.4),
+                                          ),
+                                          icon: const Icon(Icons.playlist_add_rounded, size: 18, color: AppColors.primary),
+                                          label: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              '${context.isHindi ? "मंडी लिस्ट में जोड़ें" : context.tr('stock_reorder_btn')} (+${SmartStockReorderService.getRecommendedReorderQuantity(p)})',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.primary,
+                                              ),
                                             ),
                                           ),
+                                          onPressed: () {
+                                            SmartStockReorderService.addToProcurementList(context, p);
+                                          },
                                         ),
-                                        onPressed: () {
-                                          SmartStockReorderService.addToProcurementList(context, p);
-                                        },
                                       ),
                                     ),
                                     const SizedBox(width: 8),
 
-                                    // Edit Product Button
-                                    OutlinedButton.icon(
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        side: BorderSide(color: context.colorBorder),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                      icon: Icon(Icons.edit_note_rounded, size: 16, color: context.colorTextPrimary),
-                                      label: Text(
-                                        context.tr('btn_edit'),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: context.colorTextPrimary,
+                                    // Edit Product Button (Height 42)
+                                    SizedBox(
+                                      height: 42,
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                                          side: BorderSide(color: context.colorBorder),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                         ),
-                                      ),
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => ProductDetailScreen(product: p),
+                                        icon: Icon(Icons.edit_note_rounded, size: 18, color: context.colorTextPrimary),
+                                        label: Text(
+                                          context.isHindi ? 'विवरण' : context.tr('btn_edit'),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: context.colorTextPrimary,
                                           ),
-                                        );
-                                      },
+                                        ),
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ProductDetailScreen(product: p),
+                                            ),
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ],
                                 ),
