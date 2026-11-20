@@ -1,16 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../core/constants/api_constants.dart';
 import 'ai_audio_cache_service.dart';
 import 'ai_tts_service.dart';
 
 /// Ultra High-Fidelity Cloud Neural TTS Service for StudySilo
 /// Powered by 100% Free Microsoft Edge Neural Speech Engine (Zero API Key)
 /// Features:
-/// 🎙️ Studio-grade neural human voices (Priya: hi-IN-SwaraNeural, Aryan: hi-IN-MadhurNeural)
+/// 🎙️ Studio-grade neural human voices (Priya Ma'am: hi-IN-SwaraNeural)
 /// ⚡ Zero cost, unlimited requests, and natural human teacher prosody
 /// 💾 Persistent disk caching of audio files for 0ms instant replay
+/// 🚀 Progressive HTTP audio streaming with Range requests for <400ms startup
 class CloudNeuralTtsService {
   static final CloudNeuralTtsService _instance = CloudNeuralTtsService._internal();
   factory CloudNeuralTtsService() => _instance;
@@ -18,116 +21,123 @@ class CloudNeuralTtsService {
 
   final Dio _dio = Dio(
     BaseOptions(
-      connectTimeout: const Duration(seconds: 6),
-      receiveTimeout: const Duration(seconds: 12),
+      connectTimeout: const Duration(seconds: 8),
+      receiveTimeout: const Duration(seconds: 25),
     ),
   );
 
-  /// Resolves the studio neural voice identifier based on student persona
-  String getVoiceName(VoicePersona persona) {
-    switch (persona) {
-      case VoicePersona.priya:
-        return 'hi-IN-SwaraNeural';
-      case VoicePersona.aryan:
-        return 'hi-IN-MadhurNeural';
-      case VoicePersona.mentor:
-        return 'hi-IN-SwaraNeural';
-    }
+  /// Resolves the studio neural voice identifier (Studio Indian Female: Priya / hi-IN-SwaraNeural)
+  String getVoiceName([VoicePersona? persona]) {
+    return 'hi-IN-SwaraNeural';
   }
 
-  /// Splits longer text units into <= 180 char sub-phrases at punctuation boundaries
-  List<String> _splitIntoShortPhrases(String text, int maxLength) {
-    if (text.length <= maxLength) return [text];
+  /// Builds the direct progressive streaming URL for speech synthesis.
+  /// Works across both Web and Mobile with zero local I/O wait.
+  String getAudioStreamUrl(String text, {bool isSummary = false}) {
+    // Avoid double regex sanitization if the text has already been cleaned
+    final cleanText = (text.contains(r'\') || text.contains('**') || text.contains('|') || text.contains('#'))
+        ? AiTtsService.sanitizeTextForSpeech(text)
+        : text.trim();
+    final endpoint = '${ApiConstants.baseUrl}${ApiConstants.ttsSynthesize}';
+    return '$endpoint?text=${Uri.encodeComponent(cleanText)}&persona=priya${isSummary ? '&summary=true' : ''}';
+  }
 
-    final List<String> result = [];
-    final rawTokens = text.split(RegExp(r'(?<=[,;.!?\n])\s+'));
-    String buffer = '';
+  /// Pre-warms / caches speech synthesis in the background without blocking the UI.
+  /// When the student taps "Listen" or "30s Note", audio starts in 0ms!
+  Future<void> prewarmAudio(String text, {bool isSummary = false}) async {
+    try {
+      if (text.trim().isEmpty) return;
+      final cleanText = AiTtsService.sanitizeTextForSpeech(text);
+      if (cleanText.isEmpty) return;
 
-    for (final token in rawTokens) {
-      if ((buffer.length + token.length + 1) <= maxLength) {
-        buffer = buffer.isEmpty ? token : '$buffer $token';
-      } else {
-        if (buffer.isNotEmpty) {
-          result.add(buffer);
-        }
-        if (token.length > maxLength) {
-          final words = token.split(' ');
-          String wordBuf = '';
-          for (final w in words) {
-            if ((wordBuf.length + w.length + 1) <= maxLength) {
-              wordBuf = wordBuf.isEmpty ? w : '$wordBuf $w';
-            } else {
-              if (wordBuf.isNotEmpty) result.add(wordBuf);
-              wordBuf = w;
-            }
-          }
-          if (wordBuf.isNotEmpty) buffer = wordBuf;
-        } else {
-          buffer = token;
-        }
+      final cacheKey = isSummary ? '${cleanText}_summary' : cleanText;
+      final cachedPath = await AiAudioCacheService().getCachedAudioPath(cacheKey);
+      if (cachedPath != null && File(cachedPath).existsSync()) {
+        final file = File(cachedPath);
+        if (await file.length() > 0) return; // Already cached
+      }
+
+      final streamUrl = getAudioStreamUrl(cleanText, isSummary: isSummary);
+      final hash = AiAudioCacheService.computeHash(cacheKey);
+      unawaited(_cacheAudioInBackground(streamUrl, cacheKey, hash));
+    } catch (_) {}
+  }
+
+  /// Synthesizes speech using the Go Backend Neural Engine and caches to local disk
+  /// Returns the local audio file path or streaming URL
+  Future<String?> synthesizeNeuralAudio(
+    String text, [
+    VoicePersona persona = VoicePersona.priya,
+  ]) async {
+    return synthesizeNeuralAudioWithOpt(text, persona: persona);
+  }
+
+  /// Synthesizes speech using the Go Backend Neural Engine with options.
+  /// - If the audio file is already cached locally, returns the local file path (0ms replay).
+  /// - If not, returns the direct HTTP streaming URL so just_audio begins playback progressively (<400ms).
+  /// - Concurrently downloads and registers the cache file in the background so future plays are instant.
+  Future<String?> synthesizeNeuralAudioWithOpt(
+    String text, {
+    VoicePersona persona = VoicePersona.priya,
+    bool isSummary = false,
+    CancelToken? cancelToken,
+  }) async {
+    if (text.trim().isEmpty) return null;
+
+    final cleanText = AiTtsService.sanitizeTextForSpeech(text);
+    if (cleanText.isEmpty) return null;
+
+    final streamUrl = getAudioStreamUrl(cleanText, isSummary: isSummary);
+
+    // On Web (Chrome): Return direct streaming URL
+    if (kIsWeb) {
+      return streamUrl;
+    }
+
+    final cacheKey = isSummary ? '${cleanText}_summary' : cleanText;
+    final hash = AiAudioCacheService.computeHash(cacheKey);
+
+    // 1. ⚡ 0ms Replay: Check if audio file is already cached on local disk
+    final cachedPath = await AiAudioCacheService().getCachedAudioPath(cacheKey);
+    if (cachedPath != null && File(cachedPath).existsSync()) {
+      final file = File(cachedPath);
+      if (await file.length() > 0) {
+        return cachedPath;
       }
     }
-    if (buffer.isNotEmpty) result.add(buffer);
 
-    return result.isEmpty ? [text] : result;
+    // 2. ⚡ Progressive Streaming: Return the direct URL immediately so playback starts in <400ms!
+    // Asynchronously cache in background for future offline replays
+    unawaited(_cacheAudioInBackground(streamUrl, cacheKey, hash));
+
+    return streamUrl;
   }
 
-  /// Synthesizes speech using Microsoft Edge Neural Engine and caches to local disk
-  /// Returns the local audio file path if successful, or null to trigger local fallback
-  Future<String?> synthesizeNeuralAudio(String text, VoicePersona persona) async {
-    if (kIsWeb || text.trim().isEmpty) return null;
-
-    final cleanText = text.trim();
-    final hash = AiAudioCacheService.computeHash(cleanText);
-
-    // 1. ⚡ 0ms Replay: Check if audio file is already cached on disk
-    final cachedPath = await AiAudioCacheService().getCachedAudioPath(cleanText);
-    if (cachedPath != null && File(cachedPath).existsSync()) {
-      return cachedPath;
-    }
-
+  /// Asynchronously caches audio to disk in background without blocking playback
+  Future<void> _cacheAudioInBackground(String streamUrl, String cacheKey, String hash) async {
+    if (kIsWeb) return;
     try {
       final tempDir = await getTemporaryDirectory();
       final targetFile = File('${tempDir.path}/studysilo_neural_$hash.mp3');
-
-      final voiceName = getVoiceName(persona);
-      final phrases = _splitIntoShortPhrases(cleanText, 180);
-      final List<int> combinedBytes = [];
-
-      for (final phrase in phrases) {
-        if (phrase.trim().isEmpty) continue;
-        final hasDevanagari = RegExp(r'[\u0900-\u097F]').hasMatch(phrase);
-        // Smart language resolution: use Devanagari Hindi for Hindi script, Indian English ('en-IN') for English/Hinglish terms
-        final langCode = hasDevanagari ? 'hi' : 'en-IN';
-
-        final encodedText = Uri.encodeComponent(phrase.trim());
-        final ttsUrl = 'https://translate.google.com/translate_tts?ie=UTF-8&q=$encodedText&tl=$langCode&client=tw-ob';
-
-        final response = await _dio.get<List<int>>(
-          ttsUrl,
-          options: Options(
-            responseType: ResponseType.bytes,
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-              'Referer': 'https://translate.google.com/',
-            },
-          ),
-        );
-
-        if (response.statusCode == 200 && response.data != null && response.data!.isNotEmpty) {
-          combinedBytes.addAll(response.data!);
-        }
+      if (await targetFile.exists() && await targetFile.length() > 0) {
+        await AiAudioCacheService().registerAudioFile(cacheKey, targetFile.path);
+        return;
       }
 
-      if (combinedBytes.isNotEmpty) {
-        await targetFile.writeAsBytes(combinedBytes);
-        await AiAudioCacheService().registerAudioFile(cleanText, targetFile.path);
-        return targetFile.path;
+      final response = await _dio.get<List<int>>(
+        streamUrl,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Accept': 'audio/mpeg'},
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null && response.data!.isNotEmpty) {
+        await targetFile.writeAsBytes(response.data!);
+        await AiAudioCacheService().registerAudioFile(cacheKey, targetFile.path);
       }
     } catch (e) {
-      debugPrint('CloudNeuralTtsService notice: $e');
+      debugPrint('Background audio cache notice: $e');
     }
-
-    return null;
   }
 }

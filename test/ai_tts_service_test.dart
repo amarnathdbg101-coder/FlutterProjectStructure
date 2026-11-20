@@ -50,8 +50,8 @@ void main() {
       const input = r'Combustion produces CO_2 and H_2O. The force is \vec{F} = m \vec{a}.';
       final spoken = AiTtsService.sanitizeTextForSpeech(input);
 
-      expect(spoken.contains('CO 2'), isTrue);
-      expect(spoken.contains('H 2 O'), isTrue);
+      expect(spoken.contains('carbon dioxide'), isTrue);
+      expect(spoken.contains('water'), isTrue);
       expect(spoken.contains('vector F'), isTrue);
       expect(spoken.contains('vector a'), isTrue);
       expect(spoken.contains(r'\'), isFalse);
@@ -159,10 +159,10 @@ def merge_sort(arr):
       const input = 'Titration of HCl with NaOH produces NaCl and H2O.';
       final spoken = AiTtsService.sanitizeTextForSpeech(input);
 
-      expect(spoken.contains('hydrochloric acid, H C L'), isTrue);
-      expect(spoken.contains('sodium hydroxide, N A O H'), isTrue);
-      expect(spoken.contains('sodium chloride, N A C L'), isTrue);
-      expect(spoken.contains('water, H 2 O'), isTrue);
+      expect(spoken.contains('hydrochloric acid'), isTrue);
+      expect(spoken.contains('sodium hydroxide'), isTrue);
+      expect(spoken.contains('sodium chloride'), isTrue);
+      expect(spoken.contains('water'), isTrue);
     });
 
     test('Speaks yellow-highlighted bold text accurately and NEVER says "one" or dollar', () {
@@ -174,6 +174,45 @@ def merge_sort(arr):
       expect(spoken.contains('one'), isFalse);
       expect(spoken.contains('1'), isFalse);
       expect(spoken.contains(r'$'), isFalse);
+    });
+
+    test('Handles quadratic formula with nested square root and text units cleanly', () {
+      const input = r'The roots are $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$ with speed $v = 10\text{ m/s}$';
+      final spoken = AiTtsService.sanitizeTextForSpeech(input);
+
+      expect(spoken.contains('divided by 2a'), isTrue);
+      expect(spoken.contains('square root of'), isTrue);
+      expect(spoken.contains('b squared'), isTrue);
+      expect(spoken.contains('plus or minus'), isTrue);
+      expect(spoken.contains('10 meters per second'), isTrue);
+      expect(spoken.contains('frac'), isFalse);
+      expect(spoken.contains('text'), isFalse);
+      expect(spoken.contains(r'\'), isFalse);
+    });
+
+    test('Strips markdown blockquotes so it NEVER vocalizes "greater than"', () {
+      const input = r'> 💡 **Pro Tip:** Remember that $v_f = v_i + at$' '\n' r'> ⚠️ Watch out for units!';
+      final spoken = AiTtsService.sanitizeTextForSpeech(input);
+
+      expect(spoken.contains('Pro tip:'), isTrue);
+      expect(spoken.contains('v final = v initial + at'), isTrue);
+      expect(spoken.contains('Watch out, exam trap warning:'), isTrue);
+      expect(spoken.contains('>'), isFalse);
+      expect(spoken.toLowerCase().contains('greater than'), isFalse);
+    });
+
+    test('Strips LaTeX align environments and translates reaction arrows', () {
+      const input = r'\begin{aligned} CaCO_3(s) \xrightarrow{\Delta} CaO(s) + CO_2(g) \end{aligned}';
+      final spoken = AiTtsService.sanitizeTextForSpeech(input);
+
+      expect(spoken.contains('solid'), isTrue);
+      expect(spoken.contains('reacts under heat to form'), isTrue);
+      expect(spoken.contains('carbon dioxide'), isTrue);
+      expect(spoken.contains('gas'), isTrue);
+      expect(spoken.contains('begin'), isFalse);
+      expect(spoken.contains('aligned'), isFalse);
+      expect(spoken.contains('end'), isFalse);
+      expect(spoken.contains(r'\'), isFalse);
     });
   });
 
@@ -192,15 +231,12 @@ def merge_sort(arr):
       expect(hash1.length, equals(16));
     });
 
-    test('AiTtsService persona switching and rate cycling operate correctly', () {
+    test('AiTtsService enforces Priya Ma\'am studio voice and rate cycling operates correctly', () {
       final service = AiTtsService();
       expect(service.persona, equals(VoicePersona.priya));
 
-      service.setPersona(VoicePersona.aryan);
-      expect(service.persona, equals(VoicePersona.aryan));
-
-      service.setPersona(VoicePersona.mentor);
-      expect(service.persona, equals(VoicePersona.mentor));
+      service.setPersona(VoicePersona.priya);
+      expect(service.persona, equals(VoicePersona.priya));
 
       // Test rate cycle
       service.cycleSpeechRate();
@@ -229,6 +265,13 @@ def merge_sort(arr):
       expect(service.sleepTimerMinutes, equals(15));
       service.cancelSleepTimer();
       expect(service.sleepTimerMinutes, isNull);
+    });
+
+    test('AiTtsService prewarm executes safely without throwing', () {
+      final service = AiTtsService();
+      service.prewarm('Newton ka pehla niyam inertia kehlata hai.');
+      // Repeated call should deduplicate via in-memory hash set
+      service.prewarm('Newton ka pehla niyam inertia kehlata hai.');
     });
 
     test('AiAudioCacheService pruneOldCache runs safely without exceptions', () async {

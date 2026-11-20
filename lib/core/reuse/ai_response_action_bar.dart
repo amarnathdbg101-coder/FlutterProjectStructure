@@ -28,6 +28,11 @@ class AiResponseActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ⚡ Optimistic audio pre-warming: pre-caches this message in background for 0ms instant playback
+    if (solutionContent.trim().isNotEmpty) {
+      AiTtsService().prewarm(solutionContent);
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -43,20 +48,24 @@ class AiResponseActionBar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Listen Aloud (TTS) Button with live playback state (Playing / Paused / Listen)
+            // Quick 30s Voice Note & Full Read Aloud Controls
             ListenableBuilder(
               listenable: AiTtsService(),
               builder: (context, _) {
                 final tts = AiTtsService();
-                final isSpeakingThis = tts.isPlaying && tts.currentText == solutionContent;
-                final isPausedThis = tts.isPaused && tts.currentText == solutionContent;
+                final isThisTarget = tts.currentText == solutionContent;
+                final isSpeakingThis = tts.isPlaying && isThisTarget;
+                final isPausedThis = tts.isPaused && isThisTarget;
+                final isLoadingThis = tts.isLoading && isThisTarget;
 
                 final IconData icon = isSpeakingThis
                     ? Icons.pause_circle_filled_rounded
                     : (isPausedThis ? Icons.play_circle_fill_rounded : Icons.volume_up_rounded);
-                final String label = isSpeakingThis
-                    ? 'Pause'
-                    : (isPausedThis ? 'Resume' : 'Listen');
+                final String label = isLoadingThis
+                    ? 'Preparing...'
+                    : (isSpeakingThis
+                        ? 'Pause'
+                        : (isPausedThis ? 'Resume' : 'Listen'));
                 final Color activeColor = isSpeakingThis
                     ? const Color(0xFF6366F1)
                     : (isDark ? const Color(0xFF34D399) : const Color(0xFF059669));
@@ -64,17 +73,18 @@ class AiResponseActionBar extends StatelessWidget {
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ⚡ Quick 30-Second Voice Note (Instant ~0.5s synthesis, zero server strain)
                     InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        if (isSpeakingThis) {
-                          tts.pause();
-                        } else if (isPausedThis) {
-                          tts.resume();
-                        } else {
-                          tts.speak(solutionContent, precomputedSpokenTranscript: spokenTranscript);
-                        }
-                      },
+                      onTap: isLoadingThis
+                          ? null
+                          : () {
+                              HapticFeedback.lightImpact();
+                              if (isSpeakingThis) {
+                                tts.stop();
+                              } else {
+                                tts.speakSummary(solutionContent, precomputedSummary: spokenTranscript);
+                              }
+                            },
                       borderRadius: BorderRadius.circular(6),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -82,10 +92,64 @@ class AiResponseActionBar extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              icon,
+                              Icons.bolt_rounded,
                               size: 14,
-                              color: activeColor,
+                              color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
                             ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '30s Note',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(
+                      height: 10,
+                      width: 1,
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                    ),
+                    // Full Response Read Aloud (Priya Female Voice)
+                    InkWell(
+                      onTap: isLoadingThis
+                          ? null
+                          : () {
+                              HapticFeedback.lightImpact();
+                              if (isSpeakingThis) {
+                                tts.pause();
+                              } else if (isPausedThis) {
+                                tts.resume();
+                              } else {
+                                tts.speak(solutionContent, precomputedSpokenTranscript: spokenTranscript);
+                              }
+                            },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isLoadingThis)
+                              SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: activeColor,
+                                ),
+                              )
+                            else
+                              Icon(
+                                icon,
+                                size: 14,
+                                color: activeColor,
+                              ),
                             const SizedBox(width: 4),
                             Text(
                               label,

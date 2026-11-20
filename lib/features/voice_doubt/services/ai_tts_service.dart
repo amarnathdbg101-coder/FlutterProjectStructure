@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:just_audio/just_audio.dart';
 import '../../../core/utils/latex_sanitizer.dart';
 import 'ai_audio_cache_service.dart';
 import 'cloud_neural_tts_service.dart';
@@ -10,11 +11,9 @@ import 'study_audio_handler.dart';
 
 enum TtsState { stopped, playing, paused }
 
-/// Academic Persona options for AI Voice delivery
+/// Academic Persona options for AI Voice delivery (Female Only)
 enum VoicePersona {
-  priya,  // Warm, encouraging female tutor timbre
-  aryan,  // Deep, calm analytical male professor timbre
-  mentor, // Balanced conversational peer mentor timbre
+  priya, // Warm, encouraging female tutor timbre (Priya Ma'am / hi-IN-SwaraNeural)
 }
 
 /// High-Performance AI Text-to-Speech (TTS) Service for StudySilo
@@ -41,6 +40,7 @@ class AiTtsService extends ChangeNotifier {
   }
 
   final FlutterTts _flutterTts = FlutterTts();
+  final AudioPlayer _webPlayer = AudioPlayer();
   StudyAudioHandler? _audioHandler;
   final CloudNeuralTtsService _cloudNeuralTts = CloudNeuralTtsService();
   bool _usingNeuralEngine = false;
@@ -52,19 +52,21 @@ class AiTtsService extends ChangeNotifier {
   static final Map<VoicePersona, Map> _personaVoiceMap = {};
 
   TtsState _state = TtsState.stopped;
-  VoicePersona _persona = VoicePersona.priya;
+  VoicePersona _persona = VoicePersona.priya; // 100% Female Voice (Priya Ma'am)
   double _speechRate = 1.0; // User multiplier: 1.0x, 1.25x, 1.5x, 2.0x
   String _currentText = '';
   List<SpokenChunk> _chunks = [];
   int _currentChunkIndex = 0;
   bool _isInitialized = false;
+  bool _isLoading = false; // Fast visual loading state
 
   bool _isNavigating = false;
   bool _isLiveTalkMode = false;
   VoidCallback? onLiveTalkCompleted;
 
   TtsState get state => _state;
-  VoicePersona get persona => _persona;
+  VoicePersona get persona => VoicePersona.priya;
+  bool get isLoading => _isLoading;
   bool get isPlaying => _state == TtsState.playing;
   bool get isPaused => _state == TtsState.paused;
   bool get isStopped => _state == TtsState.stopped;
@@ -150,14 +152,7 @@ class AiTtsService extends ChangeNotifier {
   }
 
   String _getPersonaDisplayName() {
-    switch (_persona) {
-      case VoicePersona.priya:
-        return 'Priya Ma\'am (Studio Neural)';
-      case VoicePersona.aryan:
-        return 'Dr. Aryan (Studio Neural)';
-      case VoicePersona.mentor:
-        return 'AI Peer Mentor (Neural)';
-    }
+    return 'Priya Ma\'am (Studio Neural)';
   }
 
   // Real-Time Karaoke & Progress Getters
@@ -220,6 +215,17 @@ class AiTtsService extends ChangeNotifier {
         }
       });
 
+      if (kIsWeb) {
+        _webPlayer.setLoopMode(LoopMode.off);
+        _webPlayer.playerStateStream.listen((playerState) {
+          if (playerState.processingState == ProcessingState.completed &&
+              !_isNavigating &&
+              _state == TtsState.playing) {
+            _onChunkCompleted();
+          }
+        });
+      }
+
       _configureSweetVoice();
     } catch (e) {
       debugPrint('AiTtsService initialization notice: $e');
@@ -235,6 +241,11 @@ class AiTtsService extends ChangeNotifier {
     // Immediately switch voice on active sentence without stutter or lag
     if (_state == TtsState.playing && _chunks.isNotEmpty && _currentChunkIndex < _chunks.length) {
       _isNavigating = true;
+      if (kIsWeb) {
+        try {
+          await _webPlayer.stop();
+        } catch (_) {}
+      }
       try {
         await _audioHandler?.stop();
       } catch (_) {}
@@ -247,25 +258,15 @@ class AiTtsService extends ChangeNotifier {
   }
 
   /// Configures a sweet, gentle, professional academic voice with warm pitch
-  Future<void> _configureSweetVoice() async {
+  Future<void> _configureSweetVoice([String? sampleText]) async {
     try {
-      // 1. Language preference: en-IN / hi-IN for natural bilingual Hinglish and English study terms
-      final targetLang = (_persona == VoicePersona.mentor) ? 'hi-IN' : 'en-IN';
-      await _flutterTts.setLanguage(targetLang);
+      // 1. Language preference: hi-IN for Hindi script, en-IN for English/Hinglish study terms
+      final hasDevanagari = sampleText != null && RegExp(r'[\u0900-\u097F]').hasMatch(sampleText);
+      final lang = hasDevanagari ? 'hi-IN' : 'en-IN';
+      await _flutterTts.setLanguage(lang);
 
-      // 2. Persona-Calibrated Voice Pitch (Natural human vocal register)
-      // Priya Ma'am: bright, encouraging, warm, sweet teacher tone (pitch 1.02)
-      // Dr. Aryan: confident, articulate, resonant professor tone (pitch 0.94)
-      // AI Mentor: lively, engaging peer tutor (pitch 1.00)
-      double targetPitch = 1.02;
-      bool preferFemale = true;
-      if (_persona == VoicePersona.aryan) {
-        targetPitch = 0.94;
-        preferFemale = false;
-      } else if (_persona == VoicePersona.mentor) {
-        targetPitch = 1.00;
-        preferFemale = true;
-      }
+      // 2. Priya Ma'am: bright, encouraging, warm, sweet teacher tone (pitch 1.02)
+      const double targetPitch = 1.02;
       await _flutterTts.setPitch(targetPitch);
 
       // 3. Energetic, human-like speech tempo: 0.48 gives crisp, natural, and articulate teacher cadence
@@ -314,19 +315,11 @@ class AiTtsService extends ChangeNotifier {
                   score -= 50;
                 }
 
-                // Gender / Timbre preference
-                if (preferFemale) {
-                  if (name.contains('female') || name.contains('cfl') || name.contains('end') || name.contains('ene') || name.contains('hie')) {
-                    score += 50;
-                  } else if (name.contains('male')) {
-                    score -= 60;
-                  }
-                } else {
-                  if ((name.contains('male') && !name.contains('female')) || name.contains('enp') || name.contains('hid') || name.contains('hin')) {
-                    score += 50;
-                  } else if (name.contains('female')) {
-                    score -= 60;
-                  }
+                // Gender / Timbre preference: Prioritize Indian Female teacher voices
+                if (name.contains('female') || name.contains('cfl') || name.contains('end') || name.contains('ene') || name.contains('hie')) {
+                  score += 50;
+                } else if (name.contains('male')) {
+                  score -= 60;
                 }
 
                 if (score > bestScore) {
@@ -359,8 +352,12 @@ class AiTtsService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_usingNeuralEngine && _audioHandler != null) {
-        await _audioHandler!.internalPlayer.setSpeed(_speechRate);
+      if (_usingNeuralEngine) {
+        if (kIsWeb) {
+          await _webPlayer.setSpeed(_speechRate);
+        } else if (_audioHandler != null) {
+          await _audioHandler!.internalPlayer.setSpeed(_speechRate);
+        }
       }
       final baseRate = kIsWeb ? 0.88 : 0.45;
       await _flutterTts.setSpeechRate(baseRate * _speechRate);
@@ -393,8 +390,114 @@ class AiTtsService extends ChangeNotifier {
   // ===========================================================================
   // 🧮 ACADEMIC & LATEX SPOKEN TEXT SANITIZER
   // ===========================================================================
-  // 🧮 ACADEMIC & LATEX SPOKEN TEXT SANITIZER (Zero Backslash/Dollar Leakage)
-  // ===========================================================================
+
+  static (String, int) _extractBracedContent(String s, int startIdx) {
+    if (startIdx < 0 || startIdx >= s.length || s[startIdx] != '{') {
+      return ('', -1);
+    }
+    int depth = 0;
+    for (int i = startIdx; i < s.length; i++) {
+      if (s[i] == '{') {
+        depth++;
+      } else if (s[i] == '}') {
+        depth--;
+        if (depth == 0) {
+          return (s.substring(startIdx + 1, i), i + 1);
+        }
+      }
+    }
+    return ('', -1);
+  }
+
+  static String _replaceBalancedFrac(String s) {
+    var res = s;
+    int limit = 10;
+    while (limit > 0) {
+      int idx = res.indexOf(r'\frac{');
+      if (idx == -1) {
+        idx = res.indexOf(r'\frac {');
+        if (idx == -1) break;
+      }
+      int open1 = res.indexOf('{', idx);
+      final (num, after1) = _extractBracedContent(res, open1);
+      if (after1 == -1) break;
+      int open2 = after1;
+      while (open2 < res.length && (res[open2] == ' ' || res[open2] == '\t')) {
+        open2++;
+      }
+      if (open2 >= res.length || res[open2] != '{') break;
+      final (den, after2) = _extractBracedContent(res, open2);
+      if (after2 == -1) break;
+
+      final cleanNum = _replaceBalancedFrac(num);
+      final cleanDen = _replaceBalancedFrac(den);
+      res = '${res.substring(0, idx)}(${cleanNum.trim()} divided by ${cleanDen.trim()})${res.substring(after2)}';
+      limit--;
+    }
+    return res;
+  }
+
+  static String _replaceBalancedSqrt(String s) {
+    var res = s;
+    int limit = 10;
+    while (limit > 0) {
+      int idx = res.indexOf(r'\sqrt');
+      if (idx == -1) break;
+      int afterCmd = idx + 5;
+      String rootDegree = '';
+      if (afterCmd < res.length && res[afterCmd] == '[') {
+        int closeBracket = res.indexOf(']', afterCmd);
+        if (closeBracket != -1) {
+          rootDegree = res.substring(afterCmd + 1, closeBracket);
+          afterCmd = closeBracket + 1;
+        }
+      }
+      while (afterCmd < res.length && (res[afterCmd] == ' ' || res[afterCmd] == '\t')) {
+        afterCmd++;
+      }
+      if (afterCmd < res.length && res[afterCmd] == '{') {
+        final (content, afterBrace) = _extractBracedContent(res, afterCmd);
+        if (afterBrace != -1) {
+          final cleanContent = _replaceBalancedSqrt(content);
+          String replacement;
+          if (rootDegree == '3' || rootDegree == 'cube') {
+            replacement = 'cube root of (${cleanContent.trim()})';
+          } else if (rootDegree.isNotEmpty) {
+            replacement = '$rootDegree root of (${cleanContent.trim()})';
+          } else {
+            replacement = 'square root of (${cleanContent.trim()})';
+          }
+          res = '${res.substring(0, idx)}$replacement${res.substring(afterBrace)}';
+          limit--;
+          continue;
+        }
+      }
+      res = '${res.substring(0, idx)}square root of ${res.substring(afterCmd)}';
+      limit--;
+    }
+    return res;
+  }
+
+  static String _unwrapMacros(String s) {
+    var res = s;
+    const macros = [
+      r'\text{', r'\textbf{', r'\textit{', r'\mathrm{', r'\mathbf{', r'\mathit{',
+      r'\operatorname{', r'\cancel{', r'\boxed{', r'\underline{', r'\overline{',
+      r'\displaystyle{', r'\large{', r'\huge{', r'\small{', r'\bold{',
+    ];
+    for (final m in macros) {
+      while (true) {
+        final idx = res.indexOf(m);
+        if (idx == -1) break;
+        final openBrace = idx + m.length - 1;
+        final (content, after) = _extractBracedContent(res, openBrace);
+        if (after == -1) break;
+        res = '${res.substring(0, idx)} $content ${res.substring(after)}';
+      }
+    }
+    return res;
+  }
+
   /// Cleans markdown formatting, complex mathematical notation, and LaTeX backslashes
   /// into crystal-clear, sweet, natural spoken English & Hinglish words.
   /// Exactly matches what the student sees on screen with zero leakage of '\' or '$'.
@@ -407,6 +510,9 @@ class AiTtsService extends ChangeNotifier {
       RegExp(r'```(?:[a-zA-Z0-9_\-]+)?\n([\s\S]*?)```'),
       (m) => ' Here is the code implementation. ',
     );
+
+    // Step 0.3: 🛡️ STRIP MARKDOWN BLOCKQUOTES (Never say 'greater than' for quotes)
+    s = s.replaceAll(RegExp(r'^\s*>+\s*(?:\[[!a-zA-Z_\-]+\])?\s*', multiLine: true), '');
 
     // Step 0.5: 🎓 PEDAGOGICAL PAUSES & STEP BOUNDARIES (Mimics real human teacher cadence)
     s = s.replaceAllMapped(RegExp(r'\bStep\s*([0-9]+)\s*:\s*', caseSensitive: false), (m) => '. Step ${m.group(1)}. ');
@@ -436,6 +542,19 @@ class AiTtsService extends ChangeNotifier {
     // Step 1: Transform Markdown Tables into clean natural sentences
     s = s.replaceAll(RegExp(r'\|[-:\s|]+\|'), ' ');
     s = s.replaceAll('|', ', ');
+
+    // Step 1.1: 📐 STRIP LATEX ENVIRONMENTS & NEWLINES
+    s = s.replaceAll(RegExp(r'\\(?:begin|end)\{[a-zA-Z0-9*]+\}'), '');
+    s = s.replaceAll(r'\\', '. ');
+    s = s.replaceAll('&=', ' = ');
+    s = s.replaceAll('&', ' ');
+
+    // Step 1.2: 📦 UNWRAP LATEX MACROS (\text{...}, \mathrm{...}, \boxed{...}, etc.)
+    s = _unwrapMacros(s);
+
+    // Step 1.3: ➗ BALANCED BRACE FRACTIONS & SQUARE ROOTS (zero regex recursion limit)
+    s = _replaceBalancedFrac(s);
+    s = _replaceBalancedSqrt(s);
 
     // Step 1.5: 📐 COMMON SIMPLE FRACTIONS & PERCENTAGES
     s = s.replaceAll(RegExp(r'\b1/2\b'), 'one half')
@@ -546,17 +665,19 @@ class AiTtsService extends ChangeNotifier {
       }
     });
 
-    // Common Chemistry Compounds & Biological Molecules
-    s = s.replaceAll(RegExp(r'\bNaCl\b'), 'sodium chloride, N A C L')
-         .replaceAll(RegExp(r'\bHCl\b'), 'hydrochloric acid, H C L')
-         .replaceAll(RegExp(r'\bH2SO4\b|\bH_2SO_4\b'), 'sulfuric acid, H 2 S O 4')
-         .replaceAll(RegExp(r'\bHNO3\b|\bHNO_3\b'), 'nitric acid, H N O 3')
-         .replaceAll(RegExp(r'\bNaOH\b'), 'sodium hydroxide, N A O H')
-         .replaceAll(RegExp(r'\bKOH\b'), 'potassium hydroxide, K O H')
-         .replaceAll(RegExp(r'\bCH4\b|\bCH_4\b'), 'methane, C H 4')
-         .replaceAll(RegExp(r'\bNH3\b|\bNH_3\b'), 'ammonia, N H 3')
-         .replaceAll(RegExp(r'\bCO[\s_]*2\b', caseSensitive: false), 'carbon dioxide, CO 2')
-         .replaceAll(RegExp(r'\bH[\s_]*2[\s_]*O\b', caseSensitive: false), 'water, H 2 O')
+    // Common Chemistry Compounds & Biological Molecules (Natural spoken names)
+    s = s.replaceAll(RegExp(r'\bCaCO_?3\b'), 'calcium carbonate')
+         .replaceAll(RegExp(r'\bCaO\b'), 'calcium oxide')
+         .replaceAll(RegExp(r'\bNaCl\b'), 'sodium chloride')
+         .replaceAll(RegExp(r'\bHCl\b'), 'hydrochloric acid')
+         .replaceAll(RegExp(r'\bH2SO4\b|\bH_2SO_4\b'), 'sulfuric acid')
+         .replaceAll(RegExp(r'\bHNO3\b|\bHNO_3\b'), 'nitric acid')
+         .replaceAll(RegExp(r'\bNaOH\b'), 'sodium hydroxide')
+         .replaceAll(RegExp(r'\bKOH\b'), 'potassium hydroxide')
+         .replaceAll(RegExp(r'\bCH4\b|\bCH_4\b'), 'methane')
+         .replaceAll(RegExp(r'\bNH3\b|\bNH_3\b'), 'ammonia')
+         .replaceAll(RegExp(r'\bCO[\s_]*2\b', caseSensitive: false), 'carbon dioxide')
+         .replaceAll(RegExp(r'\bH[\s_]*2[\s_]*O\b', caseSensitive: false), 'water')
          .replaceAll(RegExp(r'\bATP\b'), 'A T P')
          .replaceAll(RegExp(r'\bDNA\b'), 'D N A')
          .replaceAll(RegExp(r'\bRNA\b'), 'R N A');
@@ -757,9 +878,43 @@ class AiTtsService extends ChangeNotifier {
   // 🔊 AUDIO PLAYBACK & CHUNKING ENGINE
   // ===========================================================================
 
+  /// Speaks a crisp, high-value 20-30 second Audio Note (~200-300 characters).
+  /// Generates in ~0.5s with zero server strain, providing instant clarity to students.
+  Future<void> speakSummary(String text, {String? precomputedSummary}) async {
+    final summary = (precomputedSummary != null && precomputedSummary.trim().isNotEmpty)
+        ? precomputedSummary.trim()
+        : extractQuickAudioSummary(text);
+    if (summary.isEmpty) return;
+
+    await speak(text, precomputedSpokenTranscript: summary, isSummaryMode: true);
+  }
+
+  /// Extracts the essential 1-2 sentence core insight for quick voice notes
+  static String extractQuickAudioSummary(String text) {
+    final clean = sanitizeTextForSpeech(text);
+    if (clean.length <= 320) return clean;
+
+    final match = RegExp(r'^.*?[.!?](?:\s+.*?[.!?])?').firstMatch(clean);
+    if (match != null && match.group(0) != null && match.group(0)!.trim().length > 30) {
+      return match.group(0)!.trim();
+    }
+    return '${clean.substring(0, 280).trim()}...';
+  }
+
+  static final Set<int> _prewarmedHashes = {};
+
+  /// Silently pre-warms / caches audio in the background for a given text so when user presses play, it starts in 0ms.
+  void prewarm(String text, {bool isSummary = false}) {
+    if (text.trim().isEmpty) return;
+    final hash = text.hashCode ^ (isSummary ? 1 : 0);
+    if (_prewarmedHashes.contains(hash)) return;
+    _prewarmedHashes.add(hash);
+    unawaited(_cloudNeuralTts.prewarmAudio(text, isSummary: isSummary));
+  }
+
   /// Speaks the solution aloud using high-fidelity TTS
   /// If precomputedSpokenTranscript is provided by the Go backend, it avoids executing heavy client regex on low-end phones!
-  Future<void> speak(String text, {String? precomputedSpokenTranscript}) async {
+  Future<void> speak(String text, {String? precomputedSpokenTranscript, bool isSummaryMode = false}) async {
     final clean = (precomputedSpokenTranscript != null && precomputedSpokenTranscript.trim().isNotEmpty)
         ? precomputedSpokenTranscript.trim()
         : sanitizeTextForSpeech(text);
@@ -771,145 +926,131 @@ class AiTtsService extends ChangeNotifier {
     _currentChunkIndex = 0;
 
     // ⚡ 0ms Instant Replay: check local memory and disk cache first
-    final cached = await AiAudioCacheService().getCachedChunks(text);
+    final cacheKey = isSummaryMode ? '${text}_summary' : text;
+    final cached = await AiAudioCacheService().getCachedChunks(cacheKey);
     if (cached != null && cached.isNotEmpty) {
       _chunks = cached;
     } else {
-      _chunks = _splitIntoSpokenChunks(text, precomputedSpokenText: clean);
-      unawaited(AiAudioCacheService().cacheChunks(text, _chunks));
+      _chunks = isSummaryMode
+          ? [SpokenChunk(rawText: text, spokenText: clean)]
+          : _splitIntoSpokenChunks(text, precomputedSpokenText: clean);
+      unawaited(AiAudioCacheService().cacheChunks(cacheKey, _chunks));
     }
     notifyListeners();
 
     if (_chunks.isNotEmpty) {
-      await _speakChunk(_chunks[0].spokenText);
+      await _speakChunk(_chunks[0].spokenText, isSummaryMode: isSummaryMode);
     } else {
       _state = TtsState.stopped;
       notifyListeners();
     }
   }
 
-  /// Splits long explanations into sentence-sized chunks with raw-to-spoken matching for real-time karaoke highlight
+  /// Generates the explanation as ONE unified, continuous audio track.
+  /// This completely eliminates micro-chunking, stops all awkward pauses,
+  /// and delivers 100% fluent, smooth teacher speech without interruption.
   static List<SpokenChunk> _splitIntoSpokenChunks(String text, {String? precomputedSpokenText}) {
-    final rawLines = text.split(RegExp(r'\n+'));
-    final List<String> rawUnits = [];
+    final clean = (precomputedSpokenText != null && precomputedSpokenText.trim().isNotEmpty)
+        ? precomputedSpokenText.trim()
+        : sanitizeTextForSpeech(text);
+    if (clean.isEmpty) return [];
 
-    for (final line in rawLines) {
-      final trimmedLine = line.trim();
-      if (trimmedLine.isEmpty) continue;
-
-      // If line is long (> 180 chars) and contains punctuation, split by sentence boundaries
-      if (trimmedLine.length > 180 && RegExp(r'[.!?]').hasMatch(trimmedLine)) {
-        final sentences = trimmedLine.split(RegExp(r'(?<=[.!?])\s+'));
-        for (final s in sentences) {
-          if (s.trim().isNotEmpty) rawUnits.add(s.trim());
-        }
-      } else {
-        rawUnits.add(trimmedLine);
-      }
-    }
-
-    final List<SpokenChunk> chunks = [];
-    if (precomputedSpokenText != null && precomputedSpokenText.trim().isNotEmpty) {
-      // ⚡ Backend offload: Split the server-precomputed transcript by sentence boundaries
-      final spokenSentences = precomputedSpokenText
-          .split(RegExp(r'(?<=[.!?])\s+'))
-          .where((s) => s.trim().isNotEmpty)
-          .toList();
-
-      if (spokenSentences.isNotEmpty) {
-        for (int i = 0; i < spokenSentences.length; i++) {
-          final spoken = spokenSentences[i].trim();
-          final raw = i < rawUnits.length ? rawUnits[i] : (rawUnits.isNotEmpty ? rawUnits.last : text);
-          chunks.add(SpokenChunk(rawText: raw, spokenText: spoken));
-        }
-      }
-    }
-
-    if (chunks.isEmpty) {
-      for (final raw in rawUnits) {
-        final spoken = sanitizeTextForSpeech(raw);
-        if (spoken.isNotEmpty) {
-          chunks.add(SpokenChunk(rawText: raw, spokenText: spoken));
-        }
-      }
-    }
-
-    // Fallback if no individual units parsed
-    if (chunks.isEmpty) {
-      final spoken = precomputedSpokenText ?? sanitizeTextForSpeech(text);
-      if (spoken.isNotEmpty) {
-        chunks.add(SpokenChunk(rawText: text, spokenText: spoken));
-      }
-    }
-
-    return chunks;
+    return [SpokenChunk(rawText: text, spokenText: clean)];
   }
 
-  Future<void> _speakChunk(String chunk) async {
+  Future<void> _speakChunk(String chunk, {bool isSummaryMode = false}) async {
     try {
       if (_state != TtsState.playing) return;
 
+      _isLoading = true;
+      notifyListeners();
+
       // 1. Data Saver Mode: If student prefers offline speech to save 100% data
       if (_dataSaverMode) {
+        _isLoading = false;
         _usingNeuralEngine = false;
-        await _configureSweetVoice();
+        await _configureSweetVoice(chunk);
         await _flutterTts.speak(chunk);
+        notifyListeners();
         return;
       }
 
-      // 2. Online Cloud Voice Engine: 0% device CPU load, ultra-high accuracy and sweetness
+      // 2. Online Cloud Voice Engine: Studio Priya Female Voice (hi-IN-SwaraNeural)
       String? neuralAudioPath;
       try {
-        // Gapless pre-fetch of next chunk in background
-        if (_currentChunkIndex + 1 < _chunks.length) {
-          unawaited(_cloudNeuralTts
-              .synthesizeNeuralAudio(
-                _chunks[_currentChunkIndex + 1].spokenText,
-                _persona,
-              )
-              .timeout(const Duration(seconds: 4), onTimeout: () => null));
-        }
-
         neuralAudioPath = await _cloudNeuralTts
-            .synthesizeNeuralAudio(chunk, _persona)
-            .timeout(const Duration(milliseconds: 3200), onTimeout: () => null);
+            .synthesizeNeuralAudioWithOpt(
+              chunk,
+              persona: VoicePersona.priya,
+              isSummary: isSummaryMode,
+            )
+            .timeout(const Duration(seconds: 12), onTimeout: () => null);
       } catch (err) {
         debugPrint('Cloud audio attempt notice: $err');
       }
 
-      if (_state != TtsState.playing) return;
+      if (_state != TtsState.playing) {
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
 
-      if (neuralAudioPath != null && _audioHandler != null) {
+      if (!kIsWeb && _audioHandler == null) {
+        await ensureAudioHandlerInitialized();
+      }
+
+      if (neuralAudioPath != null && (kIsWeb || _audioHandler != null)) {
         _usingNeuralEngine = true;
 
-        // Calibrate pitch for persona on online audio stream
-        if (_persona == VoicePersona.aryan) {
-          await _audioHandler!.internalPlayer.setPitch(0.86);
-        } else if (_persona == VoicePersona.priya) {
-          await _audioHandler!.internalPlayer.setPitch(1.06);
-        } else {
-          await _audioHandler!.internalPlayer.setPitch(1.00);
-        }
-        await _audioHandler!.internalPlayer.setSpeed(_speechRate);
+        if (kIsWeb) {
+          try {
+            _isNavigating = true;
+            await _webPlayer.stop(); // Reset processing state to idle to prevent duplicate completed events
+            await _webPlayer.setLoopMode(LoopMode.off); // Strict LoopMode.off enforcement
+            await _webPlayer.setSpeed(_speechRate);
+            await _webPlayer.setUrl(neuralAudioPath);
+            _isNavigating = false;
+            _isLoading = false;
+            notifyListeners();
+            await _webPlayer.play();
+            return;
+          } catch (e) {
+            _isNavigating = false;
+            debugPrint('Web audio playback notice: $e');
+          }
+        } else if (_audioHandler != null) {
+          // Studio Indian Female voice natural warm pitch
+          await _audioHandler!.internalPlayer.setPitch(1.0);
+          await _audioHandler!.internalPlayer.setSpeed(_speechRate);
 
-        await _audioHandler!.playAudioFile(
-          neuralAudioPath,
-          title: 'StudySilo Masterclass (${_currentChunkIndex + 1}/${_chunks.length})',
-          subtitle: _chunks[_currentChunkIndex].rawText,
-          personaName: _getPersonaDisplayName(),
-        );
-      } else {
-        // 3. Fallback when completely offline / without network
-        _usingNeuralEngine = false;
-        final hasDevanagari = RegExp(r'[\u0900-\u097F]').hasMatch(chunk);
-        final chunkLang = hasDevanagari ? 'hi-IN' : 'en-IN';
-        try {
-          await _flutterTts.setLanguage(chunkLang);
-        } catch (_) {}
-        await _configureSweetVoice();
-        await _flutterTts.speak(chunk);
+          _isLoading = false;
+          notifyListeners();
+
+          await _audioHandler!.playAudioSource(
+            neuralAudioPath,
+            title: isSummaryMode ? 'StudySilo 30s Audio Note' : 'StudySilo Masterclass',
+            subtitle: _chunks[_currentChunkIndex].rawText,
+            personaName: _getPersonaDisplayName(),
+          );
+          return;
+        }
       }
+
+      _isLoading = false;
+      notifyListeners();
+
+      // 3. Fallback when completely offline / without network
+      _usingNeuralEngine = false;
+      final hasDevanagari = RegExp(r'[\u0900-\u097F]').hasMatch(chunk);
+      final chunkLang = hasDevanagari ? 'hi-IN' : 'en-IN';
+      try {
+        await _flutterTts.setLanguage(chunkLang);
+      } catch (_) {}
+      await _configureSweetVoice();
+      await _flutterTts.speak(chunk);
     } catch (e) {
+      _isLoading = false;
+      notifyListeners();
       debugPrint('AiTtsService speak chunk error: $e');
       if (!_isNavigating) {
         _onChunkCompleted();
@@ -922,6 +1063,7 @@ class AiTtsService extends ChangeNotifier {
     if (_isNavigating) return;
     if (_state != TtsState.playing) return;
 
+    _isNavigating = true; // State guarding: lock immediately to prevent duplicate re-entrancy
     _currentChunkIndex++;
     if (_currentChunkIndex < _chunks.length) {
       notifyListeners();
@@ -930,11 +1072,16 @@ class AiTtsService extends ChangeNotifier {
       _state = TtsState.stopped;
       _currentChunkIndex = 0;
       _chunks = [];
+      _isNavigating = false;
       notifyListeners();
 
-      // Trigger continuous live talk loop callback if active
+      // Trigger continuous live talk loop callback if active (with 350ms acoustic room decay delay)
       if (_isLiveTalkMode && onLiveTalkCompleted != null) {
-        onLiveTalkCompleted!();
+        Future.delayed(const Duration(milliseconds: 350), () {
+          if (_isLiveTalkMode && onLiveTalkCompleted != null) {
+            onLiveTalkCompleted!();
+          }
+        });
       }
     }
   }
@@ -945,10 +1092,16 @@ class AiTtsService extends ChangeNotifier {
       _state = TtsState.paused;
       notifyListeners();
 
-      if (_usingNeuralEngine && _audioHandler != null) {
-        try {
-          await _audioHandler!.pause();
-        } catch (_) {}
+      if (_usingNeuralEngine) {
+        if (kIsWeb) {
+          try {
+            await _webPlayer.pause();
+          } catch (_) {}
+        } else if (_audioHandler != null) {
+          try {
+            await _audioHandler!.pause();
+          } catch (_) {}
+        }
       } else {
         try {
           await _flutterTts.pause();
@@ -967,15 +1120,21 @@ class AiTtsService extends ChangeNotifier {
       _state = TtsState.playing;
       notifyListeners();
 
-      if (_usingNeuralEngine && _audioHandler != null) {
-        try {
-          await _audioHandler!.play();
-        } catch (_) {
-          if (_currentChunkIndex < _chunks.length) {
-            await _speakChunk(_chunks[_currentChunkIndex].spokenText);
-          }
+      if (_usingNeuralEngine) {
+        if (kIsWeb) {
+          try {
+            await _webPlayer.play();
+            return;
+          } catch (_) {}
+        } else if (_audioHandler != null) {
+          try {
+            await _audioHandler!.play();
+            return;
+          } catch (_) {}
         }
-      } else if (_currentChunkIndex < _chunks.length) {
+      }
+
+      if (_currentChunkIndex < _chunks.length) {
         await _speakChunk(_chunks[_currentChunkIndex].spokenText);
       } else {
         await stop();
@@ -990,10 +1149,16 @@ class AiTtsService extends ChangeNotifier {
     _isNavigating = true;
     cancelSleepTimer();
     _state = TtsState.stopped;
+    _isLoading = false;
     _currentChunkIndex = 0;
     _chunks = [];
     notifyListeners();
 
+    if (kIsWeb) {
+      try {
+        await _webPlayer.stop();
+      } catch (_) {}
+    }
     try {
       await _audioHandler?.stop();
     } catch (_) {}

@@ -57,7 +57,8 @@ class StudyAudioHandler extends BaseAudioHandler with SeekHandler {
       );
     });
 
-    // 2. Listen for audio track completion to auto-advance to next chunk
+    // 2. Strict LoopMode.off Enforcement and track completion handler
+    _player.setLoopMode(LoopMode.off);
     _player.playerStateStream.listen((playerState) {
       if (playerState.processingState == ProcessingState.completed && !isNavigating) {
         onPlaybackCompleted?.call();
@@ -70,6 +71,32 @@ class StudyAudioHandler extends BaseAudioHandler with SeekHandler {
         mediaItem.add(mediaItem.value!.copyWith(duration: duration));
       }
     });
+  }
+
+  /// Plays either a local file path or an HTTP(s) streaming URL with active Lockscreen Metadata
+  Future<void> playAudioSource(
+    String pathOrUrl, {
+    required String title,
+    required String subtitle,
+    String? personaName,
+    Duration? initialDuration,
+  }) async {
+    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+      await playAudioUrl(
+        pathOrUrl,
+        title: title,
+        subtitle: subtitle,
+        personaName: personaName,
+      );
+    } else {
+      await playAudioFile(
+        pathOrUrl,
+        title: title,
+        subtitle: subtitle,
+        personaName: personaName,
+        initialDuration: initialDuration,
+      );
+    }
   }
 
   /// Plays a local audio file with active Lockscreen Metadata
@@ -92,9 +119,17 @@ class StudyAudioHandler extends BaseAudioHandler with SeekHandler {
         ),
       );
 
+      // State Guarding: Prevent duplicate completion events during track setup
+      isNavigating = true;
+      try {
+        await _player.stop();
+        await _player.setLoopMode(LoopMode.off);
+      } catch (_) {}
       await _player.setFilePath(filePath);
+      isNavigating = false;
       await _player.play();
     } catch (e) {
+      isNavigating = false;
       debugPrint('StudyAudioHandler playAudioFile error: $e');
     }
   }
@@ -117,9 +152,17 @@ class StudyAudioHandler extends BaseAudioHandler with SeekHandler {
         ),
       );
 
+      // State Guarding: Prevent duplicate completion events during track setup
+      isNavigating = true;
+      try {
+        await _player.stop();
+        await _player.setLoopMode(LoopMode.off);
+      } catch (_) {}
       await _player.setUrl(url);
+      isNavigating = false;
       await _player.play();
     } catch (e) {
+      isNavigating = false;
       debugPrint('StudyAudioHandler playAudioUrl error: $e');
     }
   }

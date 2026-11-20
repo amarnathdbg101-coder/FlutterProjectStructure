@@ -97,6 +97,7 @@ class _LiveAiTalkOverlaySheetState extends State<LiveAiTalkOverlaySheet>
     _ttsService.removeListener(_onTtsStateChanged);
     _ttsService.setLiveTalkMode(false);
     _voiceService.stopListening();
+    _userSpeech = '';
     _auraAnimController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -112,26 +113,12 @@ class _LiveAiTalkOverlaySheetState extends State<LiveAiTalkOverlaySheet>
     }
   }
 
-  String _getPersonaTitle(VoicePersona persona) {
-    switch (persona) {
-      case VoicePersona.priya:
-        return 'Priya Ma\'am';
-      case VoicePersona.aryan:
-        return 'Dr. Aryan';
-      case VoicePersona.mentor:
-        return 'AI Peer Mentor';
-    }
+  String _getPersonaTitle([VoicePersona? persona]) {
+    return 'Priya Ma\'am';
   }
 
-  List<Color> _getAuraColors(VoicePersona persona) {
-    switch (persona) {
-      case VoicePersona.priya:
-        return [const Color(0xFFEC4899), const Color(0xFF10B981)];
-      case VoicePersona.aryan:
-        return [const Color(0xFF6366F1), const Color(0xFF06B6D4)];
-      case VoicePersona.mentor:
-        return [const Color(0xFFF59E0B), const Color(0xFF8B5CF6)];
-    }
+  List<Color> _getAuraColors([VoicePersona? persona]) {
+    return const [Color(0xFFEC4899), Color(0xFF10B981)];
   }
 
   Future<void> _startListeningLoop() async {
@@ -148,6 +135,8 @@ class _LiveAiTalkOverlaySheetState extends State<LiveAiTalkOverlaySheet>
       localeId: 'hi_IN',
       onResult: (text) {
         if (!mounted) return;
+        // Instant Mic Buffer Guard: Never capture speech if AI is already thinking or speaking
+        if (_state != LiveTalkState.listening) return;
         setState(() {
           _userSpeech = text;
         });
@@ -155,7 +144,9 @@ class _LiveAiTalkOverlaySheetState extends State<LiveAiTalkOverlaySheet>
       onDone: () {
         if (!mounted) return;
         if (_userSpeech.trim().isNotEmpty) {
-          _handleUserQuerySubmitted(_userSpeech.trim());
+          final query = _userSpeech.trim();
+          _userSpeech = ''; // Zeroed immediately!
+          _handleUserQuerySubmitted(query);
         } else if (_state == LiveTalkState.listening) {
           setState(() {
             _statusText = 'Tap mic to continue conversation';
@@ -172,10 +163,13 @@ class _LiveAiTalkOverlaySheetState extends State<LiveAiTalkOverlaySheet>
   }
 
   Future<void> _handleUserQuerySubmitted(String query) async {
+    // 1. Immediately kill microphone input so AI audio is never captured
     await _voiceService.stopListening();
     if (!mounted) return;
 
+    // 2. Instant Mic Buffer Clearing (ChatGPT / ElevenLabs standard)
     setState(() {
+      _userSpeech = '';
       _state = LiveTalkState.thinking;
       _statusText = '${_getPersonaTitle(_selectedPersona)} is analyzing...';
     });
@@ -209,6 +203,7 @@ class _LiveAiTalkOverlaySheetState extends State<LiveAiTalkOverlaySheet>
   Future<void> _interruptAndSpeak() async {
     HapticFeedback.mediumImpact();
     await _ttsService.stop();
+    _userSpeech = '';
     await _startListeningLoop();
   }
 
@@ -280,17 +275,13 @@ class _LiveAiTalkOverlaySheetState extends State<LiveAiTalkOverlaySheet>
               ),
             ),
 
-            // Persona Selector Chips
+            // Persona Selector Chip (Female Studio Voice)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildPersonaChip(VoicePersona.priya, '🌸 Priya Ma\'am'),
-                  const SizedBox(width: 8),
-                  _buildPersonaChip(VoicePersona.aryan, '👨‍🏫 Dr. Aryan'),
-                  const SizedBox(width: 8),
-                  _buildPersonaChip(VoicePersona.mentor, '⚡ AI Mentor'),
                 ],
               ),
             ),

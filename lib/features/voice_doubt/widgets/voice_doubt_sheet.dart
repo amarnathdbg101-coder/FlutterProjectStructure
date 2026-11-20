@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/voice_doubt_service.dart';
-import 'live_ai_talk_overlay_sheet.dart';
 
 /// Modal bottom sheet for Voice Doubt Input (Speech-to-Text).
 /// Captures genuine student voice in Hinglish, English, or Hindi via device microphone,

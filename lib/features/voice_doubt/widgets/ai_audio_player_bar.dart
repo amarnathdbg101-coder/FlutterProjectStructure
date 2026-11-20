@@ -101,7 +101,7 @@ class _AiAudioPlayerBarState extends State<AiAudioPlayerBar> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: chunks.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (ctx, index) {
                     final isCurrent = index == _ttsService.currentChunkIndex;
                     final chunk = chunks[index];
@@ -194,21 +194,10 @@ class _AiAudioPlayerBarState extends State<AiAudioPlayerBar> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  // Voice Persona Selector
-                  Text('Voice Persona', style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w600)),
+                  // Voice Persona Indicator (Female Only)
+                  Text('AI Voice (Studio Female Teacher)', style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildPersonaChip('Priya Ma\'am', VoicePersona.priya, setSheetState),
-                        const SizedBox(width: 8),
-                        _buildPersonaChip('Dr. Aryan', VoicePersona.aryan, setSheetState),
-                        const SizedBox(width: 8),
-                        _buildPersonaChip('AI Mentor', VoicePersona.mentor, setSheetState),
-                      ],
-                    ),
-                  ),
+                  _buildPersonaChip('Priya Ma\'am (Studio Female)', VoicePersona.priya, setSheetState),
                   const SizedBox(height: 16),
                   // Sleep Timer
                   Row(
@@ -398,31 +387,22 @@ class _AiAudioPlayerBarState extends State<AiAudioPlayerBar> {
                         ),
                       ),
                       const SizedBox(width: 5),
-                      InkWell(
-                        onTap: () {
-                          final next = _ttsService.persona == VoicePersona.priya
-                              ? VoicePersona.aryan
-                              : VoicePersona.priya;
-                          _ttsService.setPersona(next);
-                        },
-                        borderRadius: BorderRadius.circular(5),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.3),
-                              width: 0.8,
-                            ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            width: 0.8,
                           ),
-                          child: Text(
-                            _ttsService.persona == VoicePersona.priya ? '👩 Priya' : '👨 Aryan',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        ),
+                        child: const Text(
+                          '👩 Priya',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
