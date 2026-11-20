@@ -532,67 +532,34 @@ class _ProductPhotoCaptureScreenState extends State<ProductPhotoCaptureScreen>
   }
 
   Widget _buildGuidance(BuildContext context, {required bool compact}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: AppCard(
-        padding: EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: compact ? 7 : 10,
-        ),
-        color: const Color(0xE8172437),
-        child: compact
-            ? Text(
-                context.tr('product_camera_compact_guide'),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  height: 1.3,
-                ),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTip(
-                    Icons.center_focus_strong_rounded,
-                    context.tr('product_camera_tip_frame'),
-                  ),
-                  const SizedBox(height: 5),
-                  _buildTip(
-                    Icons.straighten_rounded,
-                    context.tr('product_camera_tip_angle'),
-                  ),
-                  const SizedBox(height: 5),
-                  _buildTip(
-                    Icons.wb_sunny_outlined,
-                    context.tr('product_camera_tip_light'),
-                  ),
-                  const SizedBox(height: 5),
-                  _buildTip(
-                    Icons.pan_tool_alt_rounded,
-                    context.tr('product_camera_tip_steady'),
-                  ),
-                ],
-              ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24, width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.center_focus_strong_rounded, size: 14, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              context.isHindi
+                  ? 'सामान को फ्रेम के बीच में रखें और फोटो लें'
+                  : 'Keep product centered in frame and capture',
+              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildTip(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 15, color: const Color(0xFF9CC2FF)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildPreviewArea() {
     final controller = _cameraController;
@@ -930,22 +897,39 @@ class _ProductPhotoCaptureScreenState extends State<ProductPhotoCaptureScreen>
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _isCapturing || _isApplyingStyle ? null : _retakePhoto,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: Text(context.tr('product_camera_retake')),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white54),
+                      child: SizedBox(
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: _isCapturing || _isApplyingStyle ? null : _retakePhoto,
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: Text(
+                            context.isHindi ? 'दोबारा लें (Retake)' : 'Retake Photo',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white54),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _isCapturing || _isApplyingStyle ? null : _usePhoto,
-                        icon: const Icon(Icons.check_rounded),
-                        label: Text(context.tr('product_camera_use_photo')),
+                      child: SizedBox(
+                        height: 48,
+                        child: FilledButton.icon(
+                          onPressed: _isCapturing || _isApplyingStyle ? null : _usePhoto,
+                          icon: const Icon(Icons.check_circle_rounded, size: 18),
+                          label: Text(
+                            context.isHindi ? '✓ फोटो जोड़ें' : '✓ Use Photo',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -957,7 +941,7 @@ class _ProductPhotoCaptureScreenState extends State<ProductPhotoCaptureScreen>
               children: [
                 // Live Camera Mode Selector: Standard vs DSLR Portrait (Blur BG)
                 Container(
-                  margin: const EdgeInsets.only(bottom: 10),
+                  margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.65),
@@ -975,41 +959,81 @@ class _ProductPhotoCaptureScreenState extends State<ProductPhotoCaptureScreen>
                 ),
                 Row(
                   children: [
+                    // Left: Back / Cancel Button
                     Expanded(
-                      child: TextButton(
+                      child: TextButton.icon(
                         onPressed: _isCapturing ? null : _finish,
-                        child: Text(
-                          context.tr('product_camera_done'),
-                          style: const TextStyle(color: Colors.white),
+                        icon: const Icon(Icons.arrow_back_rounded, size: 16, color: Colors.white70),
+                        label: Text(
+                          _capturedPhotos.isEmpty
+                              ? (context.isHindi ? 'रद्द करें' : 'Cancel')
+                              : (context.isHindi ? 'वापस जाएं' : 'Back'),
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
-                    IconButton(
-                      tooltip: context.tr('product_camera_capture'),
-                      onPressed: _isCapturing ? null : _capturePhoto,
-                      iconSize: compact ? 58 : 68,
-                      icon: _isCapturing
-                          ? const SizedBox(
-                              width: 32,
-                              height: 32,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.circle,
-                              color: Colors.white,
-                              shadows: [
-                                Shadow(color: Colors.black54, blurRadius: 8),
-                              ],
-                            ),
+
+                    // Center: Shutter Trigger Button with Ring
+                    GestureDetector(
+                      onTap: _isCapturing ? null : _capturePhoto,
+                      child: Container(
+                        width: compact ? 62 : 72,
+                        height: compact ? 62 : 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3.5),
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: _isCapturing
+                              ? const Center(
+                                  child: SizedBox(
+                                    width: 26,
+                                    height: 26,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
                     ),
+
+                    // Right: Save / Done Button
                     Expanded(
-                      child: Text(
-                        _isPortraitModeActive ? '🌟 Portrait' : 'Standard',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _capturedPhotos.isNotEmpty
+                            ? ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.success,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  elevation: 0,
+                                ),
+                                icon: const Icon(Icons.check_rounded, size: 16),
+                                label: Text(
+                                  context.isHindi
+                                      ? 'सेव करें (${_capturedPhotos.length})'
+                                      : 'Save (${_capturedPhotos.length})',
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: _isCapturing ? null : _finish,
+                              )
+                            : TextButton(
+                                onPressed: _isCapturing ? null : _finish,
+                                child: Text(
+                                  context.isHindi ? 'पूर्ण (Done)' : 'Done',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                              ),
                       ),
                     ),
                   ],
