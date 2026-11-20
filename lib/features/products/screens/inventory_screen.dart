@@ -5424,12 +5424,12 @@ class _ProductGridCard extends StatelessWidget {
 }
 
 /// Public Top-Level Helper Function to Launch Add / Edit Product Modal Sheet across all screens
-void showAddProductDialog(BuildContext context, {ProductModel? initialProduct, bool isDuplicate = false, String? initialBarcode}) {
+void showAddProductDialog(BuildContext context, {ProductModel? initialProduct, bool isDuplicate = false, String? initialBarcode, String? initialName}) {
   final state = context.findAncestorStateOfType<_InventoryScreenState>();
   if (state != null) {
-    state._showAddProductDialog(context, initialProduct: initialProduct, isDuplicate: isDuplicate, initialBarcode: initialBarcode);
+    state._showAddProductDialog(context, initialProduct: initialProduct, isDuplicate: isDuplicate, initialBarcode: initialBarcode, initialName: initialName);
   } else {
     final invState = _InventoryScreenState();
-    invState._showAddProductDialog(context, initialProduct: initialProduct, isDuplicate: isDuplicate, initialBarcode: initialBarcode);
+    invState._showAddProductDialog(context, initialProduct: initialProduct, isDuplicate: isDuplicate, initialBarcode: initialBarcode, initialName: initialName);
   }
 }

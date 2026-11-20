@@ -17,6 +17,7 @@ import '../../auth/controllers/auth_controller.dart';
 import '../../pos/controllers/pos_controller.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
+import 'inventory_screen.dart' show showAddProductDialog;
 import 'product_detail_screen.dart';
 
 /// Clean, Fast, High-Performance Instant Price & Stock Checker Screen.
@@ -48,7 +49,7 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
   String _selectedCategory = 'All';
   String _selectedStockFilter =
       'All'; // 'All', 'In Stock', 'Low Stock', 'Discounted'
-  bool _hideCostMargin = false; // Privacy mode for counter
+  bool _hideCostMargin = true; // Default to Counter Privacy Mode (hides wholesale cost from customer view)
   final List<ProductModel> _recentLookups = [];
 
   @override
@@ -1194,6 +1195,22 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
             style: TextStyle(fontSize: 12, color: context.colorTextMuted),
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: Text(
+              isHindi ? '+ नया सामान जोड़ें' : '+ Add New Product',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            onPressed: () => showAddProductDialog(context, initialName: _searchController.text),
+          ),
         ],
       ),
     );
@@ -1246,6 +1263,22 @@ class _PriceCheckerScreenState extends State<PriceCheckerScreen> {
               height: 1.35,
             ),
             textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 1,
+            ),
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+            label: Text(
+              isHindi ? 'कैमरा से बारकोड स्कैन करें' : 'Scan Barcode with Camera',
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+            ),
+            onPressed: () => _openCameraScanner(context),
           ),
         ],
       ),
