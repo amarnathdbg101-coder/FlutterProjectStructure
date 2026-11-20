@@ -1,6 +1,3 @@
-import '../../voice_doubt/services/voice_doubt_service.dart';
-import '../../voice_doubt/widgets/voice_doubt_sheet.dart';
-import '../../voice_doubt/widgets/ai_audio_player_bar.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -10,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/custom_snackbar.dart';
@@ -43,8 +39,6 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
   final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  bool _isRecording = false;
   bool _showScrollToLatest = false;
 
   @override
@@ -71,12 +65,10 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
 
   @override
   void dispose() {
-    VoiceDoubtService().stopListening();
     _scrollController.removeListener(_handleScrollPosition);
     _textController.dispose();
     _inputFocusNode.dispose();
     _scrollController.dispose();
-    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -177,76 +169,6 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Future<void> _toggleVoiceRecording() async {
-    final voiceService = VoiceDoubtService();
-
-    if (_isRecording) {
-      await voiceService.stopListening();
-      if (!mounted) return;
-      setState(() => _isRecording = false);
-      final text = _textController.text.trim();
-      if (text.isNotEmpty) {
-        final cleaned = voiceService.cleanAcademicSpeech(text);
-        _textController.text = cleaned;
-        _sendMessage();
-      }
-    } else {
-      // 1. Initialize speech recognition
-      final available = await voiceService.initSpeech();
-      if (!available) {
-        // Fallback: If browser / OS speech is not ready, open Voice Doubt Assistant sheet
-        if (mounted) _openVoiceDoubtSheet();
-        return;
-      }
-
-      if (!mounted) return;
-      setState(() => _isRecording = true);
-      CustomSnackbar.showInfo(context, '🎙️ Listening... Bol kar doubt poochhein (Speak now)');
-
-      final started = await voiceService.startListening(
-        localeId: 'hi_IN',
-        onResult: (transcription) {
-          if (!mounted) return;
-          setState(() {
-            _textController.text = transcription;
-          });
-        },
-        onDone: () {
-          if (!mounted) return;
-          setState(() => _isRecording = false);
-          final text = _textController.text.trim();
-          if (text.isNotEmpty && mounted) {
-            final cleaned = voiceService.cleanAcademicSpeech(text);
-            _textController.text = cleaned;
-            _sendMessage();
-          }
-        },
-      );
-
-      if (!started && mounted) {
-        setState(() => _isRecording = false);
-        _openVoiceDoubtSheet();
-      }
-    }
-  }
-
-  void _openVoiceDoubtSheet() {
-    VoiceDoubtSheet.show(
-      context,
-      scopeTitle: 'General AI Study Tutor',
-      initialPrompt: _textController.text,
-      onAskAi: (transcribedDoubt) {
-        _textController.text = transcribedDoubt;
-        _sendMessage();
-      },
-      onPasteToChat: (transcribedDoubt) {
-        setState(() {
-          _textController.text = transcribedDoubt;
-        });
-      },
     );
   }
 
@@ -849,16 +771,10 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                 ),
               ],
 
-              // Floating Masterclass Audio Player Bar + Bottom Input Bar (Safely Wrapped)
+              // Bottom Input Bar
               SafeArea(
                 top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AiAudioPlayerBar(isDark: isDark),
-                    _buildInputBar(controller, isDark),
-                  ],
-                ),
+                child: _buildInputBar(controller, isDark),
               ),
             ],
           ),
@@ -1073,70 +989,18 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                     const SizedBox(height: 8),
                   ],
                   if (isUser) ...[
-                    if (msg.content.contains('🎤')) ...[
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Colors.white24,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.mic_rounded, color: Colors.white, size: 16),
-                          ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Spoken Voice Doubt',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  'Audio analyzed by AI Tutor',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 10.5,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (!controller.isLoading)
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                              padding: EdgeInsets.zero,
-                              tooltip: 'Delete question and response',
-                              onPressed: () => _confirmDeleteChatTurn(context, controller, msg),
-                              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.white70),
-                            ),
-                        ],
-                      ),
-                    ] else ...[
-                      _ExpandableUserQuestionContent(
-                        content: msg.content,
-                        canEdit: controller.canEditLastQuestion(msg.id),
-                        isLoading: controller.isLoading,
-                        onEdit: () {
-                          controller.beginEditingLastQuestion(msg.id);
-                          _textController.text = msg.content;
-                          _textController.selection = TextSelection.collapsed(offset: _textController.text.length);
-                          _inputFocusNode.requestFocus();
-                        },
-                        onDelete: () => _confirmDeleteChatTurn(context, controller, msg),
-                      ),
-                    ],
+                    _ExpandableUserQuestionContent(
+                      content: msg.content,
+                      canEdit: controller.canEditLastQuestion(msg.id),
+                      isLoading: controller.isLoading,
+                      onEdit: () {
+                        controller.beginEditingLastQuestion(msg.id);
+                        _textController.text = msg.content;
+                        _textController.selection = TextSelection.collapsed(offset: _textController.text.length);
+                        _inputFocusNode.requestFocus();
+                      },
+                      onDelete: () => _confirmDeleteChatTurn(context, controller, msg),
+                    ),
                   ]
                   else ...[
                     Row(
@@ -1384,13 +1248,10 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
             isLoading: controller.isLoading,
             isStreaming: controller.isStreaming,
             onStop: controller.stopGeneration,
-            isRecordingVoice: _isRecording,
             hintText: 'Ask in ${controller.tutorMode.shortTag} mode...',
             onSend: _sendMessage,
             onSubmitted: (_) => _sendMessage(),
             onAttachImage: _showAttachmentOptions,
-            onToggleVoiceRecord: _toggleVoiceRecording,
-            onLongPressVoiceRecord: _openVoiceDoubtSheet,
           ),
         ],
       ),

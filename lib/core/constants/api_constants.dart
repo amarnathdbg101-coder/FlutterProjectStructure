@@ -45,7 +45,6 @@ class ApiConstants {
   static const String aiDiagramGenerateFlashcards = '/api/v1/ai/diagram/generate-flashcards';
   static const String aiDiagramExportPdf = '/api/v1/ai/diagram/export-pdf';
   static const String aiMindMaps = '/api/v1/ai/mindmaps';
-  static const String ttsSynthesize = '/api/v1/tts/synthesize';
 
   // Adaptive Quizzes & Cognitive Profile
   static const String quizzes = '/api/v1/quizzes';

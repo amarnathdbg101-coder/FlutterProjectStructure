@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import 'voice_record_button.dart';
 
 /// Reusable AI Chat & Doubt Input Bar
 /// Standardized across AiTutorChatScreen, DashboardScreen, and Modal Sheets.
@@ -36,7 +35,7 @@ class AiChatInputBar extends StatelessWidget {
     this.hintText = 'Ask any question, formula or theorem...',
     required this.isDark,
     this.showAttachment = true,
-    this.showVoice = true,
+    this.showVoice = false,
     this.focusNode,
   });
 
@@ -74,20 +73,6 @@ class AiChatInputBar extends StatelessWidget {
                 ),
                 tooltip: 'Attach Image / Handwritten Math',
                 onPressed: isLoading ? null : onAttachImage,
-              ),
-            ),
-
-          // Animated Voice Record Button (Tap: Voice Typing, Long Press: Voice Doubt Assistant)
-          if (showVoice && onToggleVoiceRecord != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: VoiceRecordButton(
-                isRecording: isRecordingVoice,
-                onPressed: isLoading ? () {} : onToggleVoiceRecord!,
-                onLongPress: isLoading ? null : onLongPressVoiceRecord,
-                tooltip: isRecordingVoice
-                    ? 'Stop listening (Tap to finish)'
-                    : 'Tap to Speak / Voice Typing (Long-press for Assistant)',
               ),
             ),
 

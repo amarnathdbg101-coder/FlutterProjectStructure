@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../features/voice_doubt/services/ai_tts_service.dart';
-import '../../features/voice_doubt/widgets/live_ai_talk_overlay_sheet.dart';
 import '../widgets/custom_snackbar.dart';
 
 /// Reusable Bottom Action Bar for AI Assistant responses
-/// Provides one-tap Copy, Listen Aloud (TTS), Feynman Simplification, and Practice Generation
+/// Provides one-tap Copy, Feynman Simplification, Practice Generation, Summary, and Retry
 class AiResponseActionBar extends StatelessWidget {
   final String solutionContent;
   final String? spokenTranscript;
@@ -28,11 +26,6 @@ class AiResponseActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ⚡ Optimistic audio pre-warming: pre-caches this message in background for 0ms instant playback
-    if (solutionContent.trim().isNotEmpty) {
-      AiTtsService().prewarm(solutionContent);
-    }
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -48,208 +41,6 @@ class AiResponseActionBar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Quick 30s Voice Note & Full Read Aloud Controls
-            ListenableBuilder(
-              listenable: AiTtsService(),
-              builder: (context, _) {
-                final tts = AiTtsService();
-                final isThisTarget = tts.currentText == solutionContent;
-                final isSpeakingThis = tts.isPlaying && isThisTarget;
-                final isPausedThis = tts.isPaused && isThisTarget;
-                final isLoadingThis = tts.isLoading && isThisTarget;
-
-                final IconData icon = isSpeakingThis
-                    ? Icons.pause_circle_filled_rounded
-                    : (isPausedThis ? Icons.play_circle_fill_rounded : Icons.volume_up_rounded);
-                final String label = isLoadingThis
-                    ? 'Preparing...'
-                    : (isSpeakingThis
-                        ? 'Pause'
-                        : (isPausedThis ? 'Resume' : 'Listen'));
-                final Color activeColor = isSpeakingThis
-                    ? const Color(0xFF6366F1)
-                    : (isDark ? const Color(0xFF34D399) : const Color(0xFF059669));
-
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // ⚡ Quick 30-Second Voice Note (Instant ~0.5s synthesis, zero server strain)
-                    InkWell(
-                      onTap: isLoadingThis
-                          ? null
-                          : () {
-                              HapticFeedback.lightImpact();
-                              if (isSpeakingThis) {
-                                tts.stop();
-                              } else {
-                                tts.speakSummary(solutionContent, precomputedSummary: spokenTranscript);
-                              }
-                            },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.bolt_rounded,
-                              size: 14,
-                              color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '30s Note',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Container(
-                      height: 10,
-                      width: 1,
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                    ),
-                    // Full Response Read Aloud (Priya Female Voice)
-                    InkWell(
-                      onTap: isLoadingThis
-                          ? null
-                          : () {
-                              HapticFeedback.lightImpact();
-                              if (isSpeakingThis) {
-                                tts.pause();
-                              } else if (isPausedThis) {
-                                tts.resume();
-                              } else {
-                                tts.speak(solutionContent, precomputedSpokenTranscript: spokenTranscript);
-                              }
-                            },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isLoadingThis)
-                              SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: activeColor,
-                                ),
-                              )
-                            else
-                              Icon(
-                                icon,
-                                size: 14,
-                                color: activeColor,
-                              ),
-                            const SizedBox(width: 4),
-                            Text(
-                              label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: activeColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (isSpeakingThis || isPausedThis) ...[
-                      const SizedBox(width: 2),
-                      InkWell(
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          tts.cycleSpeechRate();
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '${tts.speechRate}x',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF6366F1),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      InkWell(
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          tts.stop();
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Icon(
-                          Icons.stop_circle_outlined,
-                          size: 16,
-                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ],
-                );
-              },
-            ),
-            Container(
-              height: 12,
-              width: 1,
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-            ),
-            // 🎙️ Gemini Live 1-on-1 Interactive Talk Button
-            InkWell(
-              onTap: () {
-                HapticFeedback.mediumImpact();
-                LiveAiTalkOverlaySheet.show(
-                  context,
-                  initialDoubt: solutionContent,
-                );
-              },
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.graphic_eq,
-                      size: 14,
-                      color: Color(0xFFEC4899),
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'Live Talk',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFEC4899),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Container(
-              height: 12,
-              width: 1,
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-            ),
             // Copy Solution Button
             InkWell(
               onTap: () {

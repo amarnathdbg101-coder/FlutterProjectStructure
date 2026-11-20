@@ -9,6 +9,5 @@ export 'ai_action_card.dart';
 export 'ai_chat_input_bar.dart';
 export 'ai_filter_chips_bar.dart';
 export 'ai_response_action_bar.dart';
-export 'voice_record_button.dart';
 export '../widgets/app_tactile_card.dart';
 export '../widgets/readiness_gauge.dart';

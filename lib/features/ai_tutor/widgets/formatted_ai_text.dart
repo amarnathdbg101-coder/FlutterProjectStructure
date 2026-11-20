@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import '../../../core/utils/latex_sanitizer.dart';
 import '../../../core/widgets/custom_snackbar.dart';
-import '../../voice_doubt/services/ai_tts_service.dart';
 import '../../diagram_viewer/widgets/interactive_visual_diagram.dart';
 import '../../diagram_viewer/widgets/interactive_graph_plotter.dart';
 import '../models/chat_message_model.dart' show AiBlockModel;
@@ -58,8 +57,6 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   String? _cachedText;
   int _visibleBlockCount = _initialBlockCount;
   int _lastParseTimeMs = 0;
-  int _lastSpokenBlockIndex = 0;
-  int _lastChunkIndex = -1;
 
   @override
   void didUpdateWidget(covariant FormattedAiText oldWidget) {
@@ -69,8 +66,6 @@ class _FormattedAiTextState extends State<FormattedAiText> {
       _cachedBlocks = null;
       _visibleBlockCount = _initialBlockCount;
     } else if (oldWidget.text != widget.text) {
-      _lastSpokenBlockIndex = 0;
-      _lastChunkIndex = -1;
       if (!widget.isStreaming) {
         _cachedText = null;
         _cachedBlocks = null;
@@ -190,25 +185,6 @@ class _FormattedAiTextState extends State<FormattedAiText> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final blocks = _getBlocks();
-    final tts = AiTtsService();
-
-    final isSpeakingThis = tts.isPlaying && tts.currentText == text;
-    final currentSentence = tts.currentRawSentence.trim();
-    final currentChunk = tts.currentChunkIndex;
-
-    int activeBlockIndex = -1;
-    if (isSpeakingThis && currentSentence.isNotEmpty && blocks.isNotEmpty) {
-      activeBlockIndex = _resolveSequentialSpokenBlock(
-        blocks: blocks,
-        currentSentence: currentSentence,
-        currentChunkIndex: currentChunk,
-        totalChunks: tts.totalChunks,
-      );
-      if (activeBlockIndex >= _visibleBlockCount) {
-        _visibleBlockCount = (activeBlockIndex + 1 + _blocksPerPage).clamp(0, blocks.length);
-      }
-    }
-
     final visibleBlockCount = _visibleBlockCount < blocks.length ? _visibleBlockCount : blocks.length;
 
     Widget buildBody() => Column(
@@ -243,10 +219,10 @@ class _FormattedAiTextState extends State<FormattedAiText> {
           ),
         ],
 
-        // Render Parsed Blocks with Strict Sequential Highlighting
+        // Render Parsed Blocks
         ...List.generate(
           visibleBlockCount,
-          (index) => _renderBlock(context, blocks[index], theme, index: index, isSpokenActive: index == activeBlockIndex),
+          (index) => _renderBlock(context, blocks[index], theme, index: index),
         ),
 
         if (visibleBlockCount < blocks.length)
@@ -419,20 +395,7 @@ class _FormattedAiTextState extends State<FormattedAiText> {
       ],
     );
 
-    final initialBody = buildBody();
-    final content = ListenableBuilder(
-      listenable: tts,
-      builder: (context, child) {
-        // ⚡ Performance optimization: Only rebuild block tree if this specific message
-        // is currently playing audio! If audio is playing for another message or stopped,
-        // instantly return the cached child without re-rendering math/diagrams!
-        if (tts.currentText != text) {
-          return child!;
-        }
-        return buildBody();
-      },
-      child: initialBody,
-    );
+    final content = buildBody();
 
     // ⚡ Performance optimization: do NOT wrap in SelectionArea while actively streaming
     // SelectionArea recalculates all selectable text metrics and node geometries on every frame,
@@ -444,165 +407,14 @@ class _FormattedAiTextState extends State<FormattedAiText> {
     return SelectionArea(child: content);
   }
 
-  int _resolveSequentialSpokenBlock({
-    required List<_AiBlock> blocks,
-    required String currentSentence,
-    required int currentChunkIndex,
-    required int totalChunks,
-  }) {
-    if (blocks.isEmpty) return -1;
-
-    // If user tapped a prior section or navigated back, allow moving back
-    if (currentChunkIndex < _lastChunkIndex) {
-      _lastSpokenBlockIndex = 0;
-    }
-    _lastChunkIndex = currentChunkIndex;
-
-    // 1. First priority: Check if currentSentence is still inside the current active block
-    // (A single block or explanation paragraph often contains 2 to 4 spoken sentences)
-    if (_lastSpokenBlockIndex >= 0 && _lastSpokenBlockIndex < blocks.length) {
-      final currentBlockText = blocks[_lastSpokenBlockIndex].text.trim();
-      if (_matchesBlock(currentBlockText, currentSentence)) {
-        return _lastSpokenBlockIndex;
-      }
-    }
-
-    // 2. Second priority: Search forward in a strictly localized window (+1, +2, +3 blocks)
-    // This PREVENTS JUMPING to distant topics that share keywords like "Formula", "Step", or "Law"
-    final int startSearch = (_lastSpokenBlockIndex >= 0) ? _lastSpokenBlockIndex + 1 : 0;
-    final int forwardLimit = (startSearch + 3 < blocks.length) ? startSearch + 3 : blocks.length;
-
-    for (int i = startSearch; i < forwardLimit; i++) {
-      if (_matchesBlock(blocks[i].text.trim(), currentSentence)) {
-        _lastSpokenBlockIndex = i;
-        return i;
-      }
-    }
-
-    // 3. Third priority: Extended sequential forward search (only forward, never jump backward)
-    for (int i = forwardLimit; i < blocks.length; i++) {
-      if (_matchesBlock(blocks[i].text.trim(), currentSentence)) {
-        _lastSpokenBlockIndex = i;
-        return i;
-      }
-    }
-
-    // 4. Proportional progressive estimate if text was heavily stripped of formatting
-    if (totalChunks > 0 && currentChunkIndex >= 0) {
-      final estimatedIndex = ((currentChunkIndex / totalChunks) * blocks.length).floor().clamp(0, blocks.length - 1);
-      if (estimatedIndex >= _lastSpokenBlockIndex) {
-        _lastSpokenBlockIndex = estimatedIndex;
-        return estimatedIndex;
-      }
-    }
-
-    return _lastSpokenBlockIndex.clamp(0, blocks.length - 1);
-  }
-
-  bool _matchesBlock(String blockText, String sentence) {
-    if (blockText.isEmpty || sentence.isEmpty) return false;
-    final b = blockText.toLowerCase();
-    final s = sentence.toLowerCase();
-    return b.contains(s) || s.contains(b) || _isSubstantialOverlap(b, s);
-  }
-
   Widget _renderBlock(
     BuildContext context,
     _AiBlock block,
     ThemeData theme, {
     int index = -1,
-    bool isSpokenActive = false,
   }) {
     final textColor = defaultTextColor ?? (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B));
-    final blockWidget = _buildRawBlockWidget(context, block, theme, textColor);
-
-    if (!isSpokenActive) {
-      return InkWell(
-        onDoubleTap: () {
-          if (index >= 0) {
-            _lastSpokenBlockIndex = index;
-          }
-          AiTtsService().speakFromSection(text, block.text);
-        },
-        borderRadius: BorderRadius.circular(8),
-        splashColor: const Color(0x1A6366F1),
-        child: blockWidget,
-      );
-    }
-
-    // Glowing Real-Time Karaoke Highlight with Automatic Smooth Viewport Scroll
-    return _AutoScrollBlockWrapper(
-      isSpeakingActive: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF6366F1).withValues(alpha: 0.20)
-              : const Color(0xFFEEF2FF),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isDark
-                ? const Color(0xFF818CF8).withValues(alpha: 0.55)
-                : const Color(0xFFC7D2FE),
-            width: 1.4,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.22 : 0.10),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              margin: const EdgeInsets.only(bottom: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6366F1),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.volume_up_rounded, size: 10, color: Colors.white),
-                  SizedBox(width: 3),
-                  Text(
-                    'Reading Now',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            blockWidget,
-          ],
-        ),
-      ),
-    );
-  }
-
-  static bool _isSubstantialOverlap(String a, String b) {
-    if (a.length < 10 || b.length < 10) return false;
-    final cleanA = a.replaceAll(_nonAlphanumericRx, ' ').toLowerCase();
-    final cleanB = b.replaceAll(_nonAlphanumericRx, ' ').toLowerCase();
-    final wordsB = cleanB.split(_whitespaceRx).where((w) => w.length > 3).toList();
-    if (wordsB.isEmpty) return false;
-    int matches = 0;
-    for (final w in wordsB) {
-      if (cleanA.contains(w)) matches++;
-    }
-    return matches >= 2 && (matches / wordsB.length) >= 0.4;
+    return _buildRawBlockWidget(context, block, theme, textColor);
   }
 
   Widget _buildRawBlockWidget(BuildContext context, _AiBlock block, ThemeData theme, Color textColor) {
@@ -2815,56 +2627,5 @@ class _StreamingPulseCursorState extends State<_StreamingPulseCursor>
         ),
       ),
     );
-  }
-}
-
-/// Auto-scrolls the currently active spoken sentence/block into the student's viewport
-class _AutoScrollBlockWrapper extends StatefulWidget {
-  final Widget child;
-  final bool isSpeakingActive;
-
-  const _AutoScrollBlockWrapper({
-    required this.child,
-    required this.isSpeakingActive,
-  });
-
-  @override
-  State<_AutoScrollBlockWrapper> createState() => _AutoScrollBlockWrapperState();
-}
-
-class _AutoScrollBlockWrapperState extends State<_AutoScrollBlockWrapper> {
-  @override
-  void initState() {
-    super.initState();
-    if (widget.isSpeakingActive) {
-      _scrollToSelf();
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _AutoScrollBlockWrapper oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isSpeakingActive && !oldWidget.isSpeakingActive) {
-      _scrollToSelf();
-    }
-  }
-
-  void _scrollToSelf() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      try {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 380),
-          curve: Curves.easeInOutCubic,
-          alignment: 0.35, // Smoothly centers in the upper-middle viewport
-        );
-      } catch (_) {}
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
   }
 }

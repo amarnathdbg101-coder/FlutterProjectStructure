@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../../core/storage/hive_storage.dart';
@@ -622,64 +621,6 @@ class AiTutorController extends ChangeNotifier {
       _messages.addAll(history);
     } catch (e) {
       _errorMessage = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> sendVoiceDoubt(String audioPath) async {
-    _isLoading = true;
-    _errorMessage = null;
-
-    final userMsg = ChatMessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      role: 'user',
-      content: '🎤 Spoken Voice Doubt',
-      createdAt: DateTime.now(),
-    );
-    _messages.add(userMsg);
-    notifyListeners();
-
-    try {
-      String audioBase64 = '';
-      if (kIsWeb) {
-        if (audioPath.startsWith('data:')) {
-          audioBase64 = audioPath.split(',').last;
-        }
-      } else {
-        final file = File(audioPath);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          audioBase64 = base64Encode(bytes);
-        }
-      }
-
-      final botResponse = await _repository.askDoubt(
-        question: 'Voice Question: Please listen to the attached audio recording and answer my doubt thoroughly',
-        scopeType: 'global',
-        audioBase64: audioBase64,
-        audioMimeType: 'audio/m4a',
-        contextNotes: _activeNoteContext == null || _activeNoteContext!.isEmpty
-            ? ''
-            : '[ATTACHED NOTE CONTEXT]\n$_activeNoteContext',
-        provider: _selectedModel.providerId,
-        model: _selectedModel.modelId,
-        mode: _tutorMode.id,
-      );
-
-      _messages.add(botResponse);
-    } catch (e) {
-      final errorMessage = ApiClient.handleError(e);
-      _errorMessage = errorMessage;
-      _messages.add(
-        ChatMessageModel(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          role: 'assistant',
-          content: 'Sorry, I could not process the voice note: $errorMessage',
-          createdAt: DateTime.now(),
-        ),
-      );
     } finally {
       _isLoading = false;
       notifyListeners();
