@@ -131,7 +131,7 @@ class AiTutorController extends ChangeNotifier {
       providerName: 'Google Gemini 3',
       modelId: 'gemini-3.1-pro-preview',
       modelName: 'Gemini 3.1 Pro (Preview)',
-      description: '🏆 Advanced multimodal (text + image + audio)',
+      description: '🏆 Advanced multimodal reasoning',
       iconEmoji: '🏆',
     ),
 

@@ -7,7 +7,7 @@ class OmniSearchBar extends StatefulWidget {
   final TextEditingController? controller;
   final ValueChanged<String> onChanged;
   final ValueChanged<String>? onSubmitted;
-  final VoidCallback onVoiceTap;
+  final VoidCallback? onVoiceTap;
   final ValueChanged<String>? onSuggestionTap;
   final List<String> suggestions;
   final bool isDark;
@@ -17,7 +17,7 @@ class OmniSearchBar extends StatefulWidget {
     this.controller,
     required this.onChanged,
     this.onSubmitted,
-    required this.onVoiceTap,
+    this.onVoiceTap,
     this.onSuggestionTap,
     this.suggestions = const [],
     this.isDark = false,
@@ -129,11 +129,6 @@ class _OmniSearchBarState extends State<OmniSearchBar> {
                     contentPadding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                 ),
-              ),
-              IconButton(
-                icon: Icon(Icons.mic_none_rounded, size: 20, color: textSecondary),
-                onPressed: widget.onVoiceTap,
-                tooltip: 'Voice Doubt Prompt',
               ),
               InkWell(
                 onTap: () {

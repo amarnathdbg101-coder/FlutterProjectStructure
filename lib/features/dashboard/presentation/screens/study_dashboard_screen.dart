@@ -602,9 +602,6 @@ class _StudyDashboardScreenState extends ConsumerState<StudyDashboardScreen> {
                                 },
                                 onSubmitted: _submitSearch,
                                 onSuggestionTap: _handleSuggestionTap,
-                                onVoiceTap: () {
-                                  context.push(AppRoutes.aiChat);
-                                },
                               );
                             },
                           ),

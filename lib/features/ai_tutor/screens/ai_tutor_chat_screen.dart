@@ -1074,7 +1074,6 @@ class _AiTutorChatScreenState extends State<AiTutorChatScreen> {
                       const SizedBox(height: 10),
                       AiResponseActionBar(
                         solutionContent: msg.content,
-                        spokenTranscript: msg.spokenTranscript,
                         isDark: isDark,
                         onSimplify: () {
                           controller.sendQuestion('Explain this in simpler words using Feynman Technique with a simple analogy');

@@ -6,7 +6,6 @@ import '../widgets/custom_snackbar.dart';
 /// Provides one-tap Copy, Feynman Simplification, Practice Generation, Summary, and Retry
 class AiResponseActionBar extends StatelessWidget {
   final String solutionContent;
-  final String? spokenTranscript;
   final VoidCallback onSimplify;
   final VoidCallback onPractice;
   final VoidCallback? onSummarize;
@@ -16,7 +15,6 @@ class AiResponseActionBar extends StatelessWidget {
   const AiResponseActionBar({
     super.key,
     required this.solutionContent,
-    this.spokenTranscript,
     required this.onSimplify,
     required this.onPractice,
     this.onSummarize,

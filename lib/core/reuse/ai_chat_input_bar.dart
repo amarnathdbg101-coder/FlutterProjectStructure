@@ -8,16 +8,12 @@ class AiChatInputBar extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
   final VoidCallback onSend;
   final VoidCallback? onAttachImage;
-  final VoidCallback? onToggleVoiceRecord;
-  final VoidCallback? onLongPressVoiceRecord;
-  final bool isRecordingVoice;
   final bool isLoading;
   final bool isStreaming;
   final VoidCallback? onStop;
   final String hintText;
   final bool isDark;
   final bool showAttachment;
-  final bool showVoice;
   final FocusNode? focusNode;
 
   const AiChatInputBar({
@@ -26,16 +22,12 @@ class AiChatInputBar extends StatelessWidget {
     required this.onSend,
     this.onSubmitted,
     this.onAttachImage,
-    this.onToggleVoiceRecord,
-    this.onLongPressVoiceRecord,
-    this.isRecordingVoice = false,
     this.isLoading = false,
     this.isStreaming = false,
     this.onStop,
     this.hintText = 'Ask any question, formula or theorem...',
     required this.isDark,
     this.showAttachment = true,
-    this.showVoice = false,
     this.focusNode,
   });
 

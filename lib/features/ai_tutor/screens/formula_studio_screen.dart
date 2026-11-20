@@ -1234,11 +1234,11 @@ class _FormulaStudioScreenState extends State<FormulaStudioScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.record_voice_over_outlined, size: 16, color: AppColors.primary),
+                        const Icon(Icons.school_outlined, size: 16, color: AppColors.primary),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Exam Viva Readout: "${item.phoneticReadout}"',
+                            'Exam Viva Pronunciation: "${item.phoneticReadout}"',
                             style: TextStyle(fontSize: 11.5, fontStyle: FontStyle.italic, color: isDark ? Colors.white70 : Colors.black87),
                           ),
                         ),
