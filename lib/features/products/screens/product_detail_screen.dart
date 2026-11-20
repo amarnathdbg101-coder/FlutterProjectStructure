@@ -13,6 +13,7 @@ import '../../auth/controllers/auth_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/utils/whatsapp_share_helper.dart';
 import 'barcode_sheet_studio_screen.dart';
+import 'inventory_screen.dart' show showAddProductDialog;
 
 /// Clean, Aesthetic, High-Vibe E-Commerce Product Details Showcase.
 /// Complete parity with CustomerFrontend UI/UX while providing essential
@@ -48,8 +49,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   late final PageController _pageController;
   int _activeImageIndex = 0;
   bool _isTitleExpanded = false;
-  bool _isWishlisted = false;
-  bool _isProfitExpanded = true;
+  bool _isProfitExpanded = false;
   String? _selectedSize;
   String? _selectedColor;
   late final AnimationController _pulseController;
@@ -279,10 +279,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
               } else if (value == 'edit') {
                 if (widget.onEditRequested != null) {
                   widget.onEditRequested!(context, p);
+                } else {
+                  showAddProductDialog(context, initialProduct: p);
                 }
               } else if (value == 'duplicate') {
                 if (widget.onDuplicateRequested != null) {
                   widget.onDuplicateRequested!(context, p);
+                } else {
+                  showAddProductDialog(context, initialProduct: p, isDuplicate: true);
                 }
               } else if (value == 'barcode') {
                 BarcodeStickerDialog.show(context, p);
@@ -639,84 +643,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                         ),
                       ),
 
-                      // Floating Top-Right Circular Action Buttons: Wishlist, Share, Fullscreen Zoom
+                      // Floating Top-Right Circular Action Button: Fullscreen Zoom
                       Positioned(
                         top: 14,
                         right: 14,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Wishlist / Bookmark Button
-                            _buildFloatingRoundButton(
-                              icon: _isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                              iconColor: _isWishlisted ? const Color(0xFFEF4444) : const Color(0xFF475569),
-                              tooltip: context.isHindi ? 'पसंदीदा' : 'Wishlist',
-                              onTap: () => setState(() => _isWishlisted = !_isWishlisted),
-                            ),
-                            const SizedBox(height: 8),
-                            // WhatsApp Share Button
-                            _buildFloatingRoundButton(
-                              icon: Icons.share_outlined,
-                              iconColor: const Color(0xFF475569),
-                              tooltip: context.isHindi ? 'शेयर करें' : 'Share',
-                              onTap: () => _shareProductViaWhatsApp(context, p),
-                            ),
-                            const SizedBox(height: 8),
-                            // Fullscreen Zoom Button
-                            _buildFloatingRoundButton(
-                              icon: Icons.fullscreen_rounded,
-                              iconColor: const Color(0xFF475569),
-                              tooltip: context.isHindi ? 'बड़ा करके देखें' : 'Zoom',
-                              onTap: () => _openFullScreenImage(context, imagesList, _activeImageIndex),
-                            ),
-                          ],
+                        child: _buildFloatingRoundButton(
+                          icon: Icons.fullscreen_rounded,
+                          iconColor: const Color(0xFF475569),
+                          tooltip: context.isHindi ? 'बड़ा करके देखें' : 'Zoom',
+                          onTap: () => _openFullScreenImage(context, imagesList, _activeImageIndex),
                         ),
                       ),
 
-                      // Floating Bottom-Left Rating / Trust Pill (Flipkart Style: 4.4 ★ | Verified)
-                      Positioned(
-                        bottom: 14,
-                        left: 14,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.10),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                '4.4',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12.5,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              const Icon(Icons.star_rounded, color: Color(0xFF16A34A), size: 14),
-                              const SizedBox(width: 4),
-                              Text(
-                                '|  ${context.isHindi ? "सत्यापित" : "Verified"}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 11.5,
-                                  color: Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+
 
                       // Floating Bottom-Right Photo Counter Pill (📷 1 / 4)
                       if (imagesList.length > 1)
@@ -1696,11 +1635,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
               ),
               const SizedBox(width: 7),
               Expanded(
-                child: Text(
-                  context.isHindi ? 'मुनाफा एवं व्यापारिक जानकारी' : 'Profit & Commercials Hub',
-                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.isHindi ? 'मुनाफा एवं व्यापारिक जानकारी' : 'Profit & Commercials Hub',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      context.isHindi ? '🔒 काउंटर प्राइवेसी (सिर्फ दुकानदार के लिए)' : '🔒 Counter Privacy (Merchant Only)',
+                      style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: AppColors.primary),
+                    ),
+                  ],
                 ),
               ),
               InkWell(
@@ -2384,44 +2333,51 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         top: false,
         child: Row(
           children: [
-            // Print Barcode Button
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: context.colorBorder),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            // Print Barcode Button (Height 48)
+            SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: context.colorBorder),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.qr_code_2_rounded, size: 20, color: AppColors.primary),
+                label: Text(
+                  context.isHindi ? 'बारकोड' : 'Barcode',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary),
+                ),
+                onPressed: () => BarcodeStickerDialog.show(context, p),
               ),
-              icon: const Icon(Icons.qr_code_2_rounded, size: 18, color: AppColors.primary),
-              label: Text(
-                context.isHindi ? 'बारकोड' : 'Barcode',
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary),
-              ),
-              onPressed: () => BarcodeStickerDialog.show(context, p),
             ),
             const SizedBox(width: 10),
 
-            // Primary Update / Edit Details Button
+            // Primary Update / Edit Details Button (Height 48)
             Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.edit_note_rounded, size: 22),
+                  label: Text(
+                    context.isHindi ? 'विवरण बदलें (Edit)' : 'Edit Product Details',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: () {
+                    if (widget.onEditRequested != null) {
+                      widget.onEditRequested!(context, p);
+                    } else {
+                      showAddProductDialog(context, initialProduct: p);
+                    }
+                  },
                 ),
-                icon: const Icon(Icons.edit_note_rounded, size: 20),
-                label: Text(
-                  context.isHindi ? 'उत्पाद विवरण बदलें (Edit)' : 'Edit Product Details',
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onPressed: () {
-                  if (widget.onEditRequested != null) {
-                    widget.onEditRequested!(context, p);
-                  }
-                },
               ),
             ),
           ],
