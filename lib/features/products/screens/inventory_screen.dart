@@ -4613,6 +4613,9 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                   case 'import':
                     _showBulkImportDialog(context);
                     break;
+                  case 'categories':
+                    ManageCategoriesSheet.show(context);
+                    break;
                   case 'batch_scan':
                     final unmapped = displayProducts.where((p) => p.barcode.trim().isEmpty).toList();
                     if (unmapped.isNotEmpty) {
@@ -4662,6 +4665,16 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       const Icon(Icons.file_upload_outlined, color: AppColors.primary, size: 18),
                       const SizedBox(width: 10),
                       Text(ctx.tr('bulk_import_open_dialog_btn')),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'categories',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.category_outlined, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text(ctx.isHindi ? 'कैटेगरी प्रबंधन (Manage)' : 'Manage Categories'),
                     ],
                   ),
                 ),
@@ -4848,18 +4861,19 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                           });
                         },
                       ),
-                    _buildFilterChip(
-                      context: context,
-                      label: context.isHindi ? 'हिडन प्राइस' : 'Hidden Price',
-                      icon: Icons.lock_outline_rounded,
-                      count: hiddenPriceCount,
-                      isSelected: _showOnlyPriceHidden,
-                      onTap: () {
-                        setState(() {
-                          _showOnlyPriceHidden = !_showOnlyPriceHidden;
-                        });
-                      },
-                    ),
+                    if (hiddenPriceCount > 0)
+                      _buildFilterChip(
+                        context: context,
+                        label: context.isHindi ? 'हिडन प्राइस' : 'Hidden Price',
+                        icon: Icons.lock_outline_rounded,
+                        count: hiddenPriceCount,
+                        isSelected: _showOnlyPriceHidden,
+                        onTap: () {
+                          setState(() {
+                            _showOnlyPriceHidden = !_showOnlyPriceHidden;
+                          });
+                        },
+                      ),
                     if (missingBarcodeCount > 0)
                       _buildFilterChip(
                         context: context,
@@ -5326,36 +5340,69 @@ class _ProductGridCard extends StatelessWidget {
           ),
           const SizedBox(height: 5),
 
-          // 4. PRICE & UNIT
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  '₹${p.price.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: context.colorTextPrimary,
-                    fontSize: 15.5,
-                    letterSpacing: -0.3,
+          // 4. PRICE & UNIT + STOCK BADGE
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        '₹${p.price.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: context.colorTextPrimary,
+                          fontSize: 15,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      if (p.unit.isNotEmpty) ...[
+                        const SizedBox(width: 2),
+                        Text(
+                          '/${p.unit}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: context.colorTextSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                if (p.unit.isNotEmpty) ...[
-                  const SizedBox(width: 3),
-                  Text(
-                    '/ ${p.unit}',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: context.colorTextSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
+              ),
+              const SizedBox(width: 4),
+              // Clear High-Contrast Stock Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: p.isOutOfStock
+                      ? AppColors.error.withValues(alpha: 0.12)
+                      : (p.isLowStock
+                          ? AppColors.warning.withValues(alpha: 0.12)
+                          : AppColors.success.withValues(alpha: 0.12)),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  p.isOutOfStock
+                      ? (context.isHindi ? 'खत्म' : 'Out')
+                      : '${p.stock.toStringAsFixed(0)} ${context.isHindi ? "उपलब्ध" : "left"}',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color: p.isOutOfStock
+                        ? AppColors.error
+                        : (p.isLowStock ? AppColors.warning : AppColors.success),
                   ),
-                ],
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
