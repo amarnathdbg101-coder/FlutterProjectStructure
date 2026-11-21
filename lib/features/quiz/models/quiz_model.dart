@@ -195,6 +195,7 @@ class QuestionFeedbackModel {
   final String questionId;
   final String questionType; // 'mcq' | 'subjective'
   final String questionText;
+  final List<String> options;
   final int selectedOption;
   final int correctOptionIndex;
   final String studentAnswer;
@@ -213,6 +214,7 @@ class QuestionFeedbackModel {
     required this.questionId,
     this.questionType = 'mcq',
     required this.questionText,
+    this.options = const [],
     required this.selectedOption,
     required this.correctOptionIndex,
     this.studentAnswer = '',
@@ -229,6 +231,7 @@ class QuestionFeedbackModel {
   });
 
   bool get isSubjective => questionType.toLowerCase() == 'subjective';
+  bool get isAttempted => isSubjective ? studentAnswer.trim().isNotEmpty : selectedOption >= 0;
 
   factory QuestionFeedbackModel.fromJson(Map<String, dynamic> json) {
     List<String> parseStringList(dynamic raw) {
@@ -244,7 +247,8 @@ class QuestionFeedbackModel {
       questionId: json['question_id'] as String? ?? '',
       questionType: qType,
       questionText: json['question_text'] as String? ?? json['question'] as String? ?? '',
-      selectedOption: (json['selected_option'] as num?)?.toInt() ?? 0,
+      options: parseStringList(json['options']),
+      selectedOption: (json['selected_option'] as num?)?.toInt() ?? -1,
       correctOptionIndex: (json['correct_option_index'] as num?)?.toInt() ?? 0,
       studentAnswer: json['student_answer'] as String? ?? '',
       modelAnswer: json['model_answer'] as String? ?? '',

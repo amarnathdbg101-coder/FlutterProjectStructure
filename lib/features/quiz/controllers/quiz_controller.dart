@@ -4,7 +4,9 @@ import '../models/quiz_model.dart';
 import '../repositories/quiz_repository.dart';
 
 class QuizController extends ChangeNotifier {
-  final QuizRepository _repository = QuizRepository();
+  final QuizRepository _repository;
+
+  QuizController({QuizRepository? repository}) : _repository = repository ?? QuizRepository();
 
   List<QuizModel> _quizzes = [];
   QuizModel? _activeQuiz;
