@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants/app_colors.dart';
 import '../../../core/routes/app_router.dart';
 import '../../../core/utils/latex_sanitizer.dart';
 import '../../../core/utils/responsive.dart';
@@ -11,8 +10,59 @@ import '../../ai_tutor/widgets/formatted_ai_text.dart';
 import '../controllers/quiz_controller.dart';
 import '../models/quiz_model.dart';
 
-class QuizTakerScreen extends StatelessWidget {
+/// Distraction-Free Academic Test & Examination Interface
+/// Supports both Multiple Choice Questions (MCQ) and In-Depth Written Subjective Questions.
+class QuizTakerScreen extends StatefulWidget {
   const QuizTakerScreen({super.key});
+
+  @override
+  State<QuizTakerScreen> createState() => _QuizTakerScreenState();
+}
+
+class _QuizTakerScreenState extends State<QuizTakerScreen> {
+  final Map<String, TextEditingController> _textControllers = {};
+
+  TextEditingController _getControllerFor(String qId, String initialText) {
+    if (!_textControllers.containsKey(qId)) {
+      _textControllers[qId] = TextEditingController(text: initialText);
+    }
+    return _textControllers[qId]!;
+  }
+
+  @override
+  void dispose() {
+    for (final c in _textControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<bool> _onWillPop(BuildContext context) async {
+    final shouldPop = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Exit Examination?', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you sure you want to exit? Your current test progress will be lost unless submitted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Resume Test'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Exit'),
+          ),
+        ],
+      ),
+    );
+    return shouldPop ?? false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,19 +78,19 @@ class QuizTakerScreen extends StatelessWidget {
 
     if (quiz == null || question == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Practice Quiz')),
+        appBar: AppBar(title: const Text('Academic Test')),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.quiz_outlined, size: 56, color: AppColors.primary),
+              const Icon(Icons.school_outlined, size: 56, color: Color(0xFF2563EB)),
               const SizedBox(height: 16),
-              const Text('No active quiz in session.', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('No active test session.', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 onPressed: () => context.pop(),
                 icon: const Icon(Icons.arrow_back),
-                label: const Text('Back to Quizzes'),
+                label: const Text('Back to Tests'),
               ),
             ],
           ),
@@ -54,205 +104,426 @@ class QuizTakerScreen extends StatelessWidget {
     final minutes = controller.timeRemainingSeconds ~/ 60;
     final seconds = controller.timeRemainingSeconds % 60;
     final timeStr = '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    final isTimeUrgent = controller.timeRemainingSeconds < 60;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(quiz.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        actions: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            margin: const EdgeInsets.only(right: 16),
-            decoration: BoxDecoration(
-              color: controller.timeRemainingSeconds < 60
-                  ? AppColors.error.withValues(alpha: 0.12)
-                  : AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.timer,
-                  size: 16,
-                  color: controller.timeRemainingSeconds < 60 ? AppColors.error : AppColors.primary,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  timeStr,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: controller.timeRemainingSeconds < 60 ? AppColors.error : AppColors.primary,
-                  ),
-                ),
-              ],
-            ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldExit = await _onWillPop(context);
+        if (shouldExit && context.mounted) {
+          context.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Exit Test',
+            onPressed: () async {
+              final shouldExit = await _onWillPop(context);
+              if (shouldExit && context.mounted) {
+                context.pop();
+              }
+            },
           ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          border: Border(
-            top: BorderSide(color: isDark ? const Color(0xFF334155) : Colors.grey[200]!),
+          title: Text(
+            quiz.title,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-        child: SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              OutlinedButton.icon(
-                onPressed: currentIndex > 0 ? () => controller.prevQuestion() : null,
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Previous'),
+          actions: [
+            // Live Countdown Timer
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              margin: const EdgeInsets.only(right: 14),
+              decoration: BoxDecoration(
+                color: isTimeUrgent
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.12)
+                    : const Color(0xFF2563EB).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isTimeUrgent
+                      ? const Color(0xFFEF4444).withValues(alpha: 0.4)
+                      : const Color(0xFF2563EB).withValues(alpha: 0.25),
+                ),
               ),
-              if (currentIndex < totalQuestions - 1)
-                ElevatedButton.icon(
-                  onPressed: () => controller.nextQuestion(),
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text('Next'),
-                )
-              else
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: controller.isSubmitting
-                      ? null
-                      : () async {
-                          await controller.submitActiveQuiz();
-                        },
-                  icon: controller.isSubmitting
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.check_circle_outline),
-                  label: Text(controller.isSubmitting ? 'Grading...' : 'Submit Exam'),
-                ),
-            ],
-          ),
-        ),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
-          child: SafeScrollable(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  // --- Progress Bar ---
-                  LinearProgressIndicator(
-                    value: totalQuestions > 0 ? (currentIndex + 1) / totalQuestions : 0,
-                    backgroundColor: isDark ? const Color(0xFF334155) : Colors.grey[200],
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    minHeight: 6,
-                    borderRadius: BorderRadius.circular(3),
+                  Icon(
+                    Icons.timer_outlined,
+                    size: 15,
+                    color: isTimeUrgent ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Question ${currentIndex + 1} of $totalQuestions',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          question.difficulty.toUpperCase(),
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.accent),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // --- Question Body Card ---
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isDark ? const Color(0xFF334155) : Colors.grey[200]!),
-                    ),
-                    child: FormattedAiText(
-                      text: question.questionText,
-                      isDark: isDark,
-                      baseFontSize: 15,
+                  const SizedBox(width: 5),
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: isTimeUrgent ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _buildBottomExamBar(context, controller, currentIndex, totalQuestions, isDark),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
+            child: SafeScrollable(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- Quick Question Navigator Bar ---
+                    _buildQuestionPalette(controller, quiz, currentIndex, isDark),
+                    const SizedBox(height: 16),
 
-                  // --- Trap Alert Warning (if present) ---
-                  if (question.trapWarning.isNotEmpty)
+                    // --- Question Meta Row: Type Badge, Difficulty, Marks ---
+                    Row(
+                      children: [
+                        // Question Type Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: question.isSubjective
+                                ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
+                                : const Color(0xFF2563EB).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: question.isSubjective
+                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
+                                  : const Color(0xFF2563EB).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                question.isSubjective ? Icons.edit_note_rounded : Icons.radio_button_checked_rounded,
+                                size: 13,
+                                color: question.isSubjective ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                question.isSubjective
+                                    ? 'SUBJECTIVE • ${question.maxMarks} MARKS'
+                                    : 'MCQ • ${question.maxMarks} MARK',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: question.isSubjective ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Difficulty Badge
+                        _buildDifficultyBadge(question.difficulty),
+
+                        const Spacer(),
+
+                        // Progress Indicator Text
+                        Text(
+                          '${currentIndex + 1} of $totalQuestions',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // --- Clean Question Problem Card ---
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      margin: const EdgeInsets.only(bottom: 16),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: AppColors.warning.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
+                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      child: Row(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.warning_amber_rounded, size: 20, color: AppColors.warning),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Examiner Trap & Misconception:',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.warning),
-                                ),
-                                const SizedBox(height: 2),
-                                _buildMathOrText(
-                                  question.trapWarning,
-                                  isDark,
-                                  false,
-                                  style: const TextStyle(fontSize: 12, color: AppColors.warning),
-                                ),
-                              ],
-                            ),
+                          FormattedAiText(
+                            text: question.questionText,
+                            isDark: isDark,
+                            baseFontSize: 15,
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 14),
 
-                  // --- Multiple Choice Options ---
-                  const Text(
-                    'Select the correct answer:',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
+                    // --- Subtle Trap Warning (if present) ---
+                    if (question.trapWarning.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.lightbulb_outline_rounded, size: 17, color: Color(0xFFF59E0B)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Examiner Trap: ${question.trapWarning}',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  color: Color(0xFFD97706),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
-                  for (int i = 0; i < question.options.length; i++) ...[
-                    _buildOptionTile(
-                      index: i,
-                      text: question.options[i],
-                      isSelected: selectedOption == i,
-                      onTap: () => controller.selectOption(question.id, i),
-                      isDark: isDark,
-                    ),
-                    const SizedBox(height: 10),
+                    // --- Answer Section (MCQ vs Subjective) ---
+                    if (question.isSubjective)
+                      _buildSubjectiveEditor(context, controller, question, isDark)
+                    else
+                      _buildMCQOptions(controller, question, selectedOption, isDark),
+
+                    const SizedBox(height: 48),
                   ],
-                  const SizedBox(height: 40),
-                ],
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  // --- Quick Question Palette Widget ---
+  Widget _buildQuestionPalette(QuizController controller, QuizModel quiz, int currentIdx, bool isDark) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: List.generate(quiz.questions.length, (i) {
+          final q = quiz.questions[i];
+          final isCurrent = i == currentIdx;
+          bool isAnswered = false;
+          if (q.isSubjective) {
+            isAnswered = (controller.writtenAnswers[q.id]?.trim().isNotEmpty ?? false);
+          } else {
+            isAnswered = controller.selectedAnswers.containsKey(q.id) && controller.selectedAnswers[q.id]! >= 0;
+          }
+
+          Color bg;
+          Color border;
+          Color textColor;
+
+          if (isCurrent) {
+            bg = const Color(0xFF2563EB);
+            border = const Color(0xFF2563EB);
+            textColor = Colors.white;
+          } else if (isAnswered) {
+            bg = const Color(0xFF10B981).withValues(alpha: 0.15);
+            border = const Color(0xFF10B981);
+            textColor = const Color(0xFF059669);
+          } else {
+            bg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+            border = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+            textColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                controller.jumpToQuestion(i);
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: border, width: isCurrent ? 1.5 : 1.0),
+                ),
+                child: Text(
+                  '${i + 1}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  // --- Subjective Writing Canvas ---
+  Widget _buildSubjectiveEditor(
+    BuildContext context,
+    QuizController controller,
+    QuizQuestionModel question,
+    bool isDark,
+  ) {
+    final writtenText = controller.writtenAnswers[question.id] ?? '';
+    final textController = _getControllerFor(question.id, writtenText);
+
+    final words = writtenText.trim().isEmpty ? 0 : writtenText.trim().split(RegExp(r'\s+')).length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF8B5CF6)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Your Written Answer & Derivation',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$words words',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF8B5CF6),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Write your step-by-step logic, definitions, equations, or code. AI will grade rigorously based on the academic rubric.',
+            style: TextStyle(
+              fontSize: 11.5,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: textController,
+            maxLines: 10,
+            minLines: 5,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.45,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
+            decoration: InputDecoration(
+              hintText: 'Enter your comprehensive answer here...',
+              hintStyle: TextStyle(
+                fontSize: 13,
+                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+              ),
+              filled: true,
+              fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 1.5),
+              ),
+            ),
+            onChanged: (val) {
+              controller.setWrittenAnswer(question.id, val);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- MCQ Options Builder ---
+  Widget _buildMCQOptions(
+    QuizController controller,
+    QuizQuestionModel question,
+    int? selectedOption,
+    bool isDark,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Select the correct option:',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (int i = 0; i < question.options.length; i++) ...[
+          _buildOptionTile(
+            index: i,
+            text: question.options[i],
+            isSelected: selectedOption == i,
+            onTap: () => controller.selectOption(question.id, i),
+            isDark: isDark,
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
     );
   }
 
@@ -267,31 +538,31 @@ class QuizTakerScreen extends StatelessWidget {
     final letter = index < letters.length ? letters[index] : '${index + 1}';
 
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       onTap: () {
         HapticFeedback.selectionClick();
         onTap();
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: const Duration(milliseconds: 140),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.08)
-              : AppColors.getSurface(isDark),
-          borderRadius: BorderRadius.circular(14),
+              ? const Color(0xFF2563EB).withValues(alpha: isDark ? 0.2 : 0.08)
+              : (isDark ? const Color(0xFF1E293B) : Colors.white),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-                ? AppColors.primary
-                : AppColors.getBorder(isDark),
-            width: isSelected ? 2.0 : 1.0,
+                ? const Color(0xFF2563EB)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            width: isSelected ? 1.8 : 1.0,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.18),
-                    blurRadius: 8,
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                    blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ]
@@ -300,13 +571,12 @@ class QuizTakerScreen extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 28,
+              height: 28,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                gradient: isSelected ? AppColors.primaryGradient : null,
                 color: isSelected
-                    ? null
+                    ? const Color(0xFF2563EB)
                     : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                 shape: BoxShape.circle,
               ),
@@ -314,19 +584,123 @@ class QuizTakerScreen extends StatelessWidget {
                 letter,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : AppColors.textPrimary),
+                  fontSize: 12,
+                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF0F172A)),
                 ),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: _buildMathOrText(text, isDark, isSelected),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 21),
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF2563EB), size: 18),
           ],
         ),
+      ),
+    );
+  }
+
+  // --- Bottom Examination Navigation Bar ---
+  Widget _buildBottomExamBar(
+    BuildContext context,
+    QuizController controller,
+    int currentIndex,
+    int totalQuestions,
+    bool isDark,
+  ) {
+    final isLast = currentIndex == totalQuestions - 1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        border: Border(
+          top: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+        ),
+      ),
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              onPressed: currentIndex > 0 ? () => controller.prevQuestion() : null,
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: const Text('Previous'),
+            ),
+            if (!isLast)
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onPressed: () => controller.nextQuestion(),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('Next Question'),
+              )
+            else
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                ),
+                onPressed: controller.isSubmitting
+                    ? null
+                    : () async {
+                        await controller.submitActiveQuiz();
+                      },
+                icon: controller.isSubmitting
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.check_circle_outline_rounded, size: 16),
+                label: Text(controller.isSubmitting ? 'Evaluating...' : 'Submit Exam'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDifficultyBadge(String difficulty) {
+    Color color;
+    String label;
+    switch (difficulty.toLowerCase()) {
+      case 'easy':
+        color = const Color(0xFF10B981);
+        label = 'EASY';
+        break;
+      case 'hard':
+        color = const Color(0xFFEF4444);
+        label = 'HARD';
+        break;
+      default:
+        color = const Color(0xFFF59E0B);
+        label = 'MEDIUM';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color),
       ),
     );
   }
@@ -339,9 +713,9 @@ class QuizTakerScreen extends StatelessWidget {
   }) {
     final baseStyle = style ??
         TextStyle(
-          fontSize: 14,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isDark ? Colors.white : Colors.black87,
+          fontSize: 13.5,
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          color: isDark ? Colors.white : const Color(0xFF0F172A),
         );
 
     if (text.contains(r'$')) {
@@ -370,15 +744,17 @@ class QuizTakerScreen extends StatelessWidget {
     return Text(LatexSanitizer.clean(text), style: baseStyle);
   }
 
+  // --- Detailed Results Assessment Screen ---
   Widget _buildResultScreen(BuildContext context, QuizController controller, bool isDark) {
     final result = controller.lastResult!;
     final passed = result.percentage >= 60.0;
 
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Quiz Assessment Results', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Exam Assessment Results', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close_rounded),
           onPressed: () => context.pop(),
         ),
       ),
@@ -387,13 +763,13 @@ class QuizTakerScreen extends StatelessWidget {
         child: SafeArea(
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: const Color(0xFF2563EB),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () => context.pop(),
-            child: const Text('Back to Course & Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: const Text('Done & Return to Dashboard', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           ),
         ),
       ),
@@ -405,7 +781,7 @@ class QuizTakerScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  // --- Score Badge Card ---
+                  // --- Score Summary Hero Card ---
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -420,7 +796,7 @@ class QuizTakerScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: (passed ? AppColors.success : AppColors.error).withValues(alpha: 0.3),
+                          color: (passed ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.3),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
@@ -429,29 +805,29 @@ class QuizTakerScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(14),
                           decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
-                          child: Icon(passed ? Icons.emoji_events : Icons.refresh, size: 48, color: Colors.white),
+                          child: Icon(passed ? Icons.emoji_events_rounded : Icons.replay_rounded, size: 40, color: Colors.white),
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '${result.score} / ${result.totalScore}',
-                          style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white),
+                          '${result.score} / ${result.totalScore} Marks',
+                          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white),
                         ),
                         Text(
-                          'Score: ${result.percentage.toStringAsFixed(1)}%',
-                          style: const TextStyle(fontSize: 18, color: Colors.white70, fontWeight: FontWeight.w600),
+                          '${result.percentage.toStringAsFixed(1)}% Score',
+                          style: const TextStyle(fontSize: 16, color: Colors.white70, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                           decoration: BoxDecoration(
                             color: Colors.white12,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            passed ? '🎉 Concept Mastery Achieved' : '💡 Revision Needed on Identified Weak Areas',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                            passed ? '🎉 Concept Mastery Achieved' : '💡 Revision Recommended on Weak Topics',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
                           ),
                         ),
                       ],
@@ -459,32 +835,32 @@ class QuizTakerScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
 
-                  // --- Weak Areas Section (if any) ---
+                  // --- Diagnostic Weak Areas Section ---
                   if (result.weakAreasIdentified.isNotEmpty) ...[
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.error.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Row(
                             children: [
-                              Icon(Icons.biotech, size: 20, color: AppColors.error),
+                              Icon(Icons.biotech_rounded, size: 18, color: Color(0xFFEF4444)),
                               SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Bloom Taxonomy Diagnostics (Weak Areas):',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 13),
+                                  'Identified Knowledge Gaps (Bloom Taxonomy):',
+                                  style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFEF4444), fontSize: 13),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
                           Wrap(
                             spacing: 8,
                             runSpacing: 6,
@@ -494,11 +870,11 @@ class QuizTakerScreen extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+                                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
                                 ),
                                 child: Text(
                                   area,
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.error),
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444)),
                                 ),
                               );
                             }).toList(),
@@ -509,16 +885,19 @@ class QuizTakerScreen extends StatelessWidget {
                     const SizedBox(height: 20),
                   ],
 
-                  // --- Question by Question Review ---
+                  // --- Detailed Feedback Breakdown ---
                   const Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('Detailed Answers & LaTeX Derivations:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'Question Evaluations & Model Solutions:',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                    ),
                   ),
                   const SizedBox(height: 12),
 
                   for (int i = 0; i < result.feedback.length; i++) ...[
                     _buildFeedbackCard(i + 1, result.feedback[i], context, isDark),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                   ],
                   const SizedBox(height: 80),
                 ],
@@ -531,6 +910,8 @@ class QuizTakerScreen extends StatelessWidget {
   }
 
   Widget _buildFeedbackCard(int qNum, QuestionFeedbackModel fb, BuildContext context, bool isDark) {
+    final isSubj = fb.isSubjective;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -538,8 +919,8 @@ class QuizTakerScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: fb.isCorrect
-              ? AppColors.success.withValues(alpha: 0.4)
-              : AppColors.error.withValues(alpha: 0.4),
+              ? const Color(0xFF10B981).withValues(alpha: 0.4)
+              : const Color(0xFFEF4444).withValues(alpha: 0.4),
         ),
       ),
       child: Column(
@@ -548,18 +929,18 @@ class QuizTakerScreen extends StatelessWidget {
           Row(
             children: [
               Icon(
-                fb.isCorrect ? Icons.check_circle : Icons.cancel,
-                color: fb.isCorrect ? AppColors.success : AppColors.error,
+                fb.isCorrect ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                color: fb.isCorrect ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                 size: 20,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Question $qNum ${fb.isCorrect ? "(Correct)" : "(Incorrect)"}',
+                  'Q$qNum • ${isSubj ? "Subjective" : "MCQ"} (${fb.score}/${fb.maxMarks} Marks)',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: fb.isCorrect ? AppColors.success : AppColors.error,
-                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: fb.isCorrect ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    fontSize: 13.5,
                   ),
                 ),
               ),
@@ -573,44 +954,180 @@ class QuizTakerScreen extends StatelessWidget {
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 10),
-          if (fb.explanation.isNotEmpty) ...[
+
+          // For Subjective: Show candidate's written response & AI evaluation
+          if (isSubj) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F172A) : Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
+                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pedagogical Explanation & Derivation:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  const SizedBox(height: 6),
-                  FormattedAiText(
-                    text: fb.explanation,
-                    isDark: isDark,
-                    baseFontSize: 13,
+                  const Text('Student\'s Written Response:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
+                  const SizedBox(height: 4),
+                  Text(
+                    fb.studentAnswer.isNotEmpty ? fb.studentAnswer : '(No answer submitted)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontStyle: fb.studentAnswer.isEmpty ? FontStyle.italic : FontStyle.normal,
+                      color: isDark ? Colors.white70 : const Color(0xFF334155),
+                    ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+
+            // AI Feedback / Critique
+            if (fb.feedback.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.psychology_rounded, size: 16, color: Color(0xFF2563EB)),
+                        SizedBox(width: 6),
+                        Text('AI Examiner Assessment:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF2563EB))),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      fb.feedback,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            // Key Points Covered
+            if (fb.keyPointsCovered.isNotEmpty) ...[
+              const Text('Points Addressed:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF10B981))),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: fb.keyPointsCovered.map((pt) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('✓ $pt', style: const TextStyle(fontSize: 11, color: Color(0xFF059669), fontWeight: FontWeight.w600)),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Key Points Missed
+            if (fb.keyPointsMissed.isNotEmpty) ...[
+              const Text('Points Missed:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFEF4444))),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: fb.keyPointsMissed.map((pt) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('✗ $pt', style: const TextStyle(fontSize: 11, color: Color(0xFFDC2626), fontWeight: FontWeight.w600)),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            // Model Answer Card
+            if (fb.modelAnswer.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Official Model Answer (Full Marks):', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF8B5CF6))),
+                    const SizedBox(height: 6),
+                    FormattedAiText(
+                      text: fb.modelAnswer,
+                      isDark: isDark,
+                      baseFontSize: 12.5,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ] else ...[
+            // For MCQ: Show Explanation
+            if (fb.explanation.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Pedagogical Explanation & Derivation:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    FormattedAiText(
+                      text: fb.explanation,
+                      isDark: isDark,
+                      baseFontSize: 13,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
+
           if (fb.trapWarning.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               '⚠️ Trap Warning: ${fb.trapWarning}',
-              style: const TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 11, color: Color(0xFFD97706), fontWeight: FontWeight.w600),
             ),
           ],
+
           if (!fb.isCorrect) ...[
             const SizedBox(height: 10),
             TextButton.icon(
-              icon: const Icon(Icons.psychology, size: 16),
-              label: const Text('Ask AI Tutor to Explain this Error'),
+              icon: const Icon(Icons.psychology_rounded, size: 16),
+              label: const Text('Ask AI Tutor to Explain this Solution'),
               onPressed: () {
                 context.push(AppRoutes.aiChat, extra: {
-                  'initialQuery': 'I got this question wrong in my quiz. Please teach me why:\n\nQuestion: ${fb.questionText}\nExplanation: ${fb.explanation}',
-                  'noteTitle': 'Quiz Review Question $qNum',
+                  'initialQuery': 'I need help understanding this exam question:\n\nQuestion: ${fb.questionText}\nModel Solution / Explanation: ${isSubj ? fb.modelAnswer : fb.explanation}',
+                  'noteTitle': 'Exam Review Q$qNum',
                 });
               },
             ),

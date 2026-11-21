@@ -7,7 +7,6 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../controllers/quiz_controller.dart';
 import '../models/quiz_model.dart';
-import '../models/exam_simulator_model.dart';
 import '../services/exam_simulator_service.dart';
 import '../widgets/quiz_card.dart';
 import '../widgets/quiz_attempt_card.dart';
@@ -59,6 +58,7 @@ class _QuizListScreenState extends State<QuizListScreen> with SingleTickerProvid
         required String topic,
         String? noteId,
         required String difficulty,
+        required String testType,
         required int questionCount,
       }) async {
         try {
@@ -67,6 +67,7 @@ class _QuizListScreenState extends State<QuizListScreen> with SingleTickerProvid
             topic: topic,
             noteId: noteId,
             difficulty: difficulty,
+            testType: testType,
             questionCount: questionCount,
           );
 

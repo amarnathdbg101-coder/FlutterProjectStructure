@@ -43,6 +43,10 @@ class DiagramRepository {
     String? mindMapId,
     int nodeDepth = 0,
     bool force = false,
+    double? parentX,
+    double? parentY,
+    double? parentWidth,
+    double? parentHeight,
   }) async {
     final selectedLang = AILanguageService.getSelectedLanguageSync();
     final response = await _dio.post(
@@ -55,6 +59,10 @@ class DiagramRepository {
         'branch_color': branchColor ?? '#0EA5E9',
         'node_depth': nodeDepth,
         'force': force,
+        if (parentX != null && parentX > 0) 'parent_x': parentX,
+        if (parentY != null && parentY > 0) 'parent_y': parentY,
+        if (parentWidth != null && parentWidth > 0) 'parent_width': parentWidth,
+        if (parentHeight != null && parentHeight > 0) 'parent_height': parentHeight,
         if (mindMapId != null && mindMapId.isNotEmpty) 'mind_map_id': mindMapId,
         if (selectedLang.isNotEmpty) 'ai_language': selectedLang,
         if (selectedLang.isNotEmpty) 'language': selectedLang,

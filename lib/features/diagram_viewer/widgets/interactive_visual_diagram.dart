@@ -7,7 +7,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:vector_math/vector_math_64.dart' show Vector3;
 // import 'package:url_launcher/url_launcher.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import 'hand_drawn_diagram_canvas.dart';

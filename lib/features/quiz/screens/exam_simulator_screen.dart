@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/utils/latex_sanitizer.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../ai_tutor/widgets/formatted_ai_text.dart';
 import '../models/exam_simulator_model.dart';

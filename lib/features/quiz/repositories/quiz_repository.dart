@@ -39,6 +39,7 @@ class QuizRepository {
     String? courseId,
     String? noteId,
     String difficulty = 'adaptive',
+    String testType = 'mcq',
     int questionCount = 5,
   }) async {
     try {
@@ -49,6 +50,7 @@ class QuizRepository {
           if (courseId != null && courseId.isNotEmpty) 'course_id': courseId,
           if (noteId != null && noteId.isNotEmpty) 'note_id': noteId,
           'difficulty': difficulty,
+          'test_type': testType,
           'question_count': questionCount,
         },
       );

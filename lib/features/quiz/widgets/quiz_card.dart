@@ -41,7 +41,17 @@ class QuizCard extends StatelessWidget {
         badgeText = 'Adaptive';
     }
 
-    final estimatedMinutes = (quiz.totalQuestions * 1.5).ceil();
+    String formatBadgeText = 'MCQ';
+    Color formatColor = const Color(0xFF2563EB);
+    if (quiz.testType == 'subjective') {
+      formatBadgeText = 'Subjective';
+      formatColor = const Color(0xFF8B5CF6);
+    } else if (quiz.testType == 'mixed') {
+      formatBadgeText = 'Mixed';
+      formatColor = const Color(0xFF06B6D4);
+    }
+
+    final estimatedMinutes = (quiz.totalQuestions * (quiz.isSubjective ? 3.0 : 1.5)).ceil();
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -97,6 +107,22 @@ class QuizCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: formatColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            formatBadgeText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: formatColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                           decoration: BoxDecoration(

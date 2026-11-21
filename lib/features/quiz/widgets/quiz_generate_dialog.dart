@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../student_memory/services/student_memory_service.dart';
 
-/// Clean, high-focus Generate Adaptive Quiz Dialog
+/// Clean, high-focus Generate Adaptive Quiz & Exam Dialog
 class QuizGenerateDialog extends StatefulWidget {
   final String? initialTopic;
   final String? noteId;
+  final String initialTestType;
   final Future<void> Function({
     required String topic,
     String? noteId,
     required String difficulty,
+    required String testType,
     required int questionCount,
   }) onGenerate;
 
@@ -17,6 +19,7 @@ class QuizGenerateDialog extends StatefulWidget {
     super.key,
     this.initialTopic,
     this.noteId,
+    this.initialTestType = 'mcq',
     required this.onGenerate,
   });
 
@@ -24,10 +27,12 @@ class QuizGenerateDialog extends StatefulWidget {
     BuildContext context, {
     String? initialTopic,
     String? noteId,
+    String initialTestType = 'mcq',
     required Future<void> Function({
       required String topic,
       String? noteId,
       required String difficulty,
+      required String testType,
       required int questionCount,
     }) onGenerate,
   }) {
@@ -36,6 +41,7 @@ class QuizGenerateDialog extends StatefulWidget {
       builder: (ctx) => QuizGenerateDialog(
         initialTopic: initialTopic,
         noteId: noteId,
+        initialTestType: initialTestType,
         onGenerate: onGenerate,
       ),
     );
@@ -47,7 +53,8 @@ class QuizGenerateDialog extends StatefulWidget {
 
 class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
   late final TextEditingController _topicController;
-  String _selectedDifficulty = 'adaptive';
+  late String _selectedTestType;
+  String _selectedDifficulty = 'medium';
   int _questionCount = 5;
   bool _isGenerating = false;
 
@@ -55,6 +62,7 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
   void initState() {
     super.initState();
     _topicController = TextEditingController(text: widget.initialTopic ?? '');
+    _selectedTestType = widget.initialTestType;
   }
 
   @override
@@ -78,15 +86,15 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
               color: const Color(0xFF2563EB).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.bolt_rounded, color: Color(0xFF2563EB), size: 20),
+            child: const Icon(Icons.psychology_rounded, color: Color(0xFF2563EB), size: 22),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _isGenerating ? 'Calibrating Questions...' : 'Generate Adaptive Quiz',
+              _isGenerating ? 'Designing Rigorous Exam...' : 'Create Academic Test',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                fontSize: 16,
+                fontSize: 17,
                 color: isDark ? Colors.white : const Color(0xFF0F172A),
               ),
               overflow: TextOverflow.ellipsis,
@@ -104,7 +112,7 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                     const CircularProgressIndicator(color: Color(0xFF2563EB), strokeWidth: 2.5),
                     const SizedBox(height: 18),
                     Text(
-                      'Generating $_questionCount questions for "${_topicController.text.trim()}"...',
+                      'AI is crafting $_questionCount $_selectedTestType questions with rigorous academic criteria for "${_topicController.text.trim()}"...',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -122,8 +130,8 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                     controller: _topicController,
                     style: TextStyle(fontSize: 14, color: isDark ? Colors.white : const Color(0xFF0F172A)),
                     decoration: InputDecoration(
-                      labelText: 'Quiz Topic *',
-                      hintText: 'e.g. Branch Prediction, Thermodynamics',
+                      labelText: 'Subject / Topic *',
+                      hintText: 'e.g. Operating Systems, Thermodynamics',
                       prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Color(0xFF2563EB)),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -139,7 +147,7 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Recommended Weak Topics:',
+                              'Weak Topics to Reinforce:',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -189,14 +197,37 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                                     ),
                                   );
                                 }).toList(),
-                                ),
                               ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 16),
+
+                  // 📝 Format Selector (MCQ vs Subjective vs Mixed)
+                  Text(
+                    'Test Format',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _buildFormatPill('mcq', 'MCQ', Icons.radio_button_checked_rounded, isDark),
+                      const SizedBox(width: 8),
+                      _buildFormatPill('subjective', 'Subjective', Icons.edit_note_rounded, isDark),
+                      const SizedBox(width: 8),
+                      _buildFormatPill('mixed', 'Mixed', Icons.shuffle_rounded, isDark),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 🎯 Difficulty Level
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     initialValue: _selectedDifficulty,
@@ -206,23 +237,20 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                     ),
                     items: const [
                       DropdownMenuItem(
-                        value: 'adaptive',
-                        child: Text(
-                          '🔮 Adaptive (Biased to Weak Areas)',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      DropdownMenuItem(
                         value: 'easy',
-                        child: Text('🟢 Easy / Foundation', overflow: TextOverflow.ellipsis),
+                        child: Text('🟢 Easy (Foundational Concepts)', overflow: TextOverflow.ellipsis),
                       ),
                       DropdownMenuItem(
                         value: 'medium',
-                        child: Text('🟡 Medium / Standard', overflow: TextOverflow.ellipsis),
+                        child: Text('🟡 Medium (Multi-step & Application)', overflow: TextOverflow.ellipsis),
                       ),
                       DropdownMenuItem(
                         value: 'hard',
-                        child: Text('🔴 Hard / Advanced', overflow: TextOverflow.ellipsis),
+                        child: Text('🔴 Hard (Rigorous Derivations & Edge Cases)', overflow: TextOverflow.ellipsis),
+                      ),
+                      DropdownMenuItem(
+                        value: 'adaptive',
+                        child: Text('🔮 Adaptive (Reinforce Weak Areas)', overflow: TextOverflow.ellipsis),
                       ),
                     ],
                     onChanged: (val) {
@@ -230,6 +258,7 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                     },
                   ),
                   const SizedBox(height: 16),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -268,8 +297,8 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                icon: const Icon(Icons.bolt_rounded, size: 16),
-                label: const Text('Generate & Start', style: TextStyle(fontWeight: FontWeight.w700)),
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('Start Test', style: TextStyle(fontWeight: FontWeight.w700)),
                 onPressed: () async {
                   final topic = _topicController.text.trim();
                   if (topic.isEmpty) return;
@@ -279,11 +308,55 @@ class _QuizGenerateDialogState extends State<QuizGenerateDialog> {
                     topic: topic,
                     noteId: widget.noteId,
                     difficulty: _selectedDifficulty,
+                    testType: _selectedTestType,
                     questionCount: _questionCount,
                   );
                 },
               ),
             ],
+    );
+  }
+
+  Widget _buildFormatPill(String type, String label, IconData icon, bool isDark) {
+    final isSelected = _selectedTestType == type;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _selectedTestType = type),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF2563EB)
+                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF2563EB)
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF475569)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

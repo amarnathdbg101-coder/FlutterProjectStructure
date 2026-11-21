@@ -337,6 +337,10 @@ class DiagramController extends ChangeNotifier {
         mindMapId: _diagram!.id,
         nodeDepth: depth,
         force: force,
+        parentX: node.x,
+        parentY: node.y,
+        parentWidth: node.width,
+        parentHeight: node.height,
       );
 
       final isSaturated = res['is_saturated'] == true;
@@ -376,7 +380,12 @@ class DiagramController extends ChangeNotifier {
         }
       }
 
-      _diagram!.calculateLayout(canvasSize);
+      final hasServerCoords = rawNodes is List && rawNodes.any((n) => n is Map && (n['x'] != null && n['x'] != 0));
+      if (!hasServerCoords) {
+        _diagram!.calculateLayout(canvasSize);
+      } else {
+        _diagram!.resolveCollisions();
+      }
 
       // Auto-persist expanded sub-branches in PostgreSQL database
       if (_diagram!.id != null && _diagram!.id!.isNotEmpty) {

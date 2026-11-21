@@ -126,5 +126,55 @@ void main() {
       expect(attempt.weakAreasIdentified, contains('Pipelining'));
       expect(attempt.timeTakenSeconds, 120);
     });
+
+    test('Subjective QuizQuestionModel and QuestionFeedbackModel deserialization', () {
+      final json = {
+        'id': 'q-subj-1',
+        'quiz_id': 'quiz-subj',
+        'question_type': 'subjective',
+        'question_text': 'Explain the ACID properties and Write-Ahead Logging (WAL) protocol.',
+        'options': [],
+        'correct_option_index': -1,
+        'max_marks': 5,
+        'model_answer': 'Full marks answer detailing Atomicity, Consistency, Isolation, Durability.',
+        'rubric': [
+          '2 marks: Accurate definition of 4 properties',
+          '2 marks: WAL write sequence mechanics',
+          '1 mark: Crash recovery',
+        ],
+        'difficulty': 'hard',
+        'topic': 'Database Systems',
+      };
+
+      final q = QuizQuestionModel.fromJson(json);
+      expect(q.id, 'q-subj-1');
+      expect(q.isSubjective, true);
+      expect(q.maxMarks, 5);
+      expect(q.modelAnswer, contains('Atomicity'));
+      expect(q.rubric.length, 3);
+      expect(q.options.isEmpty, true);
+      expect(q.correctOptionIndex, -1);
+
+      final fbJson = {
+        'question_id': 'q-subj-1',
+        'question_type': 'subjective',
+        'question_text': 'Explain ACID properties...',
+        'student_answer': 'ACID is Atomicity, Consistency, Isolation, Durability. WAL flushes logs first.',
+        'model_answer': 'Complete model answer.',
+        'score': 4,
+        'max_marks': 5,
+        'is_correct': true,
+        'feedback': 'Good conceptual clarity.',
+        'key_points_covered': ['ACID definition', 'WAL sequencing'],
+        'key_points_missed': ['Crash recovery mechanics'],
+      };
+
+      final fb = QuestionFeedbackModel.fromJson(fbJson);
+      expect(fb.isSubjective, true);
+      expect(fb.score, 4);
+      expect(fb.maxMarks, 5);
+      expect(fb.keyPointsCovered.length, 2);
+      expect(fb.keyPointsMissed.length, 1);
+    });
   });
 }

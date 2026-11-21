@@ -10,6 +10,7 @@ class QuizController extends ChangeNotifier {
   QuizModel? _activeQuiz;
   int _currentQuestionIndex = 0;
   final Map<String, int> _selectedAnswers = {}; // questionId -> optionIndex
+  final Map<String, String> _writtenAnswers = {}; // questionId -> writtenText
   bool _isLoading = false;
   bool _isSubmitting = false;
   String? _errorMessage;
@@ -25,6 +26,7 @@ class QuizController extends ChangeNotifier {
   QuizModel? get activeQuiz => _activeQuiz;
   int get currentQuestionIndex => _currentQuestionIndex;
   Map<String, int> get selectedAnswers => _selectedAnswers;
+  Map<String, String> get writtenAnswers => _writtenAnswers;
   bool get isLoading => _isLoading;
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
@@ -94,9 +96,15 @@ class QuizController extends ChangeNotifier {
     _activeQuiz = active;
     _currentQuestionIndex = 0;
     _selectedAnswers.clear();
+    _writtenAnswers.clear();
     _lastResult = null;
-    final totalQ = active.questions.isNotEmpty ? active.questions.length : 5;
-    _timeRemainingSeconds = totalQ * 90; // 90 seconds per question
+
+    // Distraction-free exam timer: 90s for MCQ, 180s (3m) for Subjective
+    int totalSeconds = 0;
+    for (final q in active.questions) {
+      totalSeconds += q.isSubjective ? 180 : 90;
+    }
+    _timeRemainingSeconds = totalSeconds > 0 ? totalSeconds : (active.totalQuestions * 90);
 
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -115,6 +123,18 @@ class QuizController extends ChangeNotifier {
   void selectOption(String questionId, int optionIndex) {
     _selectedAnswers[questionId] = optionIndex;
     notifyListeners();
+  }
+
+  void setWrittenAnswer(String questionId, String text) {
+    _writtenAnswers[questionId] = text;
+    notifyListeners();
+  }
+
+  void jumpToQuestion(int index) {
+    if (_activeQuiz != null && index >= 0 && index < _activeQuiz!.questions.length) {
+      _currentQuestionIndex = index;
+      notifyListeners();
+    }
   }
 
   void nextQuestion() {
@@ -142,13 +162,27 @@ class QuizController extends ChangeNotifier {
     try {
       final List<Map<String, dynamic>> answersPayload = [];
       for (final q in _activeQuiz!.questions) {
-        answersPayload.add({
-          'question_id': q.id,
-          'selected_option': _selectedAnswers[q.id] ?? -1,
-        });
+        if (q.isSubjective) {
+          answersPayload.add({
+            'question_id': q.id,
+            'question_type': 'subjective',
+            'answer_text': _writtenAnswers[q.id]?.trim() ?? '',
+            'selected_option': -1,
+          });
+        } else {
+          answersPayload.add({
+            'question_id': q.id,
+            'question_type': 'mcq',
+            'selected_option': _selectedAnswers[q.id] ?? -1,
+            'answer_text': '',
+          });
+        }
       }
 
-      final totalAllowed = _activeQuiz!.totalQuestions * 90;
+      int totalAllowed = 0;
+      for (final q in _activeQuiz!.questions) {
+        totalAllowed += q.isSubjective ? 180 : 90;
+      }
       final timeTaken = totalAllowed - _timeRemainingSeconds;
 
       final result = await _repository.submitQuiz(
@@ -174,6 +208,7 @@ class QuizController extends ChangeNotifier {
     String? courseId,
     String? noteId,
     String difficulty = 'adaptive',
+    String testType = 'mcq',
     int questionCount = 5,
   }) async {
     _isLoading = true;
@@ -186,6 +221,7 @@ class QuizController extends ChangeNotifier {
         courseId: courseId,
         noteId: noteId,
         difficulty: difficulty,
+        testType: testType,
         questionCount: questionCount,
       );
       _quizzes.insert(0, quiz);
