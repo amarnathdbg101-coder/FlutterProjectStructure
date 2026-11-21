@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../../../core/routes/app_router.dart';
 import '../../../core/utils/latex_sanitizer.dart';
 import '../../../core/utils/responsive.dart';
-import '../../ai_tutor/widgets/formatted_ai_text.dart';
 import '../controllers/quiz_controller.dart';
 import '../models/quiz_model.dart';
 
@@ -460,11 +459,12 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
           ],
         ),
         bottomNavigationBar: _buildBottomExamBar(context, controller, quiz, currentIndex, totalQuestions, isDark),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
-            child: SafeScrollable(
-              child: Padding(
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,15 +550,16 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
                           ),
                         ],
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          FormattedAiText(
-                            text: question.questionText,
-                            isDark: isDark,
-                            baseFontSize: 15,
-                          ),
-                        ],
+                      child: _buildMathOrText(
+                        question.questionText,
+                        isDark,
+                        false,
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w600,
+                          height: 1.5,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -1143,11 +1144,12 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
           ),
         ),
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
-          child: SafeScrollable(
-            child: Padding(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1713,10 +1715,15 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
                     const Text('Official Model Answer (Full Academic Credit):',
                         style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF8B5CF6))),
                     const SizedBox(height: 6),
-                    FormattedAiText(
-                      text: fb.modelAnswer,
-                      isDark: isDark,
-                      baseFontSize: 12.5,
+                    _buildMathOrText(
+                      fb.modelAnswer,
+                      isDark,
+                      false,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),
@@ -1739,10 +1746,15 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
                     const Text('Pedagogical Explanation & Concept Derivation:',
                         style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
                     const SizedBox(height: 6),
-                    FormattedAiText(
-                      text: fb.explanation,
-                      isDark: isDark,
-                      baseFontSize: 13,
+                    _buildMathOrText(
+                      fb.explanation,
+                      isDark,
+                      false,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),
