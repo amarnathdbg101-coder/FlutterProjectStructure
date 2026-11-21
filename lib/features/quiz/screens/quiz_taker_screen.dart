@@ -467,7 +467,7 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // --- Quick Question Navigator Palette Bar ---
                     _buildQuestionPalette(controller, quiz, currentIndex, isDark),
@@ -475,49 +475,53 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
 
                     // --- Question Meta Row: Type Badge, Difficulty, Marks ---
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Question Type Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: question.isSubjective
-                                ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
-                                : const Color(0xFF2563EB).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: question.isSubjective
-                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
-                                  : const Color(0xFF2563EB).withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                question.isSubjective ? Icons.edit_note_rounded : Icons.radio_button_checked_rounded,
-                                size: 13,
-                                color: question.isSubjective ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                question.isSubjective
-                                    ? 'SUBJECTIVE • ${question.maxMarks} MARKS'
-                                    : 'MCQ • ${question.maxMarks} MARK',
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: question.isSubjective ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Question Type Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: question.isSubjective
+                                    ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
+                                    : const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: question.isSubjective
+                                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
+                                      : const Color(0xFF2563EB).withValues(alpha: 0.3),
                                 ),
                               ),
-                            ],
-                          ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    question.isSubjective ? Icons.edit_note_rounded : Icons.radio_button_checked_rounded,
+                                    size: 13,
+                                    color: question.isSubjective ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    question.isSubjective
+                                        ? 'SUBJECTIVE • ${question.maxMarks} MARKS'
+                                        : 'MCQ • ${question.maxMarks} MARK',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: question.isSubjective ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+
+                            // Difficulty Badge
+                            _buildDifficultyBadge(question.difficulty),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-
-                        // Difficulty Badge
-                        _buildDifficultyBadge(question.difficulty),
-
-                        const Spacer(),
 
                         // Progress Indicator Text
                         Text(
@@ -1023,27 +1027,39 @@ class _QuizTakerScreenState extends State<QuizTakerScreen> {
           color: isDark ? Colors.white : const Color(0xFF0F172A),
         );
 
-    if (text.contains(r'$')) {
-      final parts = text.split(r'$');
-      final spans = <InlineSpan>[];
-      for (int i = 0; i < parts.length; i++) {
-        if (parts[i].isEmpty) continue;
-        if (i % 2 == 1) {
-          spans.add(
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Math.tex(
-                parts[i],
-                textStyle: baseStyle,
-                onErrorFallback: (_) => Text(LatexSanitizer.clean(parts[i]), style: baseStyle),
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    try {
+      if (text.contains(r'$')) {
+        // Normalize double-dollars $$...$$ to single $...$ for uniform inline math parsing
+        final normalized = text.replaceAll(r'$$', r'$');
+        final parts = normalized.split(r'$');
+        final spans = <InlineSpan>[];
+        for (int i = 0; i < parts.length; i++) {
+          if (parts[i].isEmpty) continue;
+          if (i % 2 == 1) {
+            spans.add(
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Math.tex(
+                  parts[i].trim(),
+                  textStyle: baseStyle,
+                  onErrorFallback: (_) => Text(LatexSanitizer.clean(parts[i]), style: baseStyle),
+                ),
               ),
-            ),
-          );
-        } else {
-          spans.add(TextSpan(text: LatexSanitizer.clean(parts[i]), style: baseStyle));
+            );
+          } else {
+            spans.add(TextSpan(text: LatexSanitizer.clean(parts[i]), style: baseStyle));
+          }
+        }
+        if (spans.isNotEmpty) {
+          return Text.rich(TextSpan(children: spans));
         }
       }
-      return Text.rich(TextSpan(children: spans));
+    } catch (_) {
+      // Safe fallback if math engine encounters any parser exception
     }
 
     return Text(LatexSanitizer.clean(text), style: baseStyle);
