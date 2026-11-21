@@ -2117,6 +2117,13 @@ class _DiagramCanvasScreenState extends State<DiagramCanvasScreen> {
                       : LayoutBuilder(
                           builder: (context, constraints) {
                             final viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+                            if (controller.transformController.value.isIdentity() && diagram.nodes.isNotEmpty) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  controller.centerOnDiagram(viewportSize, zoomLevel: 0.85);
+                                }
+                              });
+                            }
                             return Stack(
                               children: [
                                 InteractiveViewer(

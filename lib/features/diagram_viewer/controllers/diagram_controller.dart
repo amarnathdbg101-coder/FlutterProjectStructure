@@ -247,6 +247,16 @@ class DiagramController extends ChangeNotifier {
     transformController.value = Matrix4.identity();
   }
 
+  void centerOnDiagram(Size viewportSize, {double zoomLevel = 0.85}) {
+    if (_diagram == null || _diagram!.nodes.isEmpty) {
+      resetView();
+      return;
+    }
+    final rootIndex = _diagram!.nodes.indexWhere((n) => n.isRoot);
+    final targetNode = rootIndex != -1 ? _diagram!.nodes[rootIndex] : _diagram!.nodes.first;
+    focusNode(targetNode, viewportSize, zoomLevel: zoomLevel);
+  }
+
   Future<void> generateDiagram(
     String topic, {
     String? noteId,
