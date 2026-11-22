@@ -1513,7 +1513,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
               child: Text(
                 editWholesaler != null
                     ? (isHindi ? 'सप्लायर विवरण संपादित करें' : 'Edit Wholesaler')
-                    : (isHindi ? 'नया थोक व्यापारी / सप्लायर' : 'Add Wholesaler / Dealer'),
+                    : (isHindi ? 'नया थोक व्यापारी' : 'Add Wholesaler'),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
@@ -1535,8 +1535,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 controller: nameCtrl,
                 autofocus: editWholesaler == null && initialName.isEmpty,
                 decoration: InputDecoration(
-                  labelText: isHindi ? 'व्यापारी / फर्म का नाम *' : 'Wholesaler / Firm Name *',
-                  hintText: isHindi ? 'उदा. श्याम ट्रेडिंग - मंडी शेड 4' : 'e.g. Shyam Trading Co.',
+                  labelText: isHindi ? 'व्यापारी फर्म का नाम *' : 'Wholesaler Firm Name *',
+                  hintText: isHindi ? 'उदा. श्याम ट्रेडिंग' : 'e.g. Shyam Trading Co.',
                   prefixIcon: const Icon(Icons.business_rounded, size: 18),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1547,7 +1547,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 controller: phoneCtrl,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
-                  labelText: isHindi ? 'फोन / व्हाट्सएप *' : 'Phone / WhatsApp *',
+                  labelText: isHindi ? 'फ़ोन नंबर *' : 'Phone Number *',
                   hintText: '9876543210',
                   prefixIcon: const Icon(Icons.phone_rounded, size: 18),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -1558,7 +1558,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
               TextField(
                 controller: addressCtrl,
                 decoration: InputDecoration(
-                  labelText: isHindi ? 'मंडी शेड / दुकान पता' : 'Mandi Shed / Market Location',
+                  labelText: isHindi ? 'मंडी शेड पता' : 'Market Location',
                   hintText: isHindi ? 'उदा. शेड नं. 4, अनाज मंडी' : 'e.g. Shed #4, Grain Market',
                   prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -1569,8 +1569,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
               TextField(
                 controller: notesCtrl,
                 decoration: InputDecoration(
-                  labelText: isHindi ? 'नोट्स / मुख्य सामग्री' : 'Notes / Main Items',
-                  hintText: isHindi ? 'उदा. दाल, चावल, तेल मुख्य सप्लायर' : 'e.g. Pulses, Grains, Edible Oil',
+                  labelText: isHindi ? 'विशेष विवरण' : 'Notes',
+                  hintText: isHindi ? 'उदा. दाल, चावल मुख्य सप्लायर' : 'e.g. Pulses, Grains Supplier',
                   prefixIcon: const Icon(Icons.notes_rounded, size: 18),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2049,7 +2049,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                             focusNode: focusNode,
                             decoration: InputDecoration(
                               labelText: context.isHindi ? 'सामान का नाम *' : 'Item Name *',
-                              hintText: context.isHindi ? 'उदा. शरबाती गेहूं / फॉर्च्यून तेल' : 'e.g. Sharbati Wheat / Fortune Oil',
+                              hintText: context.isHindi ? 'उदा. शरबाती गेहूं' : 'e.g. Sharbati Wheat',
                               prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20),
                               suffixIcon: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -2164,7 +2164,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               initialValue: _kWholesaleUnits.contains(selectedUnit) ? selectedUnit : _kWholesaleUnits.first,
                               isExpanded: true,
                               decoration: InputDecoration(
-                                labelText: context.isHindi ? 'यूनिट (Unit)' : 'Unit',
+                                labelText: context.isHindi ? 'इकाई' : 'Unit',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               ),
@@ -2210,7 +2210,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                   : CategoryRegistry.canonicalCategories.first,
                               isExpanded: true,
                               decoration: InputDecoration(
-                                labelText: context.isHindi ? 'श्रेणी (Category)' : 'Category',
+                                labelText: context.isHindi ? 'श्रेणी' : 'Category',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               ),
@@ -2278,7 +2278,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               Text(
                                 showDealerNotes
                                     ? (context.isHindi ? 'सप्लायर विवरण छुपाएं' : 'Hide Supplier Details')
-                                    : (context.isHindi ? '+ सप्लायर व नोट्स जोड़ें (वैकल्पिक)' : '+ Add Supplier & Notes (Optional)'),
+                                    : (context.isHindi ? '+ सप्लायर विवरण जोड़ें' : '+ Add Supplier Details'),
                                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary),
                               ),
                             ],
@@ -2412,7 +2412,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                 controller: dealerCtrl,
                                 onChanged: (_) => setModalState(() {}),
                                 decoration: InputDecoration(
-                                  labelText: context.isHindi ? 'व्यापारी / सप्लायर' : 'Wholesaler / Dealer',
+                                  labelText: context.isHindi ? 'थोक व्यापारी' : 'Wholesaler',
                                   hintText: 'उदा. श्याम ट्रेडिंग कंपनी',
                                   prefixIcon: const Icon(Icons.storefront_outlined, size: 18),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -2426,7 +2426,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                 controller: dealerPhoneCtrl,
                                 keyboardType: TextInputType.phone,
                                 decoration: InputDecoration(
-                                  labelText: context.isHindi ? 'फोन / व्हाट्सएप' : 'Phone / WhatsApp',
+                                  labelText: context.isHindi ? 'फ़ोन नंबर' : 'Phone Number',
                                   hintText: '9876543210',
                                   prefixIcon: const Icon(Icons.phone_outlined, size: 18),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -2486,7 +2486,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         TextFormField(
                           controller: notesCtrl,
                           decoration: InputDecoration(
-                            labelText: context.isHindi ? 'क्वालिटी नोट्स / शर्तें' : 'Quality Notes / Specs',
+                            labelText: context.isHindi ? 'गुणवत्ता नोट्स' : 'Quality Notes',
                             hintText: context.isHindi ? 'उदा. शरबाती ग्रेड-A, नया माल, नकद डिस्काउंट' : 'e.g. Grade A Quality, New Stock',
                             prefixIcon: const Icon(Icons.notes_rounded, size: 18),
                             suffixIcon: AppVoiceIconButton(
@@ -3331,7 +3331,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                                 : '"${removedItem.name}" removed',
                                           ),
                                           action: SnackBarAction(
-                                            label: context.isHindi ? 'पूर्ववत (Undo)' : 'Undo',
+                                            label: context.isHindi ? 'पूर्ववत' : 'Undo',
                                             textColor: Colors.yellow,
                                             onPressed: () {
                                               controller.addItem(

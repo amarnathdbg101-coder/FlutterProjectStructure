@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../models/procurement_model.dart';
 
@@ -127,13 +128,16 @@ class ProcurementPdfService {
 
   /// Builds printable A4 PDF bytes for the given list of procurement items.
   /// Designed specifically for wholesale Mandi procurement with zero checkbox tick clutter.
+  /// Strict single-language output: English mode outputs 100% English, Hindi mode outputs 100% pure Hindi.
   static Future<Uint8List> generateProcurementPdf({
     required String shopName,
     required List<ProcurementItemModel> items,
     required double totalBudget,
     String? shopAddress,
     String? shopPhone,
+    bool? isHindi,
   }) async {
+    final useHindi = isHindi ?? LanguageController.isHindi;
     final theme = await _getTheme();
     final logoImg = await _getLogoImage();
     final pdf = pw.Document(theme: theme);
@@ -145,7 +149,7 @@ class ProcurementPdfService {
         ? shopName.trim()
         : (cachedShop?.name.trim().isNotEmpty ?? false
             ? cachedShop!.name.trim()
-            : 'ShopSilo Partner Store');
+            : (useHindi ? 'शॉपसाइलो पार्टनर स्टोर' : 'ShopSilo Partner Store'));
     final cleanAddress = (shopAddress != null && shopAddress.trim().isNotEmpty)
         ? shopAddress.trim()
         : (cachedShop != null && cachedShop.address.trim().isNotEmpty
@@ -199,7 +203,9 @@ class ProcurementPdfService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    '${cleanShopName.toUpperCase()} • MANDI WHOLESALE PURCHASE ORDER ($poRefNo)',
+                    useHindi
+                        ? '${cleanShopName.toUpperCase()} • थोक क्रय मांग पत्र ($poRefNo)'
+                        : '${cleanShopName.toUpperCase()} • MANDI WHOLESALE PURCHASE ORDER ($poRefNo)',
                     style: pw.TextStyle(fontSize: 8.0, fontWeight: pw.FontWeight.bold, color: cTextDark),
                   ),
                   pw.Text(
@@ -223,11 +229,15 @@ class ProcurementPdfService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  'ShopSilo Retail Wholesale OS • Mandi Procurement Requisition Sheet',
+                  useHindi
+                      ? 'शॉपसाइलो रिटेल • थोक मंडी क्रय मांग पत्र'
+                      : 'ShopSilo Retail Wholesale OS • Mandi Procurement Requisition Sheet',
                   style: const pw.TextStyle(fontSize: 7.2, color: cMuted),
                 ),
                 pw.Text(
-                  'Page ${context.pageNumber} of ${context.pagesCount}',
+                  useHindi
+                      ? 'पृष्ठ ${context.pageNumber} / ${context.pagesCount}'
+                      : 'Page ${context.pageNumber} of ${context.pagesCount}',
                   style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: cTextDark),
                 ),
               ],
@@ -266,7 +276,7 @@ class ProcurementPdfService {
                           ),
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'PURCHASE ORDER / क्रय आदेश',
+                            useHindi ? 'थोक क्रय आदेश' : 'PURCHASE ORDER',
                             style: const pw.TextStyle(fontSize: 8.5, color: PdfColor.fromInt(0xFF94A3B8)),
                           ),
                         ],
@@ -310,20 +320,20 @@ class ProcurementPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'Buyer / क्रेता प्रतिष्ठान: $cleanShopName',
+                          useHindi ? 'क्रेता प्रतिष्ठान: $cleanShopName' : 'Buyer: $cleanShopName',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cTextDark),
                         ),
                         if (cleanAddress != null) ...[
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'Address: $cleanAddress',
+                            useHindi ? 'पता: $cleanAddress' : 'Address: $cleanAddress',
                             style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
                           ),
                         ],
                         if (cleanPhone != null) ...[
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'Contact: $cleanPhone',
+                            useHindi ? 'संपर्क: $cleanPhone' : 'Contact: $cleanPhone',
                             style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
                           ),
                         ],
@@ -337,18 +347,18 @@ class ProcurementPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text(
-                          'Total Items: ${items.length}',
+                          useHindi ? 'कुल सामग्री: ${items.length}' : 'Total Items: ${items.length}',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cBlueAccent),
                         ),
                         pw.SizedBox(height: 2),
                         pw.Text(
-                          'Est. Budget: Rs. ${effectiveTotal.toStringAsFixed(0)}',
+                          useHindi ? 'अनुमानित बजट: ₹${effectiveTotal.toStringAsFixed(0)}' : 'Est. Budget: ₹${effectiveTotal.toStringAsFixed(0)}',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.0, color: cSuccessGreen),
                         ),
                         if (uniqueDealers.isNotEmpty) ...[
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'Suppliers: ${uniqueDealers.length} Firm(s)',
+                            useHindi ? 'सप्लायर्स: ${uniqueDealers.length} फर्म' : 'Suppliers: ${uniqueDealers.length} Firm(s)',
                             style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
                           ),
                         ],
@@ -382,13 +392,13 @@ class ProcurementPdfService {
                   pw.TableRow(
                     decoration: const pw.BoxDecoration(color: cTblHeader),
                     children: [
-                      _tableCell('#', isHeader: true, align: pw.TextAlign.center),
-                      _tableCell('Item Description', isHeader: true),
-                      _tableCell('Category', isHeader: true, align: pw.TextAlign.center),
-                      _tableCell('Quantity', isHeader: true, align: pw.TextAlign.center),
-                      _tableCell('Rate (₹)', isHeader: true, align: pw.TextAlign.right),
-                      _tableCell('Amount (₹)', isHeader: true, align: pw.TextAlign.right),
-                      _tableCell('Supplier / फर्म', isHeader: true),
+                      _tableCell(useHindi ? 'क्र.' : '#', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell(useHindi ? 'सामग्री विवरण' : 'Item Description', isHeader: true),
+                      _tableCell(useHindi ? 'श्रेणी' : 'Category', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell(useHindi ? 'मात्रा' : 'Quantity', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell(useHindi ? 'दर (₹)' : 'Rate (₹)', isHeader: true, align: pw.TextAlign.right),
+                      _tableCell(useHindi ? 'राशि (₹)' : 'Amount (₹)', isHeader: true, align: pw.TextAlign.right),
+                      _tableCell(useHindi ? 'थोक सप्लायर' : 'Supplier', isHeader: true),
                     ],
                   ),
 
@@ -411,7 +421,9 @@ class ProcurementPdfService {
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Text(
-                                item.name.trim().isNotEmpty ? item.name.trim() : 'Item #${index + 1}',
+                                item.name.trim().isNotEmpty
+                                    ? item.name.trim()
+                                    : (useHindi ? 'सामग्री #${index + 1}' : 'Item #${index + 1}'),
                                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cTextDark),
                               ),
                               if (item.notes.trim().isNotEmpty) ...[
@@ -434,7 +446,9 @@ class ProcurementPdfService {
                               borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
                             ),
                             child: pw.Text(
-                              item.category.trim().isNotEmpty ? item.category.trim() : 'General',
+                              item.category.trim().isNotEmpty
+                                  ? item.category.trim()
+                                  : (useHindi ? 'सामान्य' : 'General'),
                               style: const pw.TextStyle(fontSize: 7.2, color: cMuted),
                               textAlign: pw.TextAlign.center,
                             ),
@@ -463,7 +477,9 @@ class ProcurementPdfService {
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Text(
-                                item.dealerName.trim().isNotEmpty ? item.dealerName.trim() : 'Mandi / Open Market',
+                                item.dealerName.trim().isNotEmpty
+                                    ? item.dealerName.trim()
+                                    : (useHindi ? 'मंडी / खुला बाजार' : 'Open Market'),
                                 style: pw.TextStyle(
                                   fontSize: 7.8,
                                   fontWeight: item.dealerName.trim().isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal,
@@ -490,13 +506,13 @@ class ProcurementPdfService {
                     children: [
                       _tableCell('', padding: const pw.EdgeInsets.all(5)),
                       _tableCell(
-                        'TOTAL AMOUNT / कुल योग',
+                        useHindi ? 'कुल योग' : 'TOTAL AMOUNT',
                         isBold: true,
                         padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
                       ),
                       _tableCell('', padding: const pw.EdgeInsets.all(5)),
                       _tableCell(
-                        '${items.length} Items',
+                        useHindi ? '${items.length} सामग्री' : '${items.length} Items',
                         align: pw.TextAlign.center,
                         isBold: true,
                         padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
@@ -536,12 +552,14 @@ class ProcurementPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'TERMS & INSTRUCTIONS / निर्देश:',
+                          useHindi ? 'नियम एवं निर्देश:' : 'TERMS & CONDITIONS:',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.8, color: cTextDark),
                         ),
                         pw.SizedBox(height: 3),
                         pw.Text(
-                          '1. सामग्री की पैकेजिंग, बैच संख्या एवं समाप्ति तिथि (Expiry Date) की जांच उपरांत ही आपूर्ति स्वीकार की जाएगी।\n2. क्रय आदेशानुसार पक्का बिल / चालान संलग्न करना अनिवार्य है।',
+                          useHindi
+                              ? '1. सामग्री की पैकेजिंग, बैच संख्या एवं समाप्ति तिथि की जांच उपरांत ही आपूर्ति स्वीकार की जाएगी।\n2. क्रय आदेशानुसार पक्का बिल अथवा चालान संलग्न करना अनिवार्य है।'
+                              : '1. Supplies will be accepted only after verification of packaging, batch numbers, and expiry dates.\n2. Original tax invoice or delivery challan must accompany this purchase order.',
                           style: const pw.TextStyle(fontSize: 7.0, color: cMuted),
                         ),
                       ],
@@ -562,12 +580,12 @@ class ProcurementPdfService {
                       ),
                       pw.SizedBox(height: 4),
                       pw.Text(
-                        'Authorized Signatory / अधिकृत हस्ताक्षर',
+                        useHindi ? 'अधिकृत हस्ताक्षर' : 'Authorized Signatory',
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5, color: cTextDark),
                         textAlign: pw.TextAlign.center,
                       ),
                       pw.Text(
-                        'Signature & Stamp',
+                        useHindi ? 'हस्ताक्षर एवं मुहर' : 'Signature & Stamp',
                         style: const pw.TextStyle(fontSize: 6.8, color: cMuted),
                         textAlign: pw.TextAlign.center,
                       ),
@@ -615,6 +633,7 @@ class ProcurementPdfService {
     required double totalBudget,
     String? shopAddress,
     String? shopPhone,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateProcurementPdf(
       shopName: shopName,
@@ -622,6 +641,7 @@ class ProcurementPdfService {
       totalBudget: totalBudget,
       shopAddress: shopAddress,
       shopPhone: shopPhone,
+      isHindi: isHindi,
     );
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdfBytes,
@@ -636,6 +656,7 @@ class ProcurementPdfService {
     required double totalBudget,
     String? shopAddress,
     String? shopPhone,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateProcurementPdf(
       shopName: shopName,
@@ -643,6 +664,7 @@ class ProcurementPdfService {
       totalBudget: totalBudget,
       shopAddress: shopAddress,
       shopPhone: shopPhone,
+      isHindi: isHindi,
     );
     final safeName = shopName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_').trim();
     final cleanFileName = safeName.isNotEmpty && safeName != '_' ? '${safeName}_Mandi_List.pdf' : 'Mandi_List.pdf';

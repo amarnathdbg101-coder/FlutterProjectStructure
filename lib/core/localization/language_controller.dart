@@ -6,6 +6,8 @@ import 'app_translations.dart';
 enum AppLanguage { english, hindi }
 
 class LanguageController extends ChangeNotifier {
+  static bool get isHindi => TokenStorage.getLanguage() == 'hi';
+
   AppLanguage _currentLanguage = AppLanguage.english;
 
   AppLanguage get currentLanguage => _currentLanguage;

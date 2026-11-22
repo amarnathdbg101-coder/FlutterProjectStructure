@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../models/khata_model.dart';
 
@@ -117,6 +118,7 @@ class KhataPdfService {
   }
 
   /// Builds A4 passbook PDF bytes for the given customer account.
+  /// Strict single-language output: 100% English or 100% pure Hindi based on active language.
   static Future<Uint8List> generateStatementPdf({
     required String shopName,
     String? shopAddress,
@@ -126,7 +128,9 @@ class KhataPdfService {
     required String customerMobile,
     required double balance,
     required List<KhataTransactionModel> transactions,
+    bool? isHindi,
   }) async {
+    final useHindi = isHindi ?? LanguageController.isHindi;
     final theme = await _getTheme();
     final logoImg = await _getLogoImage();
     final pdf = pw.Document(theme: theme);
@@ -137,7 +141,7 @@ class KhataPdfService {
         ? shopName.trim()
         : (cachedShop?.name.trim().isNotEmpty ?? false
             ? cachedShop!.name.trim()
-            : 'ShopSilo Partner Store');
+            : (useHindi ? 'शॉपसाइलो पार्टनर स्टोर' : 'ShopSilo Partner Store'));
     final cleanAddress = (shopAddress != null && shopAddress.trim().isNotEmpty)
         ? shopAddress.trim()
         : (cachedShop != null && cachedShop.address.trim().isNotEmpty
@@ -207,7 +211,9 @@ class KhataPdfService {
                         ),
                         pw.SizedBox(height: 3),
                         pw.Text(
-                          'OFFICIAL CUSTOMER KHATA PASSBOOK & ACCOUNT STATEMENT',
+                          useHindi
+                              ? 'ग्राहक खाता पासबुक एवं खाता विवरण'
+                              : 'OFFICIAL CUSTOMER KHATA PASSBOOK & ACCOUNT STATEMENT',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cHeaderSub),
                           textAlign: pw.TextAlign.center,
                         ),
@@ -234,7 +240,7 @@ class KhataPdfService {
                     ],
                     if (cleanPhone != null && cleanPhone.isNotEmpty) ...[
                       pw.Text(
-                        'Phone / WhatsApp: $cleanPhone',
+                        useHindi ? 'संपर्क: $cleanPhone' : 'Phone: $cleanPhone',
                         style: const pw.TextStyle(fontSize: 8.5, color: cMuted),
                         textAlign: pw.TextAlign.center,
                       ),
@@ -243,7 +249,9 @@ class KhataPdfService {
 
                     // Customer Details Centered
                     pw.Text(
-                      'Customer: $customerName ($customerMobile) | Statement Date: $dateStr',
+                      useHindi
+                          ? 'ग्राहक: $customerName ($customerMobile) | दिनांक: $dateStr'
+                          : 'Customer: $customerName ($customerMobile) | Statement Date: $dateStr',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.0, color: cDark),
                       textAlign: pw.TextAlign.center,
                     ),
@@ -255,7 +263,7 @@ class KhataPdfService {
                       children: [
                         pw.Expanded(
                           child: _buildSummaryCard(
-                            title: 'TOTAL UDHAR GIVEN (DR)',
+                            title: useHindi ? 'कुल दिया गया उधार' : 'TOTAL UDHAR GIVEN',
                             amountStr: '₹${totalDebit.toStringAsFixed(2)}',
                             color: cRed,
                             bgColor: const PdfColor.fromInt(0xFFFEF2F2),
@@ -265,7 +273,7 @@ class KhataPdfService {
                         pw.SizedBox(width: 8),
                         pw.Expanded(
                           child: _buildSummaryCard(
-                            title: 'TOTAL REPAID / JAMA (CR)',
+                            title: useHindi ? 'कुल जमा राशि' : 'TOTAL REPAID (JAMA)',
                             amountStr: '₹${totalCredit.toStringAsFixed(2)}',
                             color: cGreen,
                             bgColor: const PdfColor.fromInt(0xFFF0FDF4),
@@ -275,10 +283,10 @@ class KhataPdfService {
                         pw.SizedBox(width: 8),
                         pw.Expanded(
                           child: _buildSummaryCard(
-                            title: 'OUTSTANDING DUE',
+                            title: useHindi ? 'बकाया शेष राशि' : 'OUTSTANDING DUE',
                             amountStr: balance > 0
-                                ? '₹${balance.toStringAsFixed(2)} (PENDING)'
-                                : '₹0.00 (SETTLED)',
+                                ? (useHindi ? '₹${balance.toStringAsFixed(2)} (बाकी)' : '₹${balance.toStringAsFixed(2)} (PENDING)')
+                                : (useHindi ? '₹0.00 (चुक्ता)' : '₹0.00 (SETTLED)'),
                             color: balance > 0 ? cRed : cGreen,
                             bgColor: balance > 0
                                 ? const PdfColor.fromInt(0xFFFEF2F2)
@@ -317,17 +325,21 @@ class KhataPdfService {
                               crossAxisAlignment: pw.CrossAxisAlignment.start,
                               children: [
                                 pw.Text(
-                                  'Scan & Pay via UPI (PhonePe / Google Pay / Paytm)',
+                                  useHindi
+                                      ? 'यूपीआई द्वारा भुगतान हेतु स्कैन करें'
+                                      : 'Scan & Pay via UPI (PhonePe / Google Pay / Paytm)',
                                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cDark),
                                 ),
                                 pw.SizedBox(height: 1),
                                 pw.Text(
-                                  'Merchant UPI ID: $upiId',
+                                  useHindi ? 'दुकानदार यूपीआई आईडी: $upiId' : 'Merchant UPI ID: $upiId',
                                   style: const pw.TextStyle(fontSize: 8.0, color: cMuted),
                                 ),
                                 pw.SizedBox(height: 1),
                                 pw.Text(
-                                  'Instant Dues Settlement: ₹${balance.toStringAsFixed(2)}',
+                                  useHindi
+                                      ? 'बकाया राशि चुकता करें: ₹${balance.toStringAsFixed(2)}'
+                                      : 'Instant Dues Settlement: ₹${balance.toStringAsFixed(2)}',
                                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.0, color: cGreen),
                                 ),
                               ],
@@ -358,12 +370,12 @@ class KhataPdfService {
                           pw.TableRow(
                             decoration: const pw.BoxDecoration(color: cTblHeader),
                             children: [
-                              _cell('#', isHeader: true, align: pw.TextAlign.center),
-                              _cell('Date & Time', isHeader: true),
-                              _cell('Particulars / Notes', isHeader: true),
-                              _cell('Udhar Given (Dr)', isHeader: true, align: pw.TextAlign.right),
-                              _cell('Repaid (Cr)', isHeader: true, align: pw.TextAlign.right),
-                              _cell('Balance (₹)', isHeader: true, align: pw.TextAlign.right),
+                              _cell(useHindi ? 'क्र.' : '#', isHeader: true, align: pw.TextAlign.center),
+                              _cell(useHindi ? 'दिनांक व समय' : 'Date & Time', isHeader: true),
+                              _cell(useHindi ? 'विवरण / बिल संख्या' : 'Particulars / Notes', isHeader: true),
+                              _cell(useHindi ? 'उधार राशि (₹)' : 'Udhar Given (₹)', isHeader: true, align: pw.TextAlign.right),
+                              _cell(useHindi ? 'जमा राशि (₹)' : 'Repaid (₹)', isHeader: true, align: pw.TextAlign.right),
+                              _cell(useHindi ? 'बकाया (₹)' : 'Balance (₹)', isHeader: true, align: pw.TextAlign.right),
                             ],
                           ),
 
@@ -372,7 +384,12 @@ class KhataPdfService {
                             pw.TableRow(
                               children: [
                                 _cell('-', align: pw.TextAlign.center),
-                                _cell('No transaction records found in this statement.', isBold: true),
+                                _cell(
+                                  useHindi
+                                      ? 'इस खाते में कोई लेन-देन दर्ज नहीं है।'
+                                      : 'No transaction records found in this statement.',
+                                  isBold: true,
+                                ),
                                 _cell(''),
                                 _cell(''),
                                 _cell(''),
@@ -386,7 +403,8 @@ class KhataPdfService {
                               final txDateStr = DateFormat('dd-MM-yyyy hh:mm a').format(tx.createdAt);
 
                               final note = [
-                                if (tx.billNumber != null && tx.billNumber!.isNotEmpty) 'Bill: #${tx.billNumber}',
+                                if (tx.billNumber != null && tx.billNumber!.isNotEmpty)
+                                  (useHindi ? 'बिल सं.: #${tx.billNumber}' : 'Bill: #${tx.billNumber}'),
                                 if (tx.notes.isNotEmpty) tx.notes,
                               ].join(' | ');
 
@@ -395,7 +413,7 @@ class KhataPdfService {
                                 children: [
                                   _cell('${index + 1}', align: pw.TextAlign.center),
                                   _cell(txDateStr),
-                                  _cell(note.isNotEmpty ? note : 'Khata Entry', isBold: true),
+                                  _cell(note.isNotEmpty ? note : (useHindi ? 'खाता प्रविष्टि' : 'Khata Entry'), isBold: true),
                                   _cell(
                                     tx.isCredit ? '₹${tx.amount.toStringAsFixed(0)}' : '-',
                                     align: pw.TextAlign.right,
@@ -431,7 +449,9 @@ class KhataPdfService {
                     pw.Divider(thickness: 0.6, color: cBorder),
                     pw.SizedBox(height: 4),
                     pw.Text(
-                      'Notes: Please verify all entries and clear outstanding dues on time. Generated automatically by ShopSilo Retail OS.',
+                      useHindi
+                          ? 'निर्देश: कृपया सभी प्रविष्टियों की जांच कर लें एवं शेष बकाया समय पर चुकता करें। शॉपसाइलो रिटेल।'
+                          : 'Notes: Please verify all entries and clear outstanding dues on time. Generated automatically by ShopSilo Retail OS.',
                       style: const pw.TextStyle(fontSize: 7.8, color: cMuted),
                       textAlign: pw.TextAlign.center,
                     ),
@@ -503,6 +523,7 @@ class KhataPdfService {
     required String customerMobile,
     required double balance,
     required List<KhataTransactionModel> transactions,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateStatementPdf(
       shopName: shopName,
@@ -513,6 +534,7 @@ class KhataPdfService {
       customerMobile: customerMobile,
       balance: balance,
       transactions: transactions,
+      isHindi: isHindi,
     );
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdfBytes,
@@ -530,6 +552,7 @@ class KhataPdfService {
     required String customerMobile,
     required double balance,
     required List<KhataTransactionModel> transactions,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateStatementPdf(
       shopName: shopName,
@@ -540,6 +563,7 @@ class KhataPdfService {
       customerMobile: customerMobile,
       balance: balance,
       transactions: transactions,
+      isHindi: isHindi,
     );
     final safeName = customerName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_').trim();
     final cleanFileName = safeName.isNotEmpty && safeName != '_' ? '${safeName}_Khata_Passbook.pdf' : 'Khata_Passbook.pdf';

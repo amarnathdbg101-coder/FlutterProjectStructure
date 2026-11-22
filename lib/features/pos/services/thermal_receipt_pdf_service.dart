@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../models/pos_model.dart';
 import 'esc_pos_service.dart';
@@ -96,12 +97,12 @@ class ThermalReceiptPdfService {
   // In-memory LRU byte cache for generated thermal receipts (0ms re-sharing/re-printing)
   static final Map<String, Uint8List> _receiptByteCache = {};
 
-  static String _buildCacheKey(SaleModel sale, ThermalReceiptWidth width, String shopName) {
+  static String _buildCacheKey(SaleModel sale, ThermalReceiptWidth width, String shopName, bool isHindi) {
     final billNo = sale.billNumber ?? 'walkin';
     final ts = sale.createdAt.millisecondsSinceEpoch;
     final total = sale.totalAmount.toStringAsFixed(2);
     final count = sale.items.length;
-    return '${billNo}_${ts}_${total}_${count}_${width.name}_$shopName';
+    return '${billNo}_${ts}_${total}_${count}_${width.name}_${shopName}_${isHindi ? "hi" : "en"}';
   }
 
   static Future<pw.MemoryImage?> _getLogoImage() async {
@@ -140,6 +141,7 @@ class ThermalReceiptPdfService {
   }
 
   /// Generates printable PDF bytes for a given SaleModel and Shop Details offline in under 15ms.
+  /// Strictly adheres to selected language (100% English or 100% pure Hindi).
   static Future<Uint8List> generateReceiptPdf({
     required SaleModel sale,
     required String shopName,
@@ -148,17 +150,18 @@ class ThermalReceiptPdfService {
     String shopGstin = '',
     String upiId = '',
     ThermalReceiptWidth width = ThermalReceiptWidth.roll80mm,
-    bool isHindi = false,
+    bool? isHindi,
   }) async {
+    final useHindi = isHindi ?? LanguageController.isHindi;
     final cachedShop = LocalCacheService.getShop();
     final effectiveShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Retail Store'
         ? shopName.trim()
         : (cachedShop?.name.trim().isNotEmpty ?? false
             ? cachedShop!.name.trim()
-            : 'ShopSilo Retail Store');
+            : (useHindi ? 'शॉपसाइलो रिटेल स्टोर' : 'ShopSilo Retail Store'));
 
     // ⚡ Fast 0ms cache check (instant sharing & zero CPU re-render)
-    final cacheKey = _buildCacheKey(sale, width, effectiveShopName);
+    final cacheKey = _buildCacheKey(sale, width, effectiveShopName, useHindi);
     if (_receiptByteCache.containsKey(cacheKey)) {
       return _receiptByteCache[cacheKey]!;
     }
@@ -240,7 +243,7 @@ class ThermalReceiptPdfService {
                 ],
                 pw.SizedBox(height: 3),
                 pw.Text(
-                  'RETAIL TAX INVOICE / बिल',
+                  useHindi ? 'खुदरा कर बीजक' : 'RETAIL TAX INVOICE',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsSub + 0.5),
                   textAlign: pw.TextAlign.center,
                 ),
@@ -254,17 +257,33 @@ class ThermalReceiptPdfService {
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Bill #: ${sale.billNumber ?? "WALK-IN"}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody)),
-                    pw.Text(sale.paymentMethod.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody)),
+                    pw.Text(
+                      useHindi
+                          ? 'बिल सं.: ${sale.billNumber ?? "वॉक-इन"}'
+                          : 'Bill #: ${sale.billNumber ?? "WALK-IN"}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody),
+                    ),
+                    pw.Text(
+                      useHindi
+                          ? (sale.paymentMethod.toUpperCase() == 'CASH'
+                              ? 'नकद'
+                              : (sale.paymentMethod.toUpperCase() == 'UPI'
+                                  ? 'यूपीआई'
+                                  : (sale.paymentMethod.toUpperCase() == 'KHATA'
+                                      ? 'खाता'
+                                      : sale.paymentMethod.toUpperCase())))
+                          : sale.paymentMethod.toUpperCase(),
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody),
+                    ),
                   ],
                 ),
                 pw.SizedBox(height: 2),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Date: $dateStr', style: pw.TextStyle(fontSize: fsSub)),
+                    pw.Text(useHindi ? 'दिनांक: $dateStr' : 'Date: $dateStr', style: pw.TextStyle(fontSize: fsSub)),
                     if (sale.customerPhone.isNotEmpty)
-                      pw.Text('Cust: ${sale.customerPhone}', style: pw.TextStyle(fontSize: fsSub)),
+                      pw.Text(useHindi ? 'ग्राहक: ${sale.customerPhone}' : 'Cust: ${sale.customerPhone}', style: pw.TextStyle(fontSize: fsSub)),
                   ],
                 ),
 
@@ -277,20 +296,20 @@ class ThermalReceiptPdfService {
                   children: [
                     pw.Expanded(
                       flex: 5,
-                      child: pw.Text('ITEM', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody)),
+                      child: pw.Text(useHindi ? 'सामग्री' : 'ITEM', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody)),
                     ),
                     pw.Expanded(
                       flex: 2,
-                      child: pw.Text('QTY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody), textAlign: pw.TextAlign.center),
+                      child: pw.Text(useHindi ? 'मात्रा' : 'QTY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody), textAlign: pw.TextAlign.center),
                     ),
                     if (!is58)
                       pw.Expanded(
                         flex: 2,
-                        child: pw.Text('RATE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody), textAlign: pw.TextAlign.right),
+                        child: pw.Text(useHindi ? 'दर' : 'RATE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody), textAlign: pw.TextAlign.right),
                       ),
                     pw.Expanded(
                       flex: 3,
-                      child: pw.Text('TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody), textAlign: pw.TextAlign.right),
+                      child: pw.Text(useHindi ? 'योग' : 'TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsBody), textAlign: pw.TextAlign.right),
                     ),
                   ],
                 ),
@@ -304,7 +323,7 @@ class ThermalReceiptPdfService {
                   final index = entry.key;
                   final item = entry.value;
                   final rawName = item.product.name.trim();
-                  final cleanName = rawName.isNotEmpty ? rawName : 'Item #${index + 1}';
+                  final cleanName = rawName.isNotEmpty ? rawName : (useHindi ? 'सामग्री #${index + 1}' : 'Item #${index + 1}');
                   final cleanUnit = item.product.unit.trim();
                   final rate = item.effectivePrice;
                   final total = item.total;
@@ -368,8 +387,18 @@ class ThermalReceiptPdfService {
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Items: ${sale.items.length} (Qty $totalItemsCount)', style: pw.TextStyle(fontSize: fsSub)),
-                    pw.Text('Subtotal: ₹${sale.subtotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fsSub)),
+                    pw.Text(
+                      useHindi
+                          ? 'सामग्री: ${sale.items.length} (कुल: $totalItemsCount)'
+                          : 'Items: ${sale.items.length} (Qty $totalItemsCount)',
+                      style: pw.TextStyle(fontSize: fsSub),
+                    ),
+                    pw.Text(
+                      useHindi
+                          ? 'उपयोग: ₹${sale.subtotal.toStringAsFixed(2)}'
+                          : 'Subtotal: ₹${sale.subtotal.toStringAsFixed(2)}',
+                      style: pw.TextStyle(fontSize: fsSub),
+                    ),
                   ],
                 ),
                 if (sale.discountAmount > 0) ...[
@@ -377,7 +406,7 @@ class ThermalReceiptPdfService {
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('Discount / छूट:', style: pw.TextStyle(fontSize: fsSub)),
+                      pw.Text(useHindi ? 'छूट:' : 'Discount:', style: pw.TextStyle(fontSize: fsSub)),
                       pw.Text('-₹${sale.discountAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsSub)),
                     ],
                   ),
@@ -395,7 +424,10 @@ class ThermalReceiptPdfService {
                   child: pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('GRAND TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsTotal - 1)),
+                      pw.Text(
+                        useHindi ? 'कुल देय राशि:' : 'GRAND TOTAL:',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsTotal - 1),
+                      ),
                       pw.Text('₹${sale.totalAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsTotal)),
                     ],
                   ),
@@ -408,7 +440,7 @@ class ThermalReceiptPdfService {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Paid Cash:', style: pw.TextStyle(fontSize: fsSub)),
+                        pw.Text(useHindi ? 'नकद भुगतान:' : 'Paid Cash:', style: pw.TextStyle(fontSize: fsSub)),
                         pw.Text('₹${sale.splitPayments!.cashAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fsSub)),
                       ],
                     ),
@@ -416,7 +448,7 @@ class ThermalReceiptPdfService {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Paid UPI/Online:', style: pw.TextStyle(fontSize: fsSub)),
+                        pw.Text(useHindi ? 'ऑनलाइन/यूपीआई:' : 'Paid UPI/Online:', style: pw.TextStyle(fontSize: fsSub)),
                         pw.Text('₹${sale.splitPayments!.onlineAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: fsSub)),
                       ],
                     ),
@@ -424,7 +456,7 @@ class ThermalReceiptPdfService {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Added to Khata (Udhar):', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsSub)),
+                        pw.Text(useHindi ? 'खाते में दर्ज (उधार):' : 'Added to Khata (Credit):', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsSub)),
                         pw.Text('₹${sale.splitPayments!.khataAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsSub)),
                       ],
                     ),
@@ -445,7 +477,7 @@ class ThermalReceiptPdfService {
                   ),
                   pw.SizedBox(height: 2),
                   pw.Text(
-                    'Scan to Pay via UPI (PhonePe / GPay)',
+                    useHindi ? 'यूपीआई द्वारा भुगतान हेतु स्कैन करें' : 'Scan to Pay via UPI',
                     style: pw.TextStyle(fontSize: fsSub - 1),
                     textAlign: pw.TextAlign.center,
                   ),
@@ -456,7 +488,7 @@ class ThermalReceiptPdfService {
                 _buildSolidDivider(is58 ? 32 : 44),
                 pw.SizedBox(height: 3),
                 pw.Text(
-                  'THANK YOU! VISIT AGAIN / धन्यवाद!',
+                  useHindi ? 'धन्यवाद! पुनः पधारें' : 'THANK YOU! VISIT AGAIN',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fsSub),
                   textAlign: pw.TextAlign.center,
                 ),
@@ -500,7 +532,7 @@ class ThermalReceiptPdfService {
     String shopGstin = '',
     String upiId = '',
     ThermalReceiptWidth width = ThermalReceiptWidth.roll80mm,
-    bool isHindi = false,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateReceiptPdf(
       sale: sale,
@@ -528,7 +560,7 @@ class ThermalReceiptPdfService {
     String shopGstin = '',
     String upiId = '',
     ThermalReceiptWidth width = ThermalReceiptWidth.roll80mm,
-    bool isHindi = false,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateReceiptPdf(
       sale: sale,

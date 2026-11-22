@@ -65,6 +65,7 @@ class MandiPdfPreviewScreen extends StatelessWidget {
                 totalBudget: totalBudget,
                 shopAddress: shopAddress,
                 shopPhone: shopPhone,
+                isHindi: isHindi,
               );
             },
           ),
@@ -79,6 +80,7 @@ class MandiPdfPreviewScreen extends StatelessWidget {
           totalBudget: totalBudget,
           shopAddress: shopAddress,
           shopPhone: shopPhone,
+          isHindi: isHindi,
         ),
         allowPrinting: true,
         allowSharing: true,

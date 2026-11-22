@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../models/pos_model.dart';
 
@@ -126,11 +127,13 @@ class SalesPdfService {
     required int totalBills,
     required double totalRevenue,
     required int itemsCount,
+    required bool isHindi,
   }) {
-    return '${shopName}_${windowDays}_${totalBills}_${totalRevenue.toStringAsFixed(0)}_$itemsCount';
+    return '${shopName}_${windowDays}_${totalBills}_${totalRevenue.toStringAsFixed(0)}_${itemsCount}_${isHindi ? "hi" : "en"}';
   }
 
   /// Builds printable A4 PDF bytes for the given list of sold items.
+  /// Strictly outputs 100% English or 100% pure Hindi based on active language.
   static Future<Uint8List> generateSalesPdf({
     required String shopName,
     required List<SoldProductTimelineItem> items,
@@ -142,13 +145,15 @@ class SalesPdfService {
     int windowDays = 1,
     String? shopAddress,
     String? shopPhone,
+    bool? isHindi,
   }) async {
+    final useHindi = isHindi ?? LanguageController.isHindi;
     final cachedShop = LocalCacheService.getShop();
     final cleanShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Merchant'
         ? shopName.trim()
         : (cachedShop?.name.trim().isNotEmpty ?? false
             ? cachedShop!.name.trim()
-            : 'ShopSilo Partner Store');
+            : (useHindi ? 'शॉपसाइलो पार्टनर स्टोर' : 'ShopSilo Partner Store'));
 
     final cacheKey = _buildCacheKey(
       shopName: cleanShopName,
@@ -156,6 +161,7 @@ class SalesPdfService {
       totalBills: totalBills,
       totalRevenue: totalRevenue,
       itemsCount: items.length,
+      isHindi: useHindi,
     );
     if (_salesPdfByteCache.containsKey(cacheKey)) {
       return _salesPdfByteCache[cacheKey]!;
@@ -183,8 +189,12 @@ class SalesPdfService {
 
     final is10Days = windowDays > 1;
     final reportTitle = is10Days
-        ? '${cleanShopName.toUpperCase()} - 10-DAY SALES JOURNAL & AUDIT'
-        : '${cleanShopName.toUpperCase()} - TODAY SALES & P&L REPORT';
+        ? (useHindi
+            ? '${cleanShopName.toUpperCase()} - 10 दिवसीय बिक्री रिपोर्ट एवं ऑडिट'
+            : '${cleanShopName.toUpperCase()} - 10-DAY SALES JOURNAL & AUDIT')
+        : (useHindi
+            ? '${cleanShopName.toUpperCase()} - दैनिक बिक्री एवं लाभ-हानि रिपोर्ट'
+            : '${cleanShopName.toUpperCase()} - TODAY SALES & P&L REPORT');
 
     final totalUnitsSold = items.fold(0, (sum, i) => sum + i.quantity);
 
@@ -275,7 +285,9 @@ class SalesPdfService {
                           pw.Text(
                             isFirstPage
                                 ? reportTitle
-                                : '$reportTitle  |  PAGE ${pIdx + 1} OF $totalPages',
+                                : (useHindi
+                                    ? '$reportTitle  |  पृष्ठ ${pIdx + 1} / $totalPages'
+                                    : '$reportTitle  |  PAGE ${pIdx + 1} OF $totalPages'),
                             style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold,
                               fontSize: 8.5,
@@ -307,14 +319,16 @@ class SalesPdfService {
                         ],
                         if (cleanPhone != null && cleanPhone.isNotEmpty) ...[
                           pw.Text(
-                            'Phone / WhatsApp: $cleanPhone',
+                            useHindi ? 'संपर्क: $cleanPhone' : 'Phone: $cleanPhone',
                             style: const pw.TextStyle(fontSize: 8.5, color: cMuted),
                             textAlign: pw.TextAlign.center,
                           ),
                           pw.SizedBox(height: 2),
                         ],
                         pw.Text(
-                          'Report Window: ${is10Days ? "Past 10 Days Rolling Retention" : "Today"}  |  Generated: $dateStr',
+                          useHindi
+                              ? 'अवधि: ${is10Days ? "पिछले 10 दिन" : "आज"}  |  तैयार: $dateStr'
+                              : 'Report Window: ${is10Days ? "Past 10 Days" : "Today"}  |  Generated: $dateStr',
                           style: const pw.TextStyle(fontSize: 8.5, color: cMuted),
                           textAlign: pw.TextAlign.center,
                         ),
@@ -331,7 +345,9 @@ class SalesPdfService {
                           ),
                           child: pw.Center(
                             child: pw.Text(
-                              'TOTAL GROSS SALES: Rs. ${totalRevenue.toStringAsFixed(2)}  |  $totalUnitsSold UNITS SOLD  |  $totalBills BILLS',
+                              useHindi
+                                  ? 'कुल सकल बिक्री: ₹${totalRevenue.toStringAsFixed(2)}  |  $totalUnitsSold सामग्री  |  $totalBills बिल'
+                                  : 'TOTAL GROSS SALES: Rs. ${totalRevenue.toStringAsFixed(2)}  |  $totalUnitsSold UNITS SOLD  |  $totalBills BILLS',
                               style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 9.5,
@@ -350,7 +366,9 @@ class SalesPdfService {
                           ),
                           child: pw.Center(
                             child: pw.Text(
-                              'PAYMENT BREAKDOWN:  Cash: Rs. ${cashRevenue.toStringAsFixed(0)}  |  UPI: Rs. ${upiRevenue.toStringAsFixed(0)}  |  Khata / Udhar: Rs. ${khataRevenue.toStringAsFixed(0)}',
+                              useHindi
+                                  ? 'भुगतान विवरण:  नकद: ₹${cashRevenue.toStringAsFixed(0)}  |  यूपीआई: ₹${upiRevenue.toStringAsFixed(0)}  |  खाता (उधार): ₹${khataRevenue.toStringAsFixed(0)}'
+                                  : 'PAYMENT BREAKDOWN:  Cash: Rs. ${cashRevenue.toStringAsFixed(0)}  |  UPI: Rs. ${upiRevenue.toStringAsFixed(0)}  |  Credit: Rs. ${khataRevenue.toStringAsFixed(0)}',
                               style: const pw.TextStyle(
                                 fontSize: 8.5,
                                 color: cDark,
@@ -382,12 +400,12 @@ class SalesPdfService {
                             pw.TableRow(
                               decoration: const pw.BoxDecoration(color: cTblHeader),
                               children: [
-                                _tableCell('#', isHeader: true, align: pw.TextAlign.center),
-                                _tableCell('Item Description & SKU', isHeader: true),
-                                _tableCell('Qty', isHeader: true, align: pw.TextAlign.center),
-                                _tableCell('Rate', isHeader: true, align: pw.TextAlign.right),
-                                _tableCell('Total', isHeader: true, align: pw.TextAlign.right),
-                                _tableCell('Pay / Time', isHeader: true, align: pw.TextAlign.center),
+                                _tableCell(useHindi ? 'क्र.' : '#', isHeader: true, align: pw.TextAlign.center),
+                                _tableCell(useHindi ? 'सामग्री विवरण एवं SKU' : 'Item Description & SKU', isHeader: true),
+                                _tableCell(useHindi ? 'मात्रा' : 'Qty', isHeader: true, align: pw.TextAlign.center),
+                                _tableCell(useHindi ? 'दर' : 'Rate', isHeader: true, align: pw.TextAlign.right),
+                                _tableCell(useHindi ? 'कुल योग' : 'Total', isHeader: true, align: pw.TextAlign.right),
+                                _tableCell(useHindi ? 'भुगतान / समय' : 'Pay / Time', isHeader: true, align: pw.TextAlign.center),
                               ],
                             ),
 
@@ -396,7 +414,12 @@ class SalesPdfService {
                               pw.TableRow(
                                 children: [
                                   _tableCell('-', align: pw.TextAlign.center),
-                                  _tableCell('No sold items recorded for this reporting period.', isBold: true),
+                                  _tableCell(
+                                    useHindi
+                                        ? 'इस अवधि के लिए कोई बिक्री दर्ज नहीं है।'
+                                        : 'No sold items recorded for this reporting period.',
+                                    isBold: true,
+                                  ),
                                   _tableCell('-'),
                                   _tableCell('-'),
                                   _tableCell('-'),
@@ -410,15 +433,24 @@ class SalesPdfService {
                                 final isAlt = index % 2 == 1;
 
                                 final cleanName = item.productName.trim();
-                                String itemTitle = cleanName.isNotEmpty ? cleanName : 'Product';
+                                String itemTitle = cleanName.isNotEmpty ? cleanName : (useHindi ? 'उत्पाद' : 'Product');
                                 if (item.productSku.isNotEmpty &&
                                     item.productSku.toLowerCase() != cleanName.toLowerCase()) {
                                   itemTitle = '$cleanName (${item.productSku})';
                                 }
 
-                                final payText = item.paymentMethod.isNotEmpty
+                                final rawPay = item.paymentMethod.isNotEmpty
                                     ? item.paymentMethod.toUpperCase()
                                     : 'PAID';
+                                final payText = useHindi
+                                    ? (rawPay == 'CASH'
+                                        ? 'नकद'
+                                        : (rawPay == 'UPI'
+                                            ? 'यूपीआई'
+                                            : (rawPay == 'KHATA'
+                                                ? 'खाता'
+                                                : rawPay)))
+                                    : rawPay;
                                 final timeText = DateFormat('dd/MM HH:mm').format(item.soldAt);
 
                                 return pw.TableRow(
@@ -457,7 +489,7 @@ class SalesPdfService {
                                 decoration: const pw.BoxDecoration(color: cCardBg),
                                 children: [
                                   _tableCell('', align: pw.TextAlign.center),
-                                  _tableCell('TOTAL SUMMARY', isBold: true),
+                                  _tableCell(useHindi ? 'कुल योग' : 'TOTAL SUMMARY', isBold: true),
                                   _tableCell(
                                     '$totalUnitsSold',
                                     align: pw.TextAlign.center,
@@ -471,7 +503,11 @@ class SalesPdfService {
                                     isBold: true,
                                     color: cBlueAccent,
                                   ),
-                                  _tableCell('${items.length} Entries', align: pw.TextAlign.center, isBold: true),
+                                  _tableCell(
+                                    useHindi ? '${items.length} प्रविष्टियां' : '${items.length} Entries',
+                                    align: pw.TextAlign.center,
+                                    isBold: true,
+                                  ),
                                 ],
                               ),
                           ],
@@ -491,7 +527,9 @@ class SalesPdfService {
                       pw.Divider(thickness: 0.6, color: cBorder),
                       pw.SizedBox(height: 3),
                       pw.Text(
-                        'Notes: Verified point-of-sale transaction journal. Generated automatically by ShopSilo Retail OS. Page ${pIdx + 1} of $totalPages.',
+                        useHindi
+                            ? 'शॉपसाइलो रिटेल • बिक्री रजिस्टर • पृष्ठ ${pIdx + 1} / $totalPages'
+                            : 'Notes: Verified point-of-sale transaction journal. Generated automatically by ShopSilo Retail OS. Page ${pIdx + 1} of $totalPages.',
                         style: const pw.TextStyle(fontSize: 7.8, color: cMuted),
                         textAlign: pw.TextAlign.center,
                       ),
@@ -546,6 +584,7 @@ class SalesPdfService {
     int windowDays = 1,
     String? shopAddress,
     String? shopPhone,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateSalesPdf(
       shopName: shopName,
@@ -558,6 +597,7 @@ class SalesPdfService {
       windowDays: windowDays,
       shopAddress: shopAddress,
       shopPhone: shopPhone,
+      isHindi: isHindi,
     );
 
     final safeName = windowDays > 1
@@ -582,6 +622,7 @@ class SalesPdfService {
     int windowDays = 1,
     String? shopAddress,
     String? shopPhone,
+    bool? isHindi,
   }) async {
     final pdfBytes = await generateSalesPdf(
       shopName: shopName,
@@ -594,6 +635,7 @@ class SalesPdfService {
       windowDays: windowDays,
       shopAddress: shopAddress,
       shopPhone: shopPhone,
+      isHindi: isHindi,
     );
 
     final safeShop = shopName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_').trim();
