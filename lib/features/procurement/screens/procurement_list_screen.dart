@@ -2518,14 +2518,26 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                           final qtyStr = rawQty.isEmpty ? '1 $selectedUnit' : '$rawQty $selectedUnit';
                           final rate = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
 
+                          final enteredDealer = dealerCtrl.text.trim();
+                          final enteredDealerPhone = dealerPhoneCtrl.text.trim();
+
+                          // Auto-register dealer to permanent PostgreSQL database directory if not already present
+                          if (enteredDealer.isNotEmpty &&
+                              !controller.wholesalers.any((w) => w.name.toLowerCase() == enteredDealer.toLowerCase())) {
+                            controller.addWholesaler(
+                              name: enteredDealer,
+                              phone: enteredDealerPhone,
+                            );
+                          }
+
                           if (editItem == null) {
                             controller.addItem(
                               name: name,
                               qty: qtyStr,
                               category: selectedCategory,
                               estimatedPrice: rate,
-                              dealerName: dealerCtrl.text.trim(),
-                              dealerPhone: dealerPhoneCtrl.text.trim(),
+                              dealerName: enteredDealer,
+                              dealerPhone: enteredDealerPhone,
                               notes: notesCtrl.text.trim(),
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -2542,8 +2554,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               qty: qtyStr,
                               category: selectedCategory,
                               estimatedPrice: rate,
-                              dealerName: dealerCtrl.text.trim(),
-                              dealerPhone: dealerPhoneCtrl.text.trim(),
+                              dealerName: enteredDealer,
+                              dealerPhone: enteredDealerPhone,
                               notes: notesCtrl.text.trim(),
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
