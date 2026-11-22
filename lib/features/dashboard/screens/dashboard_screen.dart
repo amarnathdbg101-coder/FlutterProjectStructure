@@ -264,15 +264,19 @@ class _TodaySalesHeroCard extends StatelessWidget {
                   child: const Icon(Icons.currency_rupee_rounded, size: 16, color: AppColors.success),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isHindi ? 'आज की कुल कमाई' : "Today's Gross Sales",
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: context.colorTextMuted,
+                Expanded(
+                  child: Text(
+                    isHindi ? 'आज की कुल कमाई' : "Today's Gross Sales",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: context.colorTextMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -305,12 +309,16 @@ class _TodaySalesHeroCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  '$effectiveBills ${isHindi ? "बिल कटे • आज का गल्ला" : "bills recorded today"}',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: context.colorTextMuted,
+                Expanded(
+                  child: Text(
+                    '$effectiveBills ${isHindi ? "बिल कटे • आज का गल्ला" : "bills recorded today"}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: context.colorTextMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -336,7 +344,7 @@ class _CoreOperationsGrid extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final crossAxisCount = width < 480 ? 2 : 4;
-        final aspectRatio = width < 480 ? 1.45 : 1.7;
+        final aspectRatio = width < 480 ? 1.35 : 1.7;
 
         return GridView.count(
           crossAxisCount: crossAxisCount,
@@ -353,40 +361,45 @@ class _CoreOperationsGrid extends StatelessWidget {
               subtitle: isHindi ? '⚡ नया बिल बनाएं' : '⚡ Start new sale',
               icon: Icons.point_of_sale_rounded,
               tileColor: const Color(0xFF16A34A),
-              badge: isHindi ? 'नया' : 'NEW',
+              badge: isHindi ? 'काउंटर' : 'POS',
               onTap: () => context.go('/merchant/pos'),
             ),
 
-            // 2. KHATA REGISTER
+            // 2. KHATA REGISTER (Udhar dues)
             _buildGiantTile(
               context,
               title: isHindi ? 'खाता बही' : 'Khata Ledger',
-              subtitle: '₹${stats.totalUdhar.toStringAsFixed(0)} ${isHindi ? "बाज़ार बाकी" : "dues"}',
+              subtitle: stats.totalUdhar > 0
+                  ? '₹${stats.totalUdhar.toStringAsFixed(0)} ${isHindi ? "बाज़ार बाकी" : "dues"}'
+                  : (isHindi ? 'कोई बाकी नहीं' : 'All clear'),
               icon: Icons.menu_book_rounded,
               tileColor: const Color(0xFFD97706),
+              badge: stats.totalUdhar > 0 ? (isHindi ? 'बाकी' : 'DUE') : null,
               onTap: () => context.go('/merchant/khata'),
             ),
 
-            // 3. INVENTORY & STOCK
+            // 3. LOW STOCK RADAR (Stock alert)
             _buildGiantTile(
               context,
-              title: isHindi ? 'दुकान का सामान' : 'Stock & Samaan',
+              title: isHindi ? 'कम स्टॉक' : 'Low Stock',
               subtitle: stats.lowStockCount > 0
-                  ? '⚠️ ${stats.lowStockCount} ${isHindi ? "कम स्टॉक" : "low"}'
-                  : '${stats.catalogCount} ${isHindi ? "सामान" : "items"}',
+                  ? '⚠️ ${stats.lowStockCount} ${isHindi ? "खत्म हो रहे" : "low"}'
+                  : (isHindi ? 'स्टॉक सुरक्षित' : 'Stock OK'),
               icon: Icons.inventory_2_rounded,
-              tileColor: const Color(0xFF2563EB),
-              onTap: () => context.go('/merchant/inventory'),
+              tileColor: stats.lowStockCount > 0 ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
+              badge: stats.lowStockCount > 0 ? (isHindi ? 'अलर्ट' : 'ALERT') : null,
+              onTap: () => context.push('/merchant/low-stock'),
             ),
 
-            // 4. EXPENSES
+            // 4. BARCODE PRINT STUDIO
             _buildGiantTile(
               context,
-              title: isHindi ? 'दुकान खर्चा' : 'Expenses',
-              subtitle: isHindi ? 'दैनिक दुकान खर्च' : 'Daily shop spends',
-              icon: Icons.receipt_long_rounded,
+              title: isHindi ? 'बारकोड प्रिंटर' : 'Barcode Studio',
+              subtitle: isHindi ? 'लेबल व स्टीकर' : 'Print labels',
+              icon: Icons.qr_code_2_rounded,
               tileColor: const Color(0xFF7C3AED),
-              onTap: () => context.go('/merchant/expenses'),
+              badge: isHindi ? 'प्रिंट' : 'PRINT',
+              onTap: () => context.push('/merchant/barcode-studio'),
             ),
           ],
         );
@@ -407,7 +420,7 @@ class _CoreOperationsGrid extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: context.colorSurface,
           borderRadius: BorderRadius.circular(14),
@@ -428,12 +441,12 @@ class _CoreOperationsGrid extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(7),
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: tileColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, size: 20, color: tileColor),
+                  child: Icon(icon, size: 18, color: tileColor),
                 ),
                 if (badge != null)
                   Container(
@@ -451,22 +464,23 @@ class _CoreOperationsGrid extends StatelessWidget {
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: context.colorTextPrimary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1),
                 Text(
                   subtitle,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w600,
                     color: context.colorTextMuted,
                   ),

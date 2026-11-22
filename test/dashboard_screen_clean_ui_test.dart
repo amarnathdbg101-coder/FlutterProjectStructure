@@ -87,7 +87,7 @@ void main() {
         );
 
         // QR Code button
-        expect(find.byIcon(Icons.qr_code_2_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.qr_code_2_rounded), findsWidgets);
         expect(find.byTooltip('Scan barcode'), findsOneWidget);
       },
     );
