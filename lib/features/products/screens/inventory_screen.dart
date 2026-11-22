@@ -1606,23 +1606,10 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     }
                   }
 
-                  // 10. Description & Key Features
-                  var fullDesc = data['description']?.toString().trim() ?? '';
-                  if (data['key_features'] is List && (data['key_features'] as List).isNotEmpty) {
-                    final bullets = (data['key_features'] as List)
-                        .map((e) => '• ${e.toString().trim()}')
-                        .where((s) => s.length > 2)
-                        .join('\n');
-                    if (bullets.isNotEmpty) {
-                      if (fullDesc.isNotEmpty) {
-                        fullDesc = '$fullDesc\n\nKey Highlights:\n$bullets';
-                      } else {
-                        fullDesc = bullets;
-                      }
-                    }
-                  }
-                  if (fullDesc.isNotEmpty) {
-                    descriptionCtrl.text = fullDesc;
+                  // 10. Short, Important Description Only (No long walls of text, retail merchants ignore long descriptions)
+                  final shortDesc = data['description']?.toString().trim() ?? '';
+                  if (shortDesc.isNotEmpty) {
+                    descriptionCtrl.text = shortDesc;
                   }
 
                   // 11. Barcode / SKU
@@ -1636,7 +1623,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     }
                   }
 
-                  // Helper function to test if an attribute is high-value & required (avoids useless boilerplate)
+                  // Helper function to test if an attribute is a concrete product detail & specification
                   bool isUsefulAttribute(String k, String v) {
                     final kClean = k.toLowerCase().trim();
                     final vClean = v.toLowerCase().trim();
@@ -1650,8 +1637,8 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     };
                     if (dummyValues.contains(vClean)) return false;
 
-                    // 2. Reject overly long values (> 45 chars) — custom attributes should be concise specs
-                    if (vClean.length > 45) return false;
+                    // 2. Reject overly long values (> 55 chars) — custom attributes should be concise specs
+                    if (vClean.length > 55) return false;
 
                     // 3. Reject generic advice, warnings, or storage sentences
                     if (vClean.contains('store in') ||
@@ -1664,24 +1651,21 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       return false;
                     }
 
-                    // 4. Reject redundant or useless keys
+                    // 4. Reject redundant keys that duplicate top-level primary fields
                     const uselessKeys = {
                       'storage instructions', 'storage', 'usage', 'how to use',
                       'instructions', 'directions', 'care instructions', 'wash care',
                       'warning', 'safety warning', 'caution', 'disclaimer', 'notice',
-                      'country of origin', 'origin',
-                      // Redundant with primary form fields:
-                      'name', 'product name', 'brand', 'category', 'subcategory',
-                      'sub category', 'mrp', 'price', 'selling price', 'cost price',
-                      'weight', 'net weight', 'unit', 'net quantity', 'barcode',
-                      'sku', 'description', 'highlights'
+                      // Redundant with top-level primary fields:
+                      'name', 'product name', 'mrp', 'price', 'selling price', 'cost price',
+                      'barcode', 'sku', 'description'
                     };
                     if (uselessKeys.contains(kClean)) return false;
 
                     return true;
                   }
 
-                  // Helper closure to inject or update custom attribute pair in UI
+                  // Helper closure to inject or update custom attribute pair in UI (Product Details)
                   void setCustomAttr(String key, String val) {
                     final cleanK = key.trim();
                     final cleanV = val.trim();
@@ -1696,7 +1680,7 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       orElse: () => MapEntry(TextEditingController(text: ''), TextEditingController(text: '')),
                     );
                     if (existing.key.text.isEmpty) {
-                      if (customAttrPairs.length < 6) { // Max 6 high-value specs to prevent UI bloat
+                      if (customAttrPairs.length < 12) { // Allow up to 12 rich packaging specifications
                         customAttrPairs.add(MapEntry(
                           TextEditingController(text: formattedKey),
                           TextEditingController(text: cleanV),
@@ -1704,6 +1688,23 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       }
                     } else if (existing.value.text.trim().isEmpty) {
                       existing.value.text = cleanV;
+                    }
+                  }
+
+                  // Any bullet highlights from key_features get converted to structured product details!
+                  if (data['key_features'] is List) {
+                    for (final feat in (data['key_features'] as List)) {
+                      final str = feat?.toString().trim() ?? '';
+                      if (str.length > 2 && str.length <= 45 && !str.toLowerCase().contains('store in')) {
+                        if (str.contains(':')) {
+                          final parts = str.split(':');
+                          if (parts.length == 2 && parts[0].trim().isNotEmpty && parts[1].trim().isNotEmpty) {
+                            setCustomAttr(parts[0].trim(), parts[1].trim());
+                            continue;
+                          }
+                        }
+                        setCustomAttr('Highlight', str);
+                      }
                     }
                   }
 
@@ -3444,16 +3445,36 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     ),
                     const SizedBox(height: 12),
 
-                    // SECTION 5: DYNAMIC CUSTOM SPECIFICATIONS & ATTRIBUTES
+                    // SECTION 5: DYNAMIC CUSTOM SPECIFICATIONS & ATTRIBUTES (PRODUCT DETAILS)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          'Custom Attributes (${customAttrPairs.length})',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: sheetCtx.colorTextMuted,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                sheetCtx.isHindi
+                                    ? 'प्रोडक्ट विवरण एवं विशेषताएं (${customAttrPairs.length})'
+                                    : 'Product Details & Specifications (${customAttrPairs.length})',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: sheetCtx.colorTextPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                sheetCtx.isHindi
+                                    ? 'AI द्वारा पैकेजिंग से निकाली गई मुख्य विशेषताएं'
+                                    : 'Key packaging details & specs extracted by AI',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: sheetCtx.colorTextMuted,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         TextButton.icon(
@@ -3463,7 +3484,10 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                           icon: const Icon(Icons.add_rounded, size: 16),
-                          label: const Text('Add Attribute', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          label: Text(
+                            sheetCtx.isHindi ? '+ नया विवरण' : '+ Add Spec',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
                           onPressed: () {
                             setModalState(() {
                               customAttrPairs.add(MapEntry(
@@ -3490,12 +3514,13 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             scrollDirection: Axis.horizontal,
                             child: Row(
                               children: [
-                                _buildAttrChip(sheetCtx, '+ Weight/Vol', 'Weight', '1L / 1Kg', customAttrPairs, setModalState),
-                                _buildAttrChip(sheetCtx, '+ Size', 'Size', 'Medium / XL', customAttrPairs, setModalState),
+                                _buildAttrChip(sheetCtx, '+ Pack Size', 'Pack Size', '1L / 500g', customAttrPairs, setModalState),
+                                _buildAttrChip(sheetCtx, '+ Packaging', 'Packaging Type', 'Pouch / Bottle', customAttrPairs, setModalState),
+                                _buildAttrChip(sheetCtx, '+ Item Form', 'Item Form', 'Liquid / Powder', customAttrPairs, setModalState),
+                                _buildAttrChip(sheetCtx, '+ Ingredients', 'Ingredients', 'Pure Silk / Cotton', customAttrPairs, setModalState),
                                 _buildAttrChip(sheetCtx, '+ Flavor', 'Flavor', 'Vanilla / Mango', customAttrPairs, setModalState),
-                                _buildAttrChip(sheetCtx, '+ Warranty', 'Warranty', '1 Year', customAttrPairs, setModalState),
-                                _buildAttrChip(sheetCtx, '+ Color', 'Color', 'Black / Blue', customAttrPairs, setModalState),
-                                _buildAttrChip(sheetCtx, '+ Model', 'Model', '2026 Model', customAttrPairs, setModalState),
+                                _buildAttrChip(sheetCtx, '+ Shelf Life', 'Shelf Life', '12 Months', customAttrPairs, setModalState),
+                                _buildAttrChip(sheetCtx, '+ Suitable For', 'Suitable For', 'All Hair/Skin Types', customAttrPairs, setModalState),
                               ],
                             ),
                           ),
@@ -3507,33 +3532,54 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       ...customAttrPairs.asMap().entries.map((entry) {
                         final idx = entry.key;
                         final pair = entry.value;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: sheetCtx.colorSurfaceSubtle,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: sheetCtx.colorBorder.withValues(alpha: 0.4)),
+                          ),
                           child: Row(
                             children: [
                               Expanded(
+                                flex: 4,
                                 child: TextField(
                                   controller: pair.key,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Key (e.g. Size, Flavor)',
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: sheetCtx.isHindi ? 'फ़ील्ड (e.g. Pack Size)' : 'Key (e.g. Pack Size)',
+                                    hintStyle: TextStyle(fontSize: 11.5, color: sheetCtx.colorTextMuted),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              Container(
+                                width: 1,
+                                height: 24,
+                                color: sheetCtx.colorBorder.withValues(alpha: 0.6),
+                                margin: const EdgeInsets.symmetric(horizontal: 6),
+                              ),
                               Expanded(
+                                flex: 5,
                                 child: TextField(
                                   controller: pair.value,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Value (e.g. 1L, Vanilla)',
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  style: const TextStyle(fontSize: 12.5),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: sheetCtx.isHindi ? 'मान (e.g. 1 Litre)' : 'Value (e.g. 1 Litre)',
+                                    hintStyle: TextStyle(fontSize: 11.5, color: sheetCtx.colorTextMuted),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                                   ),
                                 ),
                               ),
                               IconButton(
                                 padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                icon: Icon(Icons.delete_outline_rounded, size: 18, color: sheetCtx.colorTextMuted),
+                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                icon: Icon(Icons.close_rounded, size: 16, color: sheetCtx.colorTextMuted),
                                 onPressed: () {
                                   setModalState(() {
                                     pair.key.dispose();
@@ -3549,13 +3595,17 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                     ],
                     const SizedBox(height: 12),
 
-                    // Description / Notes
+                    // Description / Notes (Compact Important Summary Only)
                     TextField(
                       controller: descriptionCtrl,
                       maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Description / Notes',
-                        hintText: 'Product specifications, usage or notes...',
+                      decoration: InputDecoration(
+                        labelText: sheetCtx.isHindi ? 'संक्षिप्त सारांश / नोट्स (Important Summary)' : 'Important Summary / Notes',
+                        hintText: sheetCtx.isHindi ? '1-2 लाइन का मुख्य सारांश...' : 'Brief 1-2 line summary note...',
+                        helperText: sheetCtx.isHindi
+                            ? 'विस्तृत विशेषताएं ऊपर "प्रोडक्ट विवरण" सेक्शन में दर्ज हैं'
+                            : 'Detailed packaging specs are saved in Product Details above',
+                        helperStyle: TextStyle(fontSize: 10.5, color: sheetCtx.colorTextMuted),
                       ),
                     ),
                     const SizedBox(height: 12),
