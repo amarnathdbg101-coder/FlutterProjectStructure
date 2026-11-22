@@ -2,12 +2,76 @@ import '../../../core/network/base_controller.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../pos/models/pos_features_model.dart';
 import '../../pos/repositories/pos_advanced_repository.dart';
+import '../models/product_model.dart';
+
+enum ExpiryUrgency {
+  expired,   // daysRemaining < 0
+  critical,  // 0 <= daysRemaining <= 7
+  warning,   // 8 <= daysRemaining <= 30
+  upcoming,  // daysRemaining > 30
+}
+
+/// A unified item representing an expiry-tracked product (from inventory or batch lot)
+class ExpiryTrackedItem {
+  final String id;
+  final String? productId;
+  final String name;
+  final String category;
+  final String barcode;
+  final String? imageUrl;
+  final String? batchNumber;
+  final DateTime expiryDate;
+  final int daysRemaining;
+  final double stockQuantity;
+  final String unit;
+  final double mrp;
+  final double purchaseCost;
+  final double markdownDiscount;
+  final bool isBatchLot;
+  final ProductModel? product;
+  final ProductBatch? batch;
+
+  const ExpiryTrackedItem({
+    required this.id,
+    this.productId,
+    required this.name,
+    required this.category,
+    required this.barcode,
+    this.imageUrl,
+    this.batchNumber,
+    required this.expiryDate,
+    required this.daysRemaining,
+    required this.stockQuantity,
+    this.unit = 'Pcs',
+    required this.mrp,
+    this.purchaseCost = 0.0,
+    this.markdownDiscount = 0.0,
+    required this.isBatchLot,
+    this.product,
+    this.batch,
+  });
+
+  ExpiryUrgency get urgency {
+    if (daysRemaining < 0) return ExpiryUrgency.expired;
+    if (daysRemaining <= 7) return ExpiryUrgency.critical;
+    if (daysRemaining <= 30) return ExpiryUrgency.warning;
+    return ExpiryUrgency.upcoming;
+  }
+
+  bool get isExpired => daysRemaining < 0;
+  bool get isCritical => !isExpired && daysRemaining <= 7;
+  bool get isWarning => !isExpired && daysRemaining > 7 && daysRemaining <= 30;
+  bool get isUpcoming => daysRemaining > 30;
+}
 
 class BatchExpiryController extends BaseController {
   final PosAdvancedRepository _repo = PosAdvancedRepository();
 
   List<ProductBatch> _batches = [];
   List<ProductBatch> get batches => List.unmodifiable(_batches);
+
+  List<ProductModel> _inventoryProducts = [];
+  List<ProductModel> get inventoryProducts => List.unmodifiable(_inventoryProducts);
 
   MarkdownScanResult? _lastScanResult;
   MarkdownScanResult? get lastScanResult => _lastScanResult;
@@ -17,6 +81,12 @@ class BatchExpiryController extends BaseController {
 
   bool _isScanningMarkdown = false;
   bool get isScanningMarkdown => _isScanningMarkdown;
+
+  /// Sync full inventory products so all products with expiry dates show up immediately
+  void syncInventoryProducts(List<ProductModel> products) {
+    _inventoryProducts = products;
+    notifyListeners();
+  }
 
   void setDaysWindow(int days) {
     _selectedDaysWindow = days;
@@ -35,6 +105,146 @@ class BatchExpiryController extends BaseController {
     } else {
       setError(res.error ?? 'Failed to load near-expiry lots');
     }
+  }
+
+  /// All expiry tracked items combined from inventory catalog + batch lots
+  List<ExpiryTrackedItem> get allTrackedItems {
+    final Map<String, ExpiryTrackedItem> itemsMap = {};
+
+    // 1. Process all inventory products that have an expiryDate attribute
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    for (final p in _inventoryProducts) {
+      final exp = p.expiryDate;
+      if (exp == null) continue;
+
+      final expDay = DateTime(exp.year, exp.month, exp.day);
+      final days = expDay.difference(today).inDays;
+      final key = 'prod_${p.id ?? p.name}';
+
+      itemsMap[key] = ExpiryTrackedItem(
+        id: key,
+        productId: p.id?.toString(),
+        name: p.name.trim().isNotEmpty ? p.name.trim() : 'Unknown Product',
+        category: p.category.trim().isNotEmpty ? p.category.trim() : 'General Store',
+        barcode: p.barcode,
+        imageUrl: p.imageUrl,
+        batchNumber: p.batchNo.isNotEmpty ? p.batchNo : null,
+        expiryDate: exp,
+        daysRemaining: days,
+        stockQuantity: p.stock.toDouble(),
+        unit: p.unit.trim().isNotEmpty ? p.unit.trim() : 'Pcs',
+        mrp: p.price,
+        purchaseCost: p.costPrice,
+        markdownDiscount: 0.0,
+        isBatchLot: false,
+        product: p,
+      );
+    }
+
+    // 2. Process all POS batches
+    for (final b in _batches) {
+      final key = 'batch_${b.id}';
+      ProductModel? matchedProduct;
+      try {
+        matchedProduct = _inventoryProducts.firstWhere(
+          (p) => p.id?.toString() == b.productId,
+        );
+      } catch (_) {
+        matchedProduct = null;
+      }
+
+      itemsMap[key] = ExpiryTrackedItem(
+        id: key,
+        productId: b.productId,
+        name: b.productName.trim().isNotEmpty ? b.productName.trim() : (matchedProduct?.name ?? 'Lot Product'),
+        category: (matchedProduct != null && matchedProduct.category.trim().isNotEmpty)
+            ? matchedProduct.category.trim()
+            : 'General Store',
+        barcode: matchedProduct?.barcode ?? '',
+        imageUrl: matchedProduct?.imageUrl,
+        batchNumber: b.batchNumber,
+        expiryDate: b.expiryDate,
+        daysRemaining: b.daysToExpiry,
+        stockQuantity: b.currentQuantity,
+        unit: (matchedProduct != null && matchedProduct.unit.trim().isNotEmpty)
+            ? matchedProduct.unit.trim()
+            : 'Pcs',
+        mrp: b.mrp > 0 ? b.mrp : (matchedProduct?.price ?? 0.0),
+        purchaseCost: b.purchaseCost,
+        markdownDiscount: b.markdownDiscount,
+        isBatchLot: true,
+        product: matchedProduct,
+        batch: b,
+      );
+    }
+
+    final list = itemsMap.values.toList();
+    // Sort: Nearest expiry first (Expired < 0 first, then 0d, 1d, 2d...)
+    list.sort((a, b) => a.daysRemaining.compareTo(b.daysRemaining));
+    return list;
+  }
+
+  // Summary Counts
+  int get totalCount => allTrackedItems.length;
+  int get expiredCount => allTrackedItems.where((i) => i.isExpired).length;
+  int get criticalCount => allTrackedItems.where((i) => i.isCritical).length;
+  int get warningCount => allTrackedItems.where((i) => i.isWarning).length;
+  int get upcomingCount => allTrackedItems.where((i) => i.isUpcoming).length;
+
+  /// Filtered and sorted items based on active screen criteria
+  List<ExpiryTrackedItem> getFilteredItems({
+    String filter = 'all', // 'all', 'expired', '7_days', '30_days', '60_days', 'safe'
+    String searchQuery = '',
+    String category = 'All',
+    String sortOrder = 'expiry_asc', // 'expiry_asc', 'expiry_desc', 'stock_desc', 'name_asc'
+  }) {
+    var items = allTrackedItems;
+
+    // Filter by urgency window
+    if (filter == 'expired') {
+      items = items.where((i) => i.isExpired).toList();
+    } else if (filter == '7_days') {
+      items = items.where((i) => !i.isExpired && i.daysRemaining <= 7).toList();
+    } else if (filter == '30_days') {
+      items = items.where((i) => !i.isExpired && i.daysRemaining <= 30).toList();
+    } else if (filter == '60_days') {
+      items = items.where((i) => !i.isExpired && i.daysRemaining <= 60).toList();
+    } else if (filter == 'safe') {
+      items = items.where((i) => i.daysRemaining > 30).toList();
+    }
+
+    // Filter by category
+    if (category != 'All' && category.isNotEmpty) {
+      items = items.where((i) => i.category.toLowerCase().contains(category.toLowerCase())).toList();
+    }
+
+    // Filter by query (name, barcode, batch number)
+    if (searchQuery.trim().isNotEmpty) {
+      final q = searchQuery.trim().toLowerCase();
+      items = items.where((i) {
+        final nameMatch = i.name.toLowerCase().contains(q);
+        final barMatch = i.barcode.toLowerCase().contains(q);
+        final batchMatch = (i.batchNumber ?? '').toLowerCase().contains(q);
+        final catMatch = i.category.toLowerCase().contains(q);
+        return nameMatch || barMatch || batchMatch || catMatch;
+      }).toList();
+    }
+
+    // Sort order
+    if (sortOrder == 'expiry_desc') {
+      items.sort((a, b) => b.daysRemaining.compareTo(a.daysRemaining));
+    } else if (sortOrder == 'stock_desc') {
+      items.sort((a, b) => b.stockQuantity.compareTo(a.stockQuantity));
+    } else if (sortOrder == 'name_asc') {
+      items.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    } else {
+      // default: expiry_asc (expired first, then 0d, 1d, etc.)
+      items.sort((a, b) => a.daysRemaining.compareTo(b.daysRemaining));
+    }
+
+    return items;
   }
 
   Future<bool> createBatch({
@@ -61,7 +271,7 @@ class BatchExpiryController extends BaseController {
     if (res.success && res.data != null) {
       _batches.insert(0, res.data!);
       notifyListeners();
-      CustomSnackbar.showSuccess(null, 'Batch #$batchNumber added to inventory radar');
+      CustomSnackbar.showSuccess(null, 'लॉट #$batchNumber सफलतापूर्वक जोड़ा गया');
       return true;
     } else {
       setError(res.error ?? 'Failed to register product batch');
@@ -81,7 +291,7 @@ class BatchExpiryController extends BaseController {
       await loadNearExpiry();
       CustomSnackbar.showSuccess(
         null,
-        'Markdown scan applied to ${_lastScanResult!.markdownsApplied} near-expiry batches!',
+        '${_lastScanResult!.markdownsApplied} एक्सपायरी लॉट पर क्लियरेंस छूट लागू की गई!',
       );
       return _lastScanResult;
     } else {

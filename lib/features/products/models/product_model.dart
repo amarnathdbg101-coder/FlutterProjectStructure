@@ -638,13 +638,63 @@ class ProductModel {
 
   /// Expiry Date parsed as DateTime
   DateTime? get expiryDate {
-    final raw = attributes['expiry_date'] ?? attributes['expiry'] ?? attributes['exp_date'] ?? attributes['Expiry'];
+    final raw = attributes['expiry_date'] ??
+        attributes['expiry'] ??
+        attributes['exp_date'] ??
+        attributes['Expiry'] ??
+        attributes['expiryDate'] ??
+        attributes['Expiry Date'] ??
+        attributes['expiry_dt'] ??
+        attributes['best_before'] ??
+        attributes['bestBefore'] ??
+        attributes['Best Before'] ??
+        attributes['exp'] ??
+        attributes['EXP'];
     if (raw == null) return null;
     if (raw is DateTime) return raw;
     final str = raw.toString().trim();
     if (str.isEmpty) return null;
     try {
-      return DateTime.tryParse(str);
+      final isoParsed = DateTime.tryParse(str);
+      if (isoParsed != null) return isoParsed;
+
+      // Check numeric timestamp in ms or seconds
+      if (RegExp(r'^\d{9,13}$').hasMatch(str)) {
+        final ms = int.tryParse(str);
+        if (ms != null) {
+          final isSec = str.length <= 10;
+          return DateTime.fromMillisecondsSinceEpoch(isSec ? ms * 1000 : ms);
+        }
+      }
+
+      // Handle DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+      final parts = str.split(RegExp(r'[/.-]'));
+      if (parts.length == 3) {
+        if (parts[2].length == 4) {
+          final day = int.tryParse(parts[0]);
+          final month = int.tryParse(parts[1]);
+          final year = int.tryParse(parts[2]);
+          if (day != null && month != null && year != null) {
+            return DateTime(year, month, day);
+          }
+        } else if (parts[0].length == 4) {
+          final year = int.tryParse(parts[0]);
+          final month = int.tryParse(parts[1]);
+          final day = int.tryParse(parts[2]);
+          if (day != null && month != null && year != null) {
+            return DateTime(year, month, day);
+          }
+        }
+      } else if (parts.length == 2) {
+        // Handle MM/YYYY (e.g. 05/2026 or 12-2027) -> Expire on last day of month
+        final m = int.tryParse(parts[0]);
+        final y = int.tryParse(parts[1]);
+        if (m != null && y != null && m >= 1 && m <= 12) {
+          final nextMonth = m == 12 ? DateTime(y + 1, 1, 1) : DateTime(y, m + 1, 1);
+          return nextMonth.subtract(const Duration(days: 1));
+        }
+      }
+      return null;
     } catch (_) {
       return null;
     }
