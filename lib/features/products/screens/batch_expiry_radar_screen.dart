@@ -1096,14 +1096,34 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
         scrolledUnderElevation: 0,
         actions: [
           IconButton(
-            tooltip: isHindi ? 'नया सामान ट्रैक करें' : 'Track Product Expiry',
-            icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary, size: 22),
-            onPressed: _showTrackExistingProductSheet,
+            tooltip: isHindi ? 'ऑटो-छूट चलाएं' : 'Auto Markdown',
+            icon: const Icon(Icons.bolt_rounded, color: Color(0xFFEA580C), size: 22),
+            onPressed: () async {
+              HapticFeedback.mediumImpact();
+              final res = await batchCtrl.runMarkdownScan();
+              if (res != null && mounted) {
+                _loadData();
+              }
+            },
+          ),
+          IconButton(
+            tooltip: isHindi ? 'ऑडिट PDF' : 'Audit PDF',
+            icon: const Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary, size: 21),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              batchCtrl.exportAuditSheet(
+                context: context,
+                isHindi: isHindi,
+              );
+            },
           ),
           IconButton(
             tooltip: isHindi ? 'ताज़ा करें' : 'Refresh',
             icon: Icon(Icons.refresh_rounded, color: context.colorTextPrimary, size: 22),
-            onPressed: _loadData,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              _loadData();
+            },
           ),
           const SizedBox(width: 4),
         ],
@@ -1322,9 +1342,6 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
           ),
           Divider(height: 1, color: context.colorBorder),
 
-          // 2.5 Horizontal Category Filter Row
-          _buildCategoryChipsRow(context, batchCtrl, isHindi),
-
           // 3. Expiry Items List or Clean Empty State
           Expanded(
             child: batchCtrl.isLoading
@@ -1356,25 +1373,15 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: context.isDark
-              ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
-              : [const Color(0xFF1E293B), const Color(0xFF334155)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
-          width: 1,
-        ),
+        color: context.isDark ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -1384,101 +1391,34 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.shield_outlined, color: Colors.white, size: 16),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isHindi ? 'कुल जोखिम पूंजी (30 दिन)' : 'Capital at Risk (30 Days)',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              Text(
+                isHindi ? 'कुल जोखिम पूंजी' : 'Capital at Risk',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              Row(
-                children: [
-                  // Auto Markdown Scan Button
-                  InkWell(
-                    onTap: batchCtrl.isScanningMarkdown
-                        ? null
-                        : () async {
-                            final res = await batchCtrl.runMarkdownScan();
-                            if (res != null && mounted) {
-                              _loadData();
-                            }
-                          },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEA580C),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (batchCtrl.isScanningMarkdown)
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
-                            )
-                          else
-                            const Icon(Icons.bolt_rounded, size: 14, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(
-                            isHindi ? 'ऑटो-छूट' : 'Auto Markdown',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                        ],
-                      ),
+              if (expiredLoss > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626).withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.5)),
+                  ),
+                  child: Text(
+                    isHindi ? '₹${expiredLoss.toStringAsFixed(0)} समाप्त' : '₹${expiredLoss.toStringAsFixed(0)} Expired',
+                    style: const TextStyle(
+                      color: Color(0xFFFCA5A5),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  // PDF Export Button
-                  InkWell(
-                    onTap: () {
-                      batchCtrl.exportAuditSheet(
-                        context: context,
-                        isHindi: isHindi,
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.picture_as_pdf_rounded, size: 14, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(
-                            isHindi ? 'ऑडिट PDF' : 'Audit PDF',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
@@ -1486,7 +1426,7 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
               Text(
                 '₹${riskVal.toStringAsFixed(0)}',
                 style: const TextStyle(
-                  fontSize: 26,
+                  fontSize: 24,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: -0.5,
@@ -1494,7 +1434,7 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                isHindi ? 'लागत मूल्य पर' : 'at purchase cost',
+                isHindi ? '(30 दिन)' : '(30 Days)',
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.6),
@@ -1502,49 +1442,27 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          // Sub-pills breakdown
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (expiredLoss > 0)
-                _buildHeroSubPill(
-                  label: isHindi ? 'समाप्त: ₹${expiredLoss.toStringAsFixed(0)}' : 'Expired: ₹${expiredLoss.toStringAsFixed(0)}',
-                  color: const Color(0xFFEF4444),
-                ),
-              if (criticalRisk > 0)
-                _buildHeroSubPill(
-                  label: isHindi ? '0-7 दिन: ₹${criticalRisk.toStringAsFixed(0)}' : '0-7d: ₹${criticalRisk.toStringAsFixed(0)}',
-                  color: const Color(0xFFF97316),
-                ),
-              if (warningRisk > 0)
-                _buildHeroSubPill(
-                  label: isHindi ? '8-30 दिन: ₹${warningRisk.toStringAsFixed(0)}' : '8-30d: ₹${warningRisk.toStringAsFixed(0)}',
-                  color: const Color(0xFFFBBF24),
-                ),
-            ],
-          ),
+          if (criticalRisk > 0 || warningRisk > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                if (criticalRisk > 0) ...[
+                  Text(
+                    isHindi ? '0-7 दिन: ₹${criticalRisk.toStringAsFixed(0)}' : '0-7d: ₹${criticalRisk.toStringAsFixed(0)}',
+                    style: const TextStyle(color: Color(0xFFFDBA74), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                if (warningRisk > 0) ...[
+                  Text(
+                    isHindi ? '8-30 दिन: ₹${warningRisk.toStringAsFixed(0)}' : '8-30d: ₹${warningRisk.toStringAsFixed(0)}',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ],
-      ),
-    );
-  }
-
-  Widget _buildHeroSubPill({required String label, required Color color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-        ),
       ),
     );
   }
@@ -1690,26 +1608,14 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          if (item.category.isNotEmpty) ...[
-                            Text(
-                              item.category,
-                              style: TextStyle(fontSize: 11, color: context.colorTextMuted),
-                            ),
-                            Text(' • ', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
-                          ],
-                          if (item.batchNumber != null)
-                            Text(
-                              'लॉट #${item.batchNumber}',
-                              style: TextStyle(fontSize: 11, color: context.colorTextMuted),
-                            )
-                          else if (item.barcode.isNotEmpty)
-                            Text(
-                              item.barcode,
-                              style: TextStyle(fontSize: 11, color: context.colorTextMuted),
-                            ),
-                        ],
+                      Text(
+                        [
+                          if (item.category.isNotEmpty) item.category,
+                          if (item.batchNumber != null) '#${item.batchNumber}' else if (item.barcode.isNotEmpty) item.barcode,
+                        ].join(' • '),
+                        style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -1735,39 +1641,26 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
 
             // Middle Row: Expiry Date + Store Stock In Hand + Price
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.primary),
-                    const SizedBox(width: 5),
-                    Text(
-                      '${isHindi ? "एक्सपायरी" : "Exp"}: $formattedDate',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
+                const Icon(Icons.calendar_today_rounded, size: 12, color: AppColors.primary),
+                const SizedBox(width: 4),
                 Text(
-                  '${isHindi ? "स्टॉक" : "Stock"}: ${item.stockQuantity.toStringAsFixed(0)} ${item.unit}',
+                  formattedDate,
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                Text(
+                  '${item.stockQuantity.toStringAsFixed(0)} ${item.unit}',
                   style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                     color: item.stockQuantity > 0 ? context.colorTextPrimary : const Color(0xFFDC2626),
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'MRP ₹${item.mrp.toStringAsFixed(0)}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.primary),
-                    ),
-                    if (item.purchaseCost > 0)
-                      Text(
-                        '${isHindi ? "लागत" : "Cost"}: ₹${item.purchaseCost.toStringAsFixed(0)}',
-                        style: TextStyle(fontSize: 10.5, color: context.colorTextMuted, fontWeight: FontWeight.w600),
-                      ),
-                  ],
+                const SizedBox(width: 10),
+                Text(
+                  '₹${item.mrp.toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary),
                 ),
               ],
             ),
@@ -1795,145 +1688,85 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
             // Action Buttons Bar
             Row(
               children: [
-                // 1. Add replacement to Mandi List
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 7),
-                      side: const BorderSide(color: AppColors.primary, width: 1.2),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 14, color: AppColors.primary),
-                    label: Text(
-                      isHindi ? 'मंडी में जोड़ें' : 'Add to Mandi',
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
-                    ),
-                    onPressed: () => _showAddToMandiDialog(item),
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // 2. Expired Write-Off / RTV OR Clearance Markdown Discount
                 if (item.isExpired) ...[
                   Expanded(
-                    child: ElevatedButton.icon(
+                    child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFDC2626),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      icon: const Icon(Icons.delete_sweep_rounded, size: 14),
-                      label: Text(
-                        isHindi ? 'वापसी / नष्ट' : 'Write-Off / RTV',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _showWriteOffDialog(item);
+                      },
+                      child: Text(
+                        isHindi ? 'वापसी / निस्तारण' : 'Write-Off / RTV',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                       ),
-                      onPressed: () => _showWriteOffDialog(item),
                     ),
                   ),
-                  const SizedBox(width: 8),
                 ] else if (item.daysRemaining <= 30) ...[
                   Expanded(
-                    child: ElevatedButton.icon(
+                    child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEA580C),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      icon: const Icon(Icons.discount_rounded, size: 14),
-                      label: Text(
-                        isHindi ? 'क्लियरेंस छूट' : 'Markdown',
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _showClearanceDiscountDialog(item);
+                      },
+                      child: Text(
+                        isHindi ? 'क्लियरेंस छूट' : 'Apply Markdown',
                         style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                       ),
-                      onPressed: () => _showClearanceDiscountDialog(item),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                ] else ...[
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _updateExpiryDate(item);
+                      },
+                      child: Text(
+                        isHindi ? 'डेट बदलें' : 'Change Date',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
                 ],
-
-                // 3. Edit Expiry Date
-                InkWell(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    _updateExpiryDate(item);
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: context.colorSurfaceSubtle,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: context.colorBorder),
-                    ),
-                    child: Icon(Icons.edit_calendar_rounded, size: 16, color: context.colorTextPrimary),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    side: const BorderSide(color: AppColors.primary, width: 1.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
+                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 14, color: AppColors.primary),
+                  label: Text(
+                    isHindi ? 'मंडी' : 'Mandi',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    _showAddToMandiDialog(item);
+                  },
                 ),
               ],
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // Horizontal Category Filter Row for Quick Department Scoping
-  Widget _buildCategoryChipsRow(BuildContext context, BatchExpiryController batchCtrl, bool isHindi) {
-    final categoriesSet = <String>{};
-    for (final i in batchCtrl.allTrackedItems) {
-      if (i.category.trim().isNotEmpty && i.category.trim() != 'General Store') {
-        categoriesSet.add(i.category.trim());
-      }
-    }
-    if (categoriesSet.isEmpty) return const SizedBox.shrink();
-
-    final categories = ['All', ...categoriesSet.toList()..sort()];
-
-    return Container(
-      color: context.colorSurface,
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: categories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (ctx, idx) {
-          final cat = categories[idx];
-          final isSel = _selectedCategory.toLowerCase() == cat.toLowerCase();
-          final label = cat == 'All' ? (isHindi ? 'सभी श्रेणियां' : 'All Categories') : cat;
-
-          return InkWell(
-            onTap: () {
-              HapticFeedback.selectionClick();
-              setState(() => _selectedCategory = cat);
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isSel ? AppColors.primary.withValues(alpha: 0.12) : context.colorSurfaceSubtle,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isSel ? AppColors.primary : context.colorBorder,
-                  width: isSel ? 1.2 : 0.8,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                    color: isSel ? AppColors.primary : context.colorTextPrimary,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
       ),
     );
   }
