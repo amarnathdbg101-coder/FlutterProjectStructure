@@ -2407,6 +2407,12 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               sublabel: context.isHindi ? 'स्कैन करके जोड़ें' : 'Scan to Add',
                               color: AppColors.primary,
                               onTap: () => _openBarcodeScannerForMandi(context, controller, prodController),
+                              onLongPress: () {
+                                try {
+                                  HapticFeedback.mediumImpact();
+                                } catch (_) {}
+                                _openBarcodeScannerForMandi(context, controller, prodController, continuous: true);
+                              },
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -2514,7 +2520,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 12.5, color: context.colorTextMuted),
                         ),
-                        if (_searchQuery.isEmpty) ...[
+                         if (_searchQuery.isEmpty) ...[
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
@@ -2529,6 +2535,20 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                             ),
                             onPressed: () => _showAddEditSourcingItemSheet(context, controller, prodController),
                           ),
+                        ] else ...[
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.clear_rounded, size: 16),
+                            label: Text(context.isHindi ? 'खोज हटाएं' : 'Clear Search'),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          ),
                         ],
                       ],
                     ),
@@ -2542,196 +2562,240 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     itemBuilder: (context, index) {
                       final item = filteredItems[index];
                       final detectedShade = _detectItemShade(item);
-                      return AppCard(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // 1-Tap Checkbox Toggle
-                            Transform.scale(
-                              scale: 1.1,
-                              child: Checkbox.adaptive(
-                                value: item.isCompleted,
-                                activeColor: AppColors.success,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                onChanged: (_) => controller.toggleItem(item.id),
+                      return InkWell(
+                        onTap: () => _showAddEditSourcingItemSheet(
+                          context,
+                          controller,
+                          prodController,
+                          editItem: item,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        child: AppCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              // 1-Tap Checkbox Toggle
+                              Transform.scale(
+                                scale: 1.1,
+                                child: Checkbox.adaptive(
+                                  value: item.isCompleted,
+                                  activeColor: AppColors.success,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                  onChanged: (_) {
+                                    try {
+                                      HapticFeedback.lightImpact();
+                                    } catch (_) {}
+                                    controller.toggleItem(item.id);
+                                  },
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
+                              const SizedBox(width: 4),
 
-                            // Details
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      if (detectedShade != null) ...[
-                                        Tooltip(
-                                          message: detectedShade.displayName,
-                                          child: Container(
-                                            width: 14,
-                                            height: 14,
-                                            margin: const EdgeInsets.only(right: 6),
-                                            decoration: BoxDecoration(
-                                              color: detectedShade.color,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: Colors.white, width: 1.5),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.25),
-                                                  blurRadius: 2.5,
-                                                  offset: const Offset(0, 1),
-                                                ),
-                                              ],
+                              // Details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        if (detectedShade != null) ...[
+                                          Tooltip(
+                                            message: detectedShade.displayName,
+                                            child: Container(
+                                              width: 14,
+                                              height: 14,
+                                              margin: const EdgeInsets.only(right: 6),
+                                              decoration: BoxDecoration(
+                                                color: detectedShade.color,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: Colors.white, width: 1.5),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black.withValues(alpha: 0.25),
+                                                    blurRadius: 2.5,
+                                                    offset: const Offset(0, 1),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        Expanded(
+                                          child: Text(
+                                            item.name,
+                                            style: TextStyle(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: item.isCompleted ? context.colorTextMuted : context.colorTextPrimary,
+                                              decoration: item.isCompleted ? TextDecoration.lineThrough : null,
                                             ),
                                           ),
                                         ),
+                                        if (item.estimatedPrice > 0) ...[
+                                          Text(
+                                            '₹${item.estimatedPrice.toStringAsFixed(0)}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w900,
+                                              color: item.isCompleted ? context.colorTextMuted : AppColors.primary,
+                                            ),
+                                          ),
+                                        ],
                                       ],
-                                      Expanded(
-                                        child: Text(
-                                          item.name,
-                                          style: TextStyle(
-                                            fontSize: 14.5,
-                                            fontWeight: FontWeight.bold,
-                                            color: item.isCompleted ? context.colorTextMuted : context.colorTextPrimary,
-                                            decoration: item.isCompleted ? TextDecoration.lineThrough : null,
-                                          ),
-                                        ),
-                                      ),
-                                      if (item.estimatedPrice > 0) ...[
-                                        Text(
-                                          '₹${item.estimatedPrice.toStringAsFixed(0)}',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w900,
-                                            color: item.isCompleted ? context.colorTextMuted : AppColors.primary,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
-                                    children: [
-                                      // Quantity badge
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                                        decoration: BoxDecoration(
-                                          color: context.colorSurfaceSubtle,
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: context.colorBorder),
-                                        ),
-                                        child: Text(
-                                          item.qty,
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.bold,
-                                            color: item.isCompleted ? context.colorTextMuted : context.colorTextPrimary,
-                                          ),
-                                        ),
-                                      ),
-                                      // Category badge
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                                        decoration: BoxDecoration(
-                                          color: context.colorPrimaryLight,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          item.category,
-                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                                        ),
-                                      ),
-                                      if (item.dealerName.isNotEmpty)
-                                        Text(
-                                          item.dealerName,
-                                          style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
-                                        ),
-                                    ],
-                                  ),
-                                  if (item.notes.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item.notes,
-                                      style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontStyle: FontStyle.italic),
                                     ),
-                                  ],
-                                ],
-                              ),
-                            ),
-
-                            // Actions with comfortable 42px touch targets
-                            if (item.dealerPhone.isNotEmpty)
-                              IconButton(
-                                constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
-                                padding: const EdgeInsets.all(8),
-                                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 19, color: Color(0xFF128C7E)),
-                                tooltip: context.isHindi ? 'डीलर को व्हाट्सएप' : 'WhatsApp Wholesaler',
-                                onPressed: () => _messageDealerWhatsApp(context, item),
-                              ),
-                            PopupMenuButton<String>(
-                              icon: Icon(Icons.more_vert_rounded, size: 20, color: context.colorTextMuted),
-                              tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'Options',
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 3,
-                              onSelected: (val) {
-                                switch (val) {
-                                  case 'edit':
-                                    _showAddEditSourcingItemSheet(
-                                      context,
-                                      controller,
-                                      prodController,
-                                      editItem: item,
-                                    );
-                                    break;
-                                  case 'call':
-                                    _callDealer(item.dealerPhone);
-                                    break;
-                                  case 'delete':
-                                    controller.removeItem(item.id);
-                                    break;
-                                }
-                              },
-                              itemBuilder: (ctx) => [
-                                PopupMenuItem<String>(
-                                  value: 'edit',
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
-                                      const SizedBox(width: 10),
-                                      Text(ctx.isHindi ? 'विवरण बदलें' : 'Edit Item'),
+                                    const SizedBox(height: 5),
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      children: [
+                                        // Quantity badge
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                          decoration: BoxDecoration(
+                                            color: context.colorSurfaceSubtle,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: context.colorBorder),
+                                          ),
+                                          child: Text(
+                                            item.qty,
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: item.isCompleted ? context.colorTextMuted : context.colorTextPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                        // Category badge
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                          decoration: BoxDecoration(
+                                            color: context.colorPrimaryLight,
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            item.category,
+                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                          ),
+                                        ),
+                                        if (item.dealerName.isNotEmpty)
+                                          Text(
+                                            item.dealerName,
+                                            style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                                          ),
+                                      ],
+                                    ),
+                                    if (item.notes.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        item.notes,
+                                        style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontStyle: FontStyle.italic),
+                                      ),
                                     ],
-                                  ),
+                                  ],
                                 ),
-                                if (item.dealerPhone.isNotEmpty)
+                              ),
+
+                              // Actions with comfortable 42px touch targets
+                              if (item.dealerPhone.isNotEmpty)
+                                IconButton(
+                                  constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+                                  padding: const EdgeInsets.all(8),
+                                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 19, color: Color(0xFF128C7E)),
+                                  tooltip: context.isHindi ? 'डीलर को व्हाट्सएप' : 'WhatsApp Wholesaler',
+                                  onPressed: () => _messageDealerWhatsApp(context, item),
+                                ),
+                              PopupMenuButton<String>(
+                                icon: Icon(Icons.more_vert_rounded, size: 20, color: context.colorTextMuted),
+                                tooltip: context.isHindi ? 'अतिरिक्त विकल्प' : 'Options',
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 3,
+                                onSelected: (val) {
+                                  switch (val) {
+                                    case 'edit':
+                                      _showAddEditSourcingItemSheet(
+                                        context,
+                                        controller,
+                                        prodController,
+                                        editItem: item,
+                                      );
+                                      break;
+                                    case 'call':
+                                      _callDealer(item.dealerPhone);
+                                      break;
+                                    case 'delete':
+                                      final removedItem = item;
+                                      controller.removeItem(item.id);
+                                      try {
+                                        HapticFeedback.mediumImpact();
+                                      } catch (_) {}
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            context.isHindi
+                                                ? '"${removedItem.name}" लिस्ट से हटाया गया'
+                                                : '"${removedItem.name}" removed',
+                                          ),
+                                          action: SnackBarAction(
+                                            label: context.isHindi ? 'पूर्ववत (Undo)' : 'Undo',
+                                            textColor: Colors.yellow,
+                                            onPressed: () {
+                                              controller.addItem(
+                                                name: removedItem.name,
+                                                qty: removedItem.qty,
+                                                category: removedItem.category,
+                                                estimatedPrice: removedItem.estimatedPrice,
+                                                actualPrice: removedItem.actualPrice,
+                                                dealerName: removedItem.dealerName,
+                                                dealerPhone: removedItem.dealerPhone,
+                                                notes: removedItem.notes,
+                                              );
+                                            },
+                                          ),
+                                          duration: const Duration(seconds: 4),
+                                        ),
+                                      );
+                                      break;
+                                  }
+                                },
+                                itemBuilder: (ctx) => [
                                   PopupMenuItem<String>(
-                                    value: 'call',
+                                    value: 'edit',
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.phone_outlined, size: 18, color: AppColors.success),
+                                        const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
                                         const SizedBox(width: 10),
-                                        Text(ctx.isHindi ? 'डीलर को कॉल करें' : 'Call Wholesaler'),
+                                        Text(ctx.isHindi ? 'विवरण बदलें' : 'Edit Item'),
                                       ],
                                     ),
                                   ),
-                                const PopupMenuDivider(),
-                                PopupMenuItem<String>(
-                                  value: 'delete',
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
-                                      const SizedBox(width: 10),
-                                      Text(ctx.isHindi ? 'लिस्ट से हटाएं' : 'Remove Item', style: const TextStyle(color: AppColors.error)),
-                                    ],
+                                  if (item.dealerPhone.isNotEmpty)
+                                    PopupMenuItem<String>(
+                                      value: 'call',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.phone_outlined, size: 18, color: AppColors.success),
+                                          const SizedBox(width: 10),
+                                          Text(ctx.isHindi ? 'डीलर को कॉल करें' : 'Call Wholesaler'),
+                                        ],
+                                      ),
+                                    ),
+                                  const PopupMenuDivider(),
+                                  PopupMenuItem<String>(
+                                    value: 'delete',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
+                                        const SizedBox(width: 10),
+                                        Text(ctx.isHindi ? 'लिस्ट से हटाएं' : 'Remove Item', style: const TextStyle(color: AppColors.error)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -2751,10 +2815,12 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     required String sublabel,
     required Color color,
     required VoidCallback onTap,
+    VoidCallback? onLongPress,
     String? badge,
   }) {
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
