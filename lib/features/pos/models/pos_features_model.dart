@@ -393,21 +393,29 @@ class ProductBatch {
   });
 
   factory ProductBatch.fromJson(Map<String, dynamic> json) {
+    final exp = json['expiry_date'] != null
+        ? DateTime.tryParse(json['expiry_date'].toString()) ?? DateTime.now().add(const Duration(days: 30))
+        : DateTime.now().add(const Duration(days: 30));
+
+    int days = (json['days_to_expiry'] as num?)?.toInt() ?? 0;
+    if (json['days_to_expiry'] == null) {
+      final now = DateTime.now();
+      days = DateTime(exp.year, exp.month, exp.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+    }
+
     return ProductBatch(
       id: json['id']?.toString() ?? '',
       shopId: json['shop_id']?.toString() ?? '',
       productId: json['product_id']?.toString() ?? '',
       productName: json['product_name']?.toString() ?? '',
       batchNumber: json['batch_number']?.toString() ?? '',
-      expiryDate: json['expiry_date'] != null
-          ? DateTime.tryParse(json['expiry_date'].toString()) ?? DateTime.now().add(const Duration(days: 30))
-          : DateTime.now().add(const Duration(days: 30)),
-      initialQuantity: (json['initial_quantity'] as num?)?.toDouble() ?? 0.0,
-      currentQuantity: (json['current_quantity'] as num?)?.toDouble() ?? 0.0,
-      purchaseCost: (json['purchase_cost'] as num?)?.toDouble() ?? 0.0,
-      mrp: (json['mrp'] as num?)?.toDouble() ?? 0.0,
-      markdownDiscount: (json['markdown_discount'] as num?)?.toDouble() ?? 0.0,
-      daysToExpiry: (json['days_to_expiry'] as num?)?.toInt() ?? 0,
+      expiryDate: exp,
+      initialQuantity: (json['initial_quantity'] ?? json['quantity'] as num?)?.toDouble() ?? 0.0,
+      currentQuantity: (json['current_quantity'] ?? json['quantity'] as num?)?.toDouble() ?? 0.0,
+      purchaseCost: (json['purchase_cost'] ?? json['cost_price'] as num?)?.toDouble() ?? 0.0,
+      mrp: (json['mrp'] ?? json['original_selling_price'] ?? json['selling_price'] as num?)?.toDouble() ?? 0.0,
+      markdownDiscount: (json['markdown_discount'] ?? json['markdown_percent'] as num?)?.toDouble() ?? 0.0,
+      daysToExpiry: days,
       status: json['status']?.toString() ?? 'FRESH',
     );
   }
@@ -427,16 +435,54 @@ class MarkdownScanResult {
   });
 
   factory MarkdownScanResult.fromJson(Map<String, dynamic> json) {
-    final raw = json['updated_batches'];
+    final raw = json['updated_batches'] ?? json['batches'];
     List<String> list = [];
     if (raw is List) {
-      list = raw.map((e) => e.toString()).toList();
+      list = raw.map((e) => e is Map ? (e['batch_number'] ?? e['id'] ?? '').toString() : e.toString()).toList();
     }
     return MarkdownScanResult(
       batchesScanned: (json['batches_scanned'] as num?)?.toInt() ?? 0,
       markdownsApplied: (json['markdowns_applied'] as num?)?.toInt() ?? 0,
-      totalPotentialLossSaved: (json['total_potential_loss_saved'] as num?)?.toDouble() ?? 0.0,
+      totalPotentialLossSaved: (json['capital_protected_amount'] ?? json['total_potential_loss_saved'] as num?)?.toDouble() ?? 0.0,
       updatedBatches: list,
+    );
+  }
+}
+
+class ExpiryRadarSummary {
+  final int totalLotsTracked;
+  final double capitalAtRisk30D;
+  final double expiredCapitalLost;
+  final double criticalCapitalAtRisk;
+  final double warningCapitalAtRisk;
+  final int expiredCount;
+  final int criticalCount;
+  final int warningCount;
+  final int upcomingCount;
+
+  ExpiryRadarSummary({
+    required this.totalLotsTracked,
+    required this.capitalAtRisk30D,
+    required this.expiredCapitalLost,
+    required this.criticalCapitalAtRisk,
+    required this.warningCapitalAtRisk,
+    required this.expiredCount,
+    required this.criticalCount,
+    required this.warningCount,
+    required this.upcomingCount,
+  });
+
+  factory ExpiryRadarSummary.fromJson(Map<String, dynamic> json) {
+    return ExpiryRadarSummary(
+      totalLotsTracked: (json['total_lots_tracked'] as num?)?.toInt() ?? 0,
+      capitalAtRisk30D: (json['capital_at_risk_30d'] as num?)?.toDouble() ?? 0.0,
+      expiredCapitalLost: (json['expired_capital_lost'] as num?)?.toDouble() ?? 0.0,
+      criticalCapitalAtRisk: (json['critical_capital_at_risk'] as num?)?.toDouble() ?? 0.0,
+      warningCapitalAtRisk: (json['warning_capital_at_risk'] as num?)?.toDouble() ?? 0.0,
+      expiredCount: (json['expired_count'] as num?)?.toInt() ?? 0,
+      criticalCount: (json['critical_count'] as num?)?.toInt() ?? 0,
+      warningCount: (json['warning_count'] as num?)?.toInt() ?? 0,
+      upcomingCount: (json['upcoming_count'] as num?)?.toInt() ?? 0,
     );
   }
 }

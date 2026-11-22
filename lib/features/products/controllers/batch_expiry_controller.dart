@@ -1,8 +1,10 @@
+import 'package:flutter/widgets.dart';
 import '../../../core/network/base_controller.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../pos/models/pos_features_model.dart';
 import '../../pos/repositories/pos_advanced_repository.dart';
 import '../models/product_model.dart';
+import '../services/expiry_audit_pdf_service.dart';
 
 enum ExpiryUrgency {
   expired,   // daysRemaining < 0
@@ -159,18 +161,14 @@ class BatchExpiryController extends BaseController {
         id: key,
         productId: b.productId,
         name: b.productName.trim().isNotEmpty ? b.productName.trim() : (matchedProduct?.name ?? 'Lot Product'),
-        category: (matchedProduct != null && matchedProduct.category.trim().isNotEmpty)
-            ? matchedProduct.category.trim()
-            : 'General Store',
+        category: matchedProduct?.category.trim().isNotEmpty == true ? matchedProduct!.category.trim() : 'General Store',
         barcode: matchedProduct?.barcode ?? '',
         imageUrl: matchedProduct?.imageUrl,
         batchNumber: b.batchNumber,
         expiryDate: b.expiryDate,
         daysRemaining: b.daysToExpiry,
         stockQuantity: b.currentQuantity,
-        unit: (matchedProduct != null && matchedProduct.unit.trim().isNotEmpty)
-            ? matchedProduct.unit.trim()
-            : 'Pcs',
+        unit: matchedProduct?.unit.trim().isNotEmpty == true ? matchedProduct!.unit.trim() : 'Pcs',
         mrp: b.mrp > 0 ? b.mrp : (matchedProduct?.price ?? 0.0),
         purchaseCost: b.purchaseCost,
         markdownDiscount: b.markdownDiscount,
@@ -192,6 +190,41 @@ class BatchExpiryController extends BaseController {
   int get criticalCount => allTrackedItems.where((i) => i.isCritical).length;
   int get warningCount => allTrackedItems.where((i) => i.isWarning).length;
   int get upcomingCount => allTrackedItems.where((i) => i.isUpcoming).length;
+
+  /// Total capital locked in expiring inventory (<= 30 days or expired)
+  double get capitalAtRisk30D {
+    return allTrackedItems
+        .where((i) => i.daysRemaining <= 30)
+        .fold(0.0, (sum, i) => sum + (i.stockQuantity * (i.purchaseCost > 0 ? i.purchaseCost : i.mrp * 0.7)));
+  }
+
+  /// Capital lost in expired dead stock (< 0 days)
+  double get expiredCapitalLost {
+    return allTrackedItems
+        .where((i) => i.isExpired)
+        .fold(0.0, (sum, i) => sum + (i.stockQuantity * (i.purchaseCost > 0 ? i.purchaseCost : i.mrp * 0.7)));
+  }
+
+  /// Critical capital at risk in the next 0-7 days
+  double get criticalCapitalAtRisk {
+    return allTrackedItems
+        .where((i) => i.isCritical)
+        .fold(0.0, (sum, i) => sum + (i.stockQuantity * (i.purchaseCost > 0 ? i.purchaseCost : i.mrp * 0.7)));
+  }
+
+  /// Warning capital at risk in 8-30 days
+  double get warningCapitalAtRisk {
+    return allTrackedItems
+        .where((i) => i.isWarning)
+        .fold(0.0, (sum, i) => sum + (i.stockQuantity * (i.purchaseCost > 0 ? i.purchaseCost : i.mrp * 0.7)));
+  }
+
+  /// Estimated potential sales revenue if liquidated
+  double get potentialClearanceRevenue {
+    return allTrackedItems
+        .where((i) => i.daysRemaining <= 30 && !i.isExpired)
+        .fold(0.0, (sum, i) => sum + (i.stockQuantity * i.mrp));
+  }
 
   /// Filtered and sorted items based on active screen criteria
   List<ExpiryTrackedItem> getFilteredItems({
@@ -297,6 +330,78 @@ class BatchExpiryController extends BaseController {
     } else {
       setError(res.error ?? 'Failed to execute markdown scan');
       return null;
+    }
+  }
+
+  /// Apply clearance markdown discount to a specific batch lot
+  Future<bool> applyBatchClearance({
+    required String batchId,
+    required double markdownPercent,
+    double? customPrice,
+  }) async {
+    setLoading(true);
+    final res = await _repo.applyBatchMarkdown(batchId, markdownPercent, customPrice: customPrice);
+    setLoading(false);
+
+    if (res.success && res.data != null) {
+      final updated = res.data!;
+      final idx = _batches.indexWhere((b) => b.id == batchId);
+      if (idx != -1) {
+        _batches[idx] = updated;
+      }
+      notifyListeners();
+      return true;
+    } else {
+      setError(res.error ?? 'Failed to apply markdown');
+      return false;
+    }
+  }
+
+  /// Write off expired batch (disposal or return to wholesaler)
+  Future<bool> writeOffBatch({
+    required String batchId,
+    required int quantity,
+    required String reason,
+  }) async {
+    setLoading(true);
+    final res = await _repo.writeOffBatch(batchId, quantity, reason);
+    setLoading(false);
+
+    if (res.success && res.data != null) {
+      final updated = res.data!;
+      final idx = _batches.indexWhere((b) => b.id == batchId);
+      if (idx != -1) {
+        if (updated.currentQuantity <= 0) {
+          _batches.removeAt(idx);
+        } else {
+          _batches[idx] = updated;
+        }
+      }
+      notifyListeners();
+      return true;
+    } else {
+      setError(res.error ?? 'Failed to write off batch');
+      return false;
+    }
+  }
+
+  /// Export printable PDF stock audit checklist
+  Future<void> exportAuditSheet({
+    required BuildContext context,
+    String shopName = 'Shop Silo Retail Store',
+    bool isHindi = true,
+  }) async {
+    try {
+      await ExpiryAuditPdfService.printOrShareAuditPdf(
+        items: allTrackedItems,
+        totalCapitalAtRisk: capitalAtRisk30D,
+        expiredCapitalLost: expiredCapitalLost,
+        shopName: shopName,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        CustomSnackbar.showError(context, 'PDF जनरेट करने में त्रुटि: $e');
+      }
     }
   }
 }

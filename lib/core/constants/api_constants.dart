@@ -171,7 +171,10 @@ class ApiConstants {
   // --- 10E. Batch Expiry Radar & Near-Expiry Auto-Markdown ---
   static const String batches = '/api/batches';
   static const String batchesNearExpiry = '/api/batches/near-expiry';
+  static const String batchesSummary = '/api/batches/summary';
   static const String batchMarkdownScan = '/api/batches/markdown-scan';
+  static String batchMarkdown(String id) => '/api/batches/$id/markdown';
+  static String batchWriteOff(String id) => '/api/batches/$id/write-off';
 
   // --- 10F. Khata Daily Micro-Installments ---
   static const String khataMicroPlans = '/api/khata/micro-plans';

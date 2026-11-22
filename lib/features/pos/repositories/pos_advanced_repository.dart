@@ -306,11 +306,62 @@ class PosAdvancedRepository {
       List list = [];
       if (raw is List) {
         list = raw;
-      } else if (raw is Map && raw['data'] is List) {
-        list = raw['data'];
+      } else if (raw is Map) {
+        if (raw['data'] is List) {
+          list = raw['data'];
+        } else if (raw['data'] is Map && raw['data']['batches'] is List) {
+          list = raw['data']['batches'];
+        } else if (raw['batches'] is List) {
+          list = raw['batches'];
+        }
       }
       final items = list.map((e) => ProductBatch.fromJson(e as Map<String, dynamic>)).toList();
       return ApiResponse(success: true, data: items);
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<ExpiryRadarSummary>> getExpirySummary() async {
+    try {
+      final res = await _dio.get(ApiConstants.batchesSummary);
+      final raw = res.data;
+      Map<String, dynamic> data = raw is Map && raw['data'] is Map ? raw['data'] : (raw is Map ? raw as Map<String, dynamic> : {});
+      return ApiResponse(success: true, data: ExpiryRadarSummary.fromJson(data));
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<ProductBatch>> applyBatchMarkdown(String batchId, double percent, {double? customPrice}) async {
+    try {
+      final res = await _dio.put(
+        ApiConstants.batchMarkdown(batchId),
+        data: {
+          'markdown_percent': percent,
+          if (customPrice != null) 'custom_price': customPrice,
+        },
+      );
+      final raw = res.data;
+      Map<String, dynamic> data = raw is Map && raw['data'] is Map ? raw['data'] : (raw is Map ? raw as Map<String, dynamic> : {});
+      return ApiResponse(success: true, data: ProductBatch.fromJson(data));
+    } catch (e) {
+      return ApiResponse.failure(ApiClient.handleError(e));
+    }
+  }
+
+  Future<ApiResponse<ProductBatch>> writeOffBatch(String batchId, int qty, String reason) async {
+    try {
+      final res = await _dio.post(
+        ApiConstants.batchWriteOff(batchId),
+        data: {
+          'quantity': qty,
+          'reason': reason,
+        },
+      );
+      final raw = res.data;
+      Map<String, dynamic> data = raw is Map && raw['data'] is Map ? raw['data'] : (raw is Map ? raw as Map<String, dynamic> : {});
+      return ApiResponse(success: true, data: ProductBatch.fromJson(data));
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
     }

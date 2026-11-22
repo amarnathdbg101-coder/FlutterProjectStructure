@@ -280,6 +280,22 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                           Text('MRP: ₹${item.mrp.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700)),
                         ],
                       ),
+                      if (item.purchaseCost > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              isHindi ? 'खरीद लागत:' : 'Purchase Cost:',
+                              style: TextStyle(fontSize: 11.5, color: context.colorTextMuted),
+                            ),
+                            Text(
+                              '₹${item.purchaseCost.toStringAsFixed(0)}',
+                              style: TextStyle(fontSize: 11.5, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ],
                       const Divider(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -297,6 +313,31 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                     ],
                   ),
                 ),
+                if (item.purchaseCost > 0 && discountedPrice < item.purchaseCost) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFF59E0B)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Color(0xFFB45309), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isHindi
+                                ? '⚠️ यह ऑफर खरीद लागत (₹${item.purchaseCost.toStringAsFixed(0)}) से कम है।'
+                                : '⚠️ Warning: Price is below purchase cost (₹${item.purchaseCost.toStringAsFixed(0)}).',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
                   isHindi ? 'छूट प्रतिशत चुनें:' : 'Select Discount Percentage:',
@@ -342,8 +383,16 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () async {
+                      final batchCtrl = context.read<BatchExpiryController>();
+                      final prodCtrl = context.read<ProductController>();
+                      if (item.isBatchLot && item.batch != null) {
+                        await batchCtrl.applyBatchClearance(
+                          batchId: item.batch!.id,
+                          markdownPercent: selectedPercent,
+                          customPrice: discountedPrice,
+                        );
+                      }
                       if (item.productId != null) {
-                        final prodCtrl = context.read<ProductController>();
                         await prodCtrl.editProduct(item.productId!, {
                           'discount_price': discountedPrice,
                           'attributes': {
@@ -370,6 +419,241 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 1-Tap Write-Off / RTV (Return to Wholesaler) Dialog for Expired Lots
+  void _showWriteOffDialog(ExpiryTrackedItem item) {
+    final isHindi = context.isHindi;
+    final maxQty = item.stockQuantity > 0 ? item.stockQuantity.toInt() : 1;
+    final qtyCtrl = TextEditingController(text: maxQty.toString());
+    String selectedReason = 'VENDOR_RETURN'; // 'VENDOR_RETURN' or 'EXPIRED_DISPOSAL'
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (bContext) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final enteredQty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+          final totalLoss = enteredQty * (item.purchaseCost > 0 ? item.purchaseCost : item.mrp);
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(bContext).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.delete_sweep_rounded, color: Color(0xFFDC2626), size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isHindi ? 'एक्सपायर्ड स्टॉक निस्तारण / वापसी' : 'Expired Stock Write-Off / Return',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            isHindi ? 'शेल्फ से हटाकर इन्वेंट्री सही करें' : 'Remove expired items from live inventory',
+                            style: TextStyle(fontSize: 12, color: context.colorTextMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.colorSurfaceSubtle,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: context.colorBorder),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            '${isHindi ? "उपलब्ध" : "Stock"}: ${item.stockQuantity.toStringAsFixed(0)} ${item.unit}',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isHindi ? 'कुल बहीखाता मूल्य:' : 'Total Book Value:',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            '₹${totalLoss.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFFDC2626)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isHindi ? 'निस्तारण का कारण चुनें:' : 'Select Disposal Reason:',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: Center(
+                          child: Text(
+                            isHindi ? 'थोक वापसी (RTV)' : 'Vendor Return (RTV)',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: selectedReason == 'VENDOR_RETURN' ? FontWeight.w900 : FontWeight.w600,
+                              color: selectedReason == 'VENDOR_RETURN' ? Colors.white : context.colorTextPrimary,
+                            ),
+                          ),
+                        ),
+                        selected: selectedReason == 'VENDOR_RETURN',
+                        selectedColor: AppColors.primary,
+                        backgroundColor: context.colorSurfaceSubtle,
+                        showCheckmark: false,
+                        onSelected: (_) => setModalState(() => selectedReason = 'VENDOR_RETURN'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: Center(
+                          child: Text(
+                            isHindi ? 'नष्ट निस्तारण' : 'Physical Scrap',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: selectedReason == 'EXPIRED_DISPOSAL' ? FontWeight.w900 : FontWeight.w600,
+                              color: selectedReason == 'EXPIRED_DISPOSAL' ? Colors.white : context.colorTextPrimary,
+                            ),
+                          ),
+                        ),
+                        selected: selectedReason == 'EXPIRED_DISPOSAL',
+                        selectedColor: const Color(0xFFDC2626),
+                        backgroundColor: context.colorSurfaceSubtle,
+                        showCheckmark: false,
+                        onSelected: (_) => setModalState(() => selectedReason = 'EXPIRED_DISPOSAL'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: qtyCtrl,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setModalState(() {}),
+                  decoration: InputDecoration(
+                    labelText: isHindi ? 'हटाने की मात्रा (${item.unit})' : 'Quantity to Remove (${item.unit})',
+                    hintText: 'e.g. $maxQty',
+                    prefixIcon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(bContext),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(isHindi ? 'रद्द करें' : 'Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                        label: Text(
+                          isHindi ? 'स्टॉक हटाएं' : 'Confirm Write-Off',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          if (enteredQty <= 0) return;
+
+                          final batchCtrl = context.read<BatchExpiryController>();
+                          if (item.isBatchLot && item.batch != null) {
+                            await batchCtrl.writeOffBatch(
+                              batchId: item.batch!.id,
+                              quantity: enteredQty,
+                              reason: selectedReason,
+                            );
+                          } else if (item.productId != null) {
+                            final prodCtrl = context.read<ProductController>();
+                            final currentStock = item.stockQuantity.toInt();
+                            final remainingStock = (currentStock - enteredQty) > 0 ? (currentStock - enteredQty) : 0;
+                            await prodCtrl.editProduct(item.productId!, {
+                              'stock': remainingStock,
+                            });
+                            await prodCtrl.loadProducts();
+                            if (mounted) {
+                              batchCtrl.syncInventoryProducts(prodCtrl.products);
+                            }
+                          }
+
+                          if (bContext.mounted) {
+                            Navigator.pop(bContext);
+                          }
+                          if (mounted) {
+                            CustomSnackbar.showSuccess(
+                              context,
+                              isHindi
+                                  ? '✓ ${item.name} ($enteredQty ${item.unit}) को इन्वेंट्री से सफलतापूर्वक हटाया गया'
+                                  : '✓ $enteredQty ${item.unit} written off for ${item.name}',
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -844,6 +1128,9 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
       ),
       body: Column(
         children: [
+          // 0. Executive Capital at Risk Hero Panel
+          _buildCapitalAtRiskHero(context, batchCtrl, isHindi),
+
           // 1. Metric Badges Row
           Container(
             color: context.colorSurface,
@@ -1009,6 +1296,197 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                           ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCapitalAtRiskHero(BuildContext context, BatchExpiryController batchCtrl, bool isHindi) {
+    final riskVal = batchCtrl.capitalAtRisk30D;
+    final expiredLoss = batchCtrl.expiredCapitalLost;
+    final criticalRisk = batchCtrl.criticalCapitalAtRisk;
+    final warningRisk = batchCtrl.warningCapitalAtRisk;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.isDark ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.shield_outlined, color: Colors.white, size: 16),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isHindi ? 'कुल जोखिम पूंजी (30 दिन)' : 'Capital at Risk (30 Days)',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.8),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  // Auto Markdown Scan Button
+                  InkWell(
+                    onTap: batchCtrl.isScanningMarkdown
+                        ? null
+                        : () async {
+                            final res = await batchCtrl.runMarkdownScan();
+                            if (res != null && mounted) {
+                              _loadData();
+                            }
+                          },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEA580C),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (batchCtrl.isScanningMarkdown)
+                            const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                            )
+                          else
+                            const Icon(Icons.bolt_rounded, size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            isHindi ? 'ऑटो-छूट' : 'Auto Markdown',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // PDF Export Button
+                  InkWell(
+                    onTap: () {
+                      batchCtrl.exportAuditSheet(
+                        context: context,
+                        isHindi: isHindi,
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.picture_as_pdf_rounded, size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            isHindi ? 'ऑडिट PDF' : 'Audit PDF',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '₹${riskVal.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isHindi ? 'लागत मूल्य पर' : 'at purchase cost',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Sub-pills breakdown
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (expiredLoss > 0)
+                _buildHeroSubPill(
+                  label: isHindi ? 'समाप्त: ₹${expiredLoss.toStringAsFixed(0)}' : 'Expired: ₹${expiredLoss.toStringAsFixed(0)}',
+                  color: const Color(0xFFEF4444),
+                ),
+              if (criticalRisk > 0)
+                _buildHeroSubPill(
+                  label: isHindi ? '0-7 दिन: ₹${criticalRisk.toStringAsFixed(0)}' : '0-7d: ₹${criticalRisk.toStringAsFixed(0)}',
+                  color: const Color(0xFFF97316),
+                ),
+              if (warningRisk > 0)
+                _buildHeroSubPill(
+                  label: isHindi ? '8-30 दिन: ₹${warningRisk.toStringAsFixed(0)}' : '8-30d: ₹${warningRisk.toStringAsFixed(0)}',
+                  color: const Color(0xFFFBBF24),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroSubPill({required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
@@ -1218,9 +1696,19 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                     color: item.stockQuantity > 0 ? context.colorTextPrimary : const Color(0xFFDC2626),
                   ),
                 ),
-                Text(
-                  '₹${item.mrp.toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: AppColors.primary),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'MRP ₹${item.mrp.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.primary),
+                    ),
+                    if (item.purchaseCost > 0)
+                      Text(
+                        '${isHindi ? "लागत" : "Cost"}: ₹${item.purchaseCost.toStringAsFixed(0)}',
+                        style: TextStyle(fontSize: 10.5, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -1263,8 +1751,8 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                 ),
                 const SizedBox(width: 8),
 
-                // 2. Clearance Markdown Discount
-                if (item.daysRemaining <= 30) ...[
+                // 2. Expired Write-Off / RTV OR Clearance Markdown Discount
+                if (item.isExpired) ...[
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -1274,9 +1762,28 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
+                      icon: const Icon(Icons.delete_sweep_rounded, size: 14),
+                      label: Text(
+                        isHindi ? 'वापसी / नष्ट' : 'Write-Off / RTV',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () => _showWriteOffDialog(item),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else if (item.daysRemaining <= 30) ...[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEA580C),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                       icon: const Icon(Icons.discount_rounded, size: 14),
                       label: Text(
-                        isHindi ? 'छूट लगाएं' : 'Markdown',
+                        isHindi ? 'क्लियरेंस छूट' : 'Markdown',
                         style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                       ),
                       onPressed: () => _showClearanceDiscountDialog(item),
