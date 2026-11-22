@@ -381,7 +381,11 @@ class ProcurementController extends BaseController {
           category: prod.category,
           qty: reorderQty,
           estimatedPrice: estRate,
-          notes: 'Auto-imported from Low Stock Alert',
+          dealerName: prod.wholesalerName,
+          dealerPhone: prod.wholesalerPhone,
+          notes: prod.wholesalerName.isNotEmpty
+              ? 'Wholesaler: ${prod.wholesalerName}'
+              : 'Auto-imported from Low Stock Alert',
         );
 
         _items.insert(0, item);
@@ -393,7 +397,11 @@ class ProcurementController extends BaseController {
           qty: reorderQty,
           category: prod.category,
           estimatedPrice: estRate,
-          notes: 'Auto-imported from Low Stock Alert',
+          dealerName: prod.wholesalerName,
+          dealerPhone: prod.wholesalerPhone,
+          notes: prod.wholesalerName.isNotEmpty
+              ? 'Wholesaler: ${prod.wholesalerName}'
+              : 'Auto-imported from Low Stock Alert',
         );
       }
     }

@@ -280,6 +280,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                 qty: '$reorderQty $defaultUnit',
                 category: prod.category.isNotEmpty ? prod.category : 'General Store',
                 estimatedPrice: defaultRate,
+                dealerName: prod.wholesalerName,
+                dealerPhone: prod.wholesalerPhone,
                 notes: prod.barcode.isNotEmpty ? 'Barcode: ${prod.barcode}' : '',
               );
             }
@@ -331,6 +333,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     final TextEditingController rateCtrl = TextEditingController(
       text: defaultRate > 0 ? defaultRate.toStringAsFixed(0) : '',
     );
+    final TextEditingController dealerCtrl = TextEditingController(text: prod.wholesalerName);
+    final TextEditingController dealerPhoneCtrl = TextEditingController(text: prod.wholesalerPhone);
     String selectedUnit = defaultUnit;
 
     showModalBottomSheet(
@@ -646,6 +650,115 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    // Wholesaler Supplier Selector for Quick Add
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: ctx.colorSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: ctx.colorBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.storefront_rounded, size: 16, color: AppColors.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    ctx.isHindi ? 'सप्लायर / थोक व्यापारी:' : 'Wholesale Supplier:',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                              if (prod.hasWholesaler)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    ctx.isHindi ? 'पसंदीदा' : 'Default',
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (controller.wholesalers.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  for (final w in controller.wholesalers)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: InkWell(
+                                        onTap: () {
+                                          setModalState(() {
+                                            if (dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()) {
+                                              dealerCtrl.clear();
+                                              dealerPhoneCtrl.clear();
+                                            } else {
+                                              dealerCtrl.text = w.name;
+                                              dealerPhoneCtrl.text = w.phone;
+                                            }
+                                          });
+                                        },
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                          decoration: BoxDecoration(
+                                            color: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                                ? AppColors.primary.withValues(alpha: 0.15)
+                                                : ctx.colorSurface,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                                  ? AppColors.primary
+                                                  : ctx.colorBorder,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            w.name,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                              color: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                                  ? AppColors.primary
+                                                  : ctx.colorTextPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: dealerCtrl,
+                            decoration: InputDecoration(
+                              hintText: ctx.isHindi ? 'सप्लायर का नाम दर्ज करें' : 'Enter Wholesaler Name',
+                              prefixIcon: const Icon(Icons.storefront_outlined, size: 16),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onChanged: (_) => setModalState(() {}),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
                     // Summary banner
                     if (totalEst > 0) ...[
                       Container(
@@ -689,14 +802,39 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         final q = qtyCtrl.text.trim().isEmpty ? '1' : qtyCtrl.text.trim();
                         final formattedQty = '$q $selectedUnit';
                         final rate = double.tryParse(rateCtrl.text.trim()) ?? 0.0;
+                        final enteredDealer = dealerCtrl.text.trim();
+                        final enteredDealerPhone = dealerPhoneCtrl.text.trim();
 
                         controller.addItem(
                           name: prod.name,
                           qty: formattedQty,
                           category: prod.category.isNotEmpty ? prod.category : 'General Store',
                           estimatedPrice: rate,
+                          dealerName: enteredDealer,
+                          dealerPhone: enteredDealerPhone,
                           notes: prod.barcode.isNotEmpty ? 'Barcode: ${prod.barcode}' : '',
                         );
+
+                        // If merchant entered a new or changed supplier, sync to product inventory
+                        if (enteredDealer.isNotEmpty && enteredDealer != prod.wholesalerName) {
+                          try {
+                            final updatedAttr = Map<String, dynamic>.from(prod.attributes);
+                            updatedAttr['wholesaler_name'] = enteredDealer;
+                            if (enteredDealerPhone.isNotEmpty) updatedAttr['wholesaler_phone'] = enteredDealerPhone;
+                            context.read<ProductController>().editProduct(
+                              prod.id,
+                              {
+                                ...prod.toJson(),
+                                'cost_price': rate > 0 ? rate : prod.costPrice,
+                                'attributes': updatedAttr,
+                              },
+                            );
+
+                            if (!controller.wholesalers.any((w) => w.name.trim().toLowerCase() == enteredDealer.toLowerCase())) {
+                              controller.addWholesaler(name: enteredDealer, phone: enteredDealerPhone);
+                            }
+                          } catch (_) {}
+                        }
 
                         try {
                           HapticFeedback.mediumImpact();
@@ -1880,6 +2018,354 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     );
   }
 
+  /// 🔄 Quick Supplier & Best Rate Change Sheet
+  /// Directly lets the merchant change which wholesaler is offering a better price for this product,
+  /// and automatically synchronizes the new wholesaler and best cost price to the product in store inventory.
+  void _showQuickChangeSupplierSheet(
+    BuildContext context,
+    ProcurementItemModel item,
+    ProcurementController controller,
+    ProductController prodController,
+  ) {
+    // Find matching product in store inventory
+    ProductModel? matchedProduct;
+    for (final p in prodController.products) {
+      if (p.name.trim().toLowerCase() == item.name.trim().toLowerCase()) {
+        matchedProduct = p;
+        break;
+      }
+    }
+
+    final TextEditingController dealerCtrl = TextEditingController(text: item.dealerName);
+    final TextEditingController dealerPhoneCtrl = TextEditingController(text: item.dealerPhone);
+    final TextEditingController rateCtrl = TextEditingController(
+      text: item.estimatedPrice > 0 ? item.estimatedPrice.toStringAsFixed(0) : '',
+    );
+    bool syncToInventory = true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colorSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final double bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+            final double newRate = double.tryParse(rateCtrl.text.trim()) ?? 0.0;
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Drag Handle
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: ctx.colorBorder,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+
+                    // Header
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.swap_horiz_rounded, size: 22, color: AppColors.primary),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                ctx.isHindi ? 'सप्लायर व बेस्ट रेट बदलें' : 'Change Supplier & Best Rate',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                item.name,
+                                style: TextStyle(fontSize: 12.5, color: ctx.colorTextMuted, fontWeight: FontWeight.w600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Guidance Banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              ctx.isHindi
+                                  ? 'यदि कोई दूसरा सप्लायर कम दाम लगा रहा है, तो यहां सप्लायर व नया रेट अपडेट करें।'
+                                  : 'If another supplier offers a lower price, update the supplier and price here.',
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.primary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Quick Directory Selector
+                    if (controller.wholesalers.isNotEmpty) ...[
+                      Text(
+                        ctx.isHindi ? 'सप्लायर सूची से चुनें:' : 'Select from Directory:',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: ctx.colorTextMuted),
+                      ),
+                      const SizedBox(height: 6),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final w in controller.wholesalers)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: InkWell(
+                                  onTap: () {
+                                    setModalState(() {
+                                      dealerCtrl.text = w.name;
+                                      dealerPhoneCtrl.text = w.phone;
+                                    });
+                                  },
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                    decoration: BoxDecoration(
+                                      color: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                          ? AppColors.primary.withValues(alpha: 0.15)
+                                          : ctx.colorSurface,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                            ? AppColors.primary
+                                            : ctx.colorBorder,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      w.name,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: dealerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                            ? AppColors.primary
+                                            : ctx.colorTextPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Supplier Name Input
+                    TextFormField(
+                      controller: dealerCtrl,
+                      decoration: InputDecoration(
+                        labelText: ctx.isHindi ? 'नया सप्लायर / थोक व्यापारी *' : 'New Wholesaler / Supplier *',
+                        hintText: ctx.isHindi ? 'उदा. गुप्ता ब्रदर्स मंडी' : 'e.g. Gupta Brothers',
+                        prefixIcon: const Icon(Icons.storefront_outlined, size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      ),
+                      onChanged: (_) => setModalState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Supplier Phone & Rate Row
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: TextFormField(
+                            controller: rateCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: InputDecoration(
+                              labelText: ctx.isHindi ? 'सस्ता / नया रेट (₹)' : 'New Low Rate (₹)',
+                              hintText: '0',
+                              prefixText: '₹ ',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            ),
+                            onChanged: (_) => setModalState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 6,
+                          child: TextFormField(
+                            controller: dealerPhoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            decoration: InputDecoration(
+                              labelText: ctx.isHindi ? 'फ़ोन नंबर' : 'Phone Number',
+                              hintText: '9876543210',
+                              prefixIcon: const Icon(Icons.phone_outlined, size: 18),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Sync to Inventory Toggle
+                    if (matchedProduct != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: ctx.colorSurfaceSubtle,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: ctx.colorBorder),
+                        ),
+                        child: SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: Text(
+                            ctx.isHindi
+                                ? 'उत्पाद इन्वेंटरी में भी सप्लायर व रेट अपडेट करें'
+                                : 'Sync new supplier & rate to product inventory',
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            ctx.isHindi
+                                ? '"${matchedProduct.name}" की खरीद लागत ₹${newRate > 0 ? newRate.toStringAsFixed(0) : matchedProduct.costPrice.toStringAsFixed(0)} व सप्लायर सेट होगा'
+                                : 'Updates cost price and preferred supplier in store inventory',
+                            style: TextStyle(fontSize: 11, color: ctx.colorTextMuted),
+                          ),
+                          value: syncToInventory,
+                          onChanged: (val) => setModalState(() => syncToInventory = val),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+
+                    // Submit Button
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                      label: Text(
+                        ctx.isHindi ? '✓ सप्लायर व रेट अपडेट करें' : '✓ Update Supplier & Rate',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        final newDealer = dealerCtrl.text.trim();
+                        final newPhone = dealerPhoneCtrl.text.trim();
+                        final rate = double.tryParse(rateCtrl.text.trim()) ?? item.estimatedPrice;
+
+                        if (newDealer.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(ctx.isHindi ? 'कृपया सप्लायर का नाम दर्ज करें' : 'Please enter supplier name'),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                          return;
+                        }
+
+                        // 1. Update Mandi item
+                        controller.updateItem(
+                          id: item.id,
+                          name: item.name,
+                          qty: item.qty,
+                          category: item.category,
+                          estimatedPrice: rate,
+                          dealerName: newDealer,
+                          dealerPhone: newPhone,
+                          notes: item.notes,
+                        );
+
+                        // 2. Auto-register in directory if new
+                        if (!controller.wholesalers.any((w) => w.name.trim().toLowerCase() == newDealer.toLowerCase())) {
+                          controller.addWholesaler(name: newDealer, phone: newPhone);
+                        }
+
+                        // 3. Sync to Product in Inventory if enabled
+                        if (syncToInventory && matchedProduct != null) {
+                          final updatedAttr = Map<String, dynamic>.from(matchedProduct.attributes);
+                          updatedAttr['wholesaler_name'] = newDealer;
+                          if (newPhone.isNotEmpty) updatedAttr['wholesaler_phone'] = newPhone;
+                          prodController.editProduct(
+                            matchedProduct.id,
+                            {
+                              ...matchedProduct.toJson(),
+                              'cost_price': rate > 0 ? rate : matchedProduct.costPrice,
+                              'attributes': updatedAttr,
+                            },
+                          );
+                        }
+
+                        Navigator.pop(sheetCtx);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    ctx.isHindi
+                                        ? '✓ "${item.name}" का सप्लायर "$newDealer"${rate > 0 ? " (₹${rate.toStringAsFixed(0)})" : ""} अपडेट हो गया!'
+                                        : '✓ Supplier updated to "$newDealer"${rate > 0 ? " (₹${rate.toStringAsFixed(0)})" : ""}!',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            backgroundColor: AppColors.success,
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// Opens the professional, structured Add/Edit Sourcing Item Sheet
   void _showAddEditSourcingItemSheet(
     BuildContext context,
@@ -1920,6 +2406,18 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     String selectedUnit = initialUnit;
     bool showDealerNotes = editItem != null &&
         (editItem.dealerName.isNotEmpty || editItem.notes.isNotEmpty || editItem.dealerPhone.isNotEmpty);
+
+    ProductModel? matchedProduct;
+    final initialName = (editItem?.name ?? '').trim().toLowerCase();
+    if (initialName.isNotEmpty) {
+      for (final p in prodController.products) {
+        if (p.name.trim().toLowerCase() == initialName) {
+          matchedProduct = p;
+          break;
+        }
+      }
+    }
+    bool syncToInventory = true;
 
     showModalBottomSheet(
       context: context,
@@ -2498,7 +2996,36 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
+
+                      // Optional 1-Tap Sync to Store Inventory
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: ctx.colorSurfaceSubtle,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: ctx.colorBorder),
+                        ),
+                        child: SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: Text(
+                            context.isHindi
+                                ? 'उत्पाद इन्वेंटरी में भी सप्लायर व रेट अपडेट करें'
+                                : 'Sync supplier & rate to store inventory',
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            context.isHindi
+                                ? 'स्टोर कैटलॉग में इस सामान की खरीद लागत व मुख्य सप्लायर सेट होगा'
+                                : 'Updates cost price and preferred wholesaler in store catalog',
+                            style: TextStyle(fontSize: 11, color: ctx.colorTextMuted),
+                          ),
+                          value: syncToInventory,
+                          onChanged: (val) => setModalState(() => syncToInventory = val),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
 
                       // 5. SUBMIT ACTION BUTTON
                       AppButton(
@@ -2566,6 +3093,35 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                               ),
                             );
                           }
+
+                          // 3. Sync to Product in Inventory if enabled & supplier entered
+                          if (syncToInventory && enteredDealer.isNotEmpty) {
+                            try {
+                              ProductModel? targetProd = matchedProduct;
+                              if (targetProd == null) {
+                                for (final p in prodController.products) {
+                                  if (p.name.trim().toLowerCase() == name.toLowerCase()) {
+                                    targetProd = p;
+                                    break;
+                                  }
+                                }
+                              }
+                              if (targetProd != null) {
+                                final updatedAttr = Map<String, dynamic>.from(targetProd.attributes);
+                                updatedAttr['wholesaler_name'] = enteredDealer;
+                                if (enteredDealerPhone.isNotEmpty) updatedAttr['wholesaler_phone'] = enteredDealerPhone;
+                                prodController.editProduct(
+                                  targetProd.id,
+                                  {
+                                    ...targetProd.toJson(),
+                                    'cost_price': rate > 0 ? rate : targetProd.costPrice,
+                                    'attributes': updatedAttr,
+                                  },
+                                );
+                              }
+                            } catch (_) {}
+                          }
+
                           Navigator.pop(sheetCtx);
                         },
                       ),
@@ -3273,9 +3829,60 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                           ),
                                         ),
                                         if (item.dealerName.isNotEmpty)
-                                          Text(
-                                            item.dealerName,
-                                            style: TextStyle(fontSize: 11, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+                                          InkWell(
+                                            borderRadius: BorderRadius.circular(6),
+                                            onTap: () => _showQuickChangeSupplierSheet(context, item, controller, prodController),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.storefront_rounded, size: 12, color: AppColors.primary),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      item.dealerName,
+                                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 3),
+                                                  const Icon(Icons.swap_horiz_rounded, size: 12, color: AppColors.primary),
+                                                ],
+                                              ),
+                                            ),
+                                          )
+                                        else
+                                          InkWell(
+                                            borderRadius: BorderRadius.circular(6),
+                                            onTap: () => _showQuickChangeSupplierSheet(context, item, controller, prodController),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.warning.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.storefront_outlined, size: 12, color: AppColors.warning),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      context.isHindi ? '+ सप्लायर चुनें (सस्ता रेट)' : '+ Assign Supplier',
+                                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.warning),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                           ),
                                       ],
                                     ),
@@ -3306,6 +3913,14 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                 elevation: 3,
                                 onSelected: (val) {
                                   switch (val) {
+                                    case 'change_supplier':
+                                      _showQuickChangeSupplierSheet(
+                                        context,
+                                        item,
+                                        controller,
+                                        prodController,
+                                      );
+                                      break;
                                     case 'edit':
                                       _showAddEditSourcingItemSheet(
                                         context,
@@ -3353,6 +3968,16 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                   }
                                 },
                                 itemBuilder: (ctx) => [
+                                  PopupMenuItem<String>(
+                                    value: 'change_supplier',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.swap_horiz_rounded, size: 18, color: AppColors.primary),
+                                        const SizedBox(width: 10),
+                                        Text(ctx.isHindi ? 'सप्लायर / सस्ता रेट बदलें' : 'Change Supplier / Rate'),
+                                      ],
+                                    ),
+                                  ),
                                   PopupMenuItem<String>(
                                     value: 'edit',
                                     child: Row(

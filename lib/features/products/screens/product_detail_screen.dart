@@ -1735,6 +1735,48 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 ),
               ),
             ],
+
+            // Preferred Wholesaler / Mandi Supplier
+            if (p.hasWholesaler) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: context.colorSurfaceSubtle,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.colorBorder),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.storefront_rounded, size: 15, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        context.isHindi
+                            ? 'थोक सप्लायर: ${p.wholesalerName}${p.wholesalerPhone.isNotEmpty ? ' (${p.wholesalerPhone})' : ''}'
+                            : 'Wholesale Supplier: ${p.wholesalerName}${p.wholesalerPhone.isNotEmpty ? ' (${p.wholesalerPhone})' : ''}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: context.colorTextPrimary,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        context.isHindi ? 'मंडी सिंक' : 'Mandi Linked',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ],
       ),

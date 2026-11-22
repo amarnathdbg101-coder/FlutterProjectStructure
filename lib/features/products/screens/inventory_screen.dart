@@ -24,6 +24,7 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../../../core/widgets/merchant_shell.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../../procurement/controllers/procurement_controller.dart';
 import '../controllers/category_controller.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
@@ -1062,6 +1063,12 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
     final expiryCtrl = TextEditingController(
       text: initialProduct?.attributes['expiry_date']?.toString() ?? '',
     );
+    final wholesalerCtrl = TextEditingController(
+      text: initialProduct?.wholesalerName ?? '',
+    );
+    final wholesalerPhoneCtrl = TextEditingController(
+      text: initialProduct?.wholesalerPhone ?? '',
+    );
 
     bool isQuickMode = !isEdit;
     ProductModel? matchedProduct;
@@ -1105,6 +1112,16 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
             kLow != 'category_name' &&
             kLow != 'category' &&
             kLow != 'unit' &&
+            kLow != 'batch_number' &&
+            kLow != 'expiry_date' &&
+            kLow != 'wholesaler_name' &&
+            kLow != 'wholesaler' &&
+            kLow != 'wholesaler_phone' &&
+            kLow != 'supplier_name' &&
+            kLow != 'supplier' &&
+            kLow != 'supplier_phone' &&
+            kLow != 'dealer_name' &&
+            kLow != 'dealer_phone' &&
             v != null &&
             v.toString().trim().isNotEmpty) {
           customAttrPairs.add(MapEntry(
@@ -1138,6 +1155,166 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
           final boxCostVal = double.tryParse(boxCostCtrl.text.trim()) ?? 0.0;
           final boxQtyVal = double.tryParse(boxQtyCtrl.text.trim()) ?? 0.0;
           final calculatedUnitCost = (boxCostVal > 0 && boxQtyVal > 0) ? (boxCostVal / boxQtyVal) : 0.0;
+
+          Widget buildWholesalerSupplierSection() {
+            final procCtrl = context.read<ProcurementController>();
+            final savedWholesalers = procCtrl.wholesalers;
+
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: sheetCtx.colorSurfaceSubtle,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: sheetCtx.colorBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.storefront_rounded, size: 18, color: AppColors.primary),
+                          const SizedBox(width: 8),
+                          Text(
+                            sheetCtx.isHindi ? 'थोक विक्रेता (Wholesaler)' : 'Wholesale Supplier',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.sync_alt_rounded, size: 11, color: AppColors.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              sheetCtx.isHindi ? 'मंडी लिस्ट लिंक' : 'Mandi Auto-Link',
+                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    sheetCtx.isHindi
+                        ? 'स्टॉक खत्म होने पर मंडी लिस्ट में स्वतः दिखेगा कि किस सप्लायर से सही दाम में माल लेना है।'
+                        : 'Auto-suggests this supplier in your Mandi procurement list for the best price.',
+                    style: TextStyle(fontSize: 11, color: sheetCtx.colorTextMuted),
+                  ),
+                  if (savedWholesalers.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Text(
+                            sheetCtx.isHindi ? 'सप्लायर चुनें: ' : 'Quick Select: ',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: sheetCtx.colorTextMuted),
+                          ),
+                          for (final w in savedWholesalers)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: InkWell(
+                                onTap: () {
+                                  setModalState(() {
+                                    if (wholesalerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()) {
+                                      wholesalerCtrl.clear();
+                                      wholesalerPhoneCtrl.clear();
+                                    } else {
+                                      wholesalerCtrl.text = w.name;
+                                      wholesalerPhoneCtrl.text = w.phone;
+                                    }
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: wholesalerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                        ? AppColors.primary.withValues(alpha: 0.15)
+                                        : sheetCtx.colorSurface,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: wholesalerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                          ? AppColors.primary
+                                          : sheetCtx.colorBorder,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    w.name,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: wholesalerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: wholesalerCtrl.text.trim().toLowerCase() == w.name.trim().toLowerCase()
+                                          ? AppColors.primary
+                                          : sheetCtx.colorTextPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: TextField(
+                          controller: wholesalerCtrl,
+                          decoration: InputDecoration(
+                            labelText: sheetCtx.isHindi ? 'थोक व्यापारी का नाम' : 'Wholesaler Name',
+                            hintText: sheetCtx.isHindi ? 'उदा. श्याम ट्रेडिंग कंपनी' : 'e.g. Shyam Trading Co.',
+                            prefixIcon: const Icon(Icons.storefront_outlined, size: 18),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            suffixIcon: wholesalerCtrl.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 16),
+                                    onPressed: () {
+                                      wholesalerCtrl.clear();
+                                      wholesalerPhoneCtrl.clear();
+                                      setModalState(() {});
+                                    },
+                                  )
+                                : null,
+                          ),
+                          onChanged: (_) => setModalState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 5,
+                        child: TextField(
+                          controller: wholesalerPhoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: sheetCtx.isHindi ? 'फ़ोन नंबर (वैकल्पिक)' : 'Phone (Optional)',
+                            hintText: '9876543210',
+                            prefixIcon: const Icon(Icons.phone_outlined, size: 18),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
 
           Future<void> checkBarcodeDuplicate(String code) async {
             final clean = code.trim();
@@ -2298,7 +2475,11 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                             ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
+
+                      // 🏪 WHOLESALER / SUPPLIER SELECTION (Quick Mode)
+                      buildWholesalerSupplierSection(),
+                      const SizedBox(height: 10),
 
                       // Accordion / Switch to Full Catalog Mode
                       OutlinedButton.icon(
@@ -3442,6 +3623,10 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+
+                    // 🏪 WHOLESALER / SUPPLIER SELECTION (Full Mode)
+                    buildWholesalerSupplierSection(),
                     const SizedBox(height: 12),
 
                     // SECTION 5: DYNAMIC CUSTOM SPECIFICATIONS & ATTRIBUTES (PRODUCT DETAILS)
@@ -3867,6 +4052,12 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                                   if (expiryCtrl.text.trim().isNotEmpty) {
                                     attr['expiry_date'] = expiryCtrl.text.trim();
                                   }
+                                  if (wholesalerCtrl.text.trim().isNotEmpty) {
+                                    attr['wholesaler_name'] = wholesalerCtrl.text.trim();
+                                  }
+                                  if (wholesalerPhoneCtrl.text.trim().isNotEmpty) {
+                                    attr['wholesaler_phone'] = wholesalerPhoneCtrl.text.trim();
+                                  }
                                   for (var pair in customAttrPairs) {
                                     final k = pair.key.text.trim();
                                     final v = pair.value.text.trim();
@@ -3887,6 +4078,21 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
 
                                   // 1. Instantly close modal sheet (0ms waiting for merchant)
                                   Navigator.pop(sheetCtx);
+
+                                  // Auto-register new wholesaler to directory if entered
+                                  final enteredWholesaler = wholesalerCtrl.text.trim();
+                                  final enteredWholesalerPhone = wholesalerPhoneCtrl.text.trim();
+                                  if (enteredWholesaler.isNotEmpty) {
+                                    try {
+                                      final procCtrl = context.read<ProcurementController>();
+                                      if (!procCtrl.wholesalers.any((w) => w.name.trim().toLowerCase() == enteredWholesaler.toLowerCase())) {
+                                        procCtrl.addWholesaler(
+                                          name: enteredWholesaler,
+                                          phone: enteredWholesalerPhone,
+                                        );
+                                      }
+                                    } catch (_) {}
+                                  }
 
                                   // 2. Instantly show success confirmation toast
                                   ScaffoldMessenger.of(context).showSnackBar(

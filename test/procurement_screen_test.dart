@@ -57,10 +57,12 @@ void main() {
       await tester.pumpWidget(buildTestScreen());
       await tester.pumpAndSettle();
 
-      // Verify dual FABs (AI Mandi Scan + Manual Add Item) are present
-      expect(find.byType(FloatingActionButton), findsNWidgets(2));
-      expect(find.text('📸 AI Scan'), findsOneWidget);
-      expect(find.text('Add Item'), findsOneWidget);
+      // Verify FAB is present
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(FloatingActionButton), matching: find.text('Add Sourcing Item')),
+        findsOneWidget,
+      );
 
       // Verify summary banner shows 0 items
       expect(find.text('0 Items'), findsOneWidget);
@@ -165,8 +167,8 @@ void main() {
       expect(find.text('Cotton Petticoat - Sugapankhi'), findsOneWidget);
       expect(find.text('Tata Salt 1kg Pouch'), findsOneWidget);
 
-      // Verify dealer actions (Call & WhatsApp) present for item with phone
-      expect(find.byIcon(Icons.phone_rounded), findsOneWidget);
+      // Verify dealer actions & supplier badge present for item with phone
+      expect(find.text('Gupta Wholesalers'), findsOneWidget);
       expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
 
       // Verify search field exists
@@ -175,6 +177,7 @@ void main() {
 
       // Search for 'petticoat'
       await tester.enterText(searchFieldFinder, 'petticoat');
+      await tester.pump(const Duration(milliseconds: 350));
       await tester.pumpAndSettle();
 
       // Petticoat should remain, Tata Salt filtered out
@@ -183,9 +186,43 @@ void main() {
 
       // Search for nonexistent item
       await tester.enterText(searchFieldFinder, 'Maggi Noodles');
+      await tester.pump(const Duration(milliseconds: 350));
       await tester.pumpAndSettle();
 
       expect(find.text('No matching items'), findsOneWidget);
+    });
+
+    testWidgets('displays interactive supplier badge and opens quick supplier change sheet', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+
+      await LocalCacheService.saveProcurementItems([
+        ProcurementItemModel(
+          id: 'item_supplier_demo',
+          name: 'Fortune Basmati Rice',
+          qty: '5 बोरी (Bags)',
+          category: 'Grocery & Staples',
+          estimatedPrice: 3200,
+          dealerName: 'Shyam Traders',
+          dealerPhone: '9876500000',
+        ),
+      ]);
+
+      procCtrl = ProcurementController();
+
+      await tester.pumpWidget(buildTestScreen());
+      await tester.pumpAndSettle();
+
+      // Verify supplier badge is rendered
+      expect(find.text('Shyam Traders'), findsOneWidget);
+
+      // Tap supplier badge to open quick change sheet
+      await tester.tap(find.text('Shyam Traders'));
+      await tester.pumpAndSettle();
+
+      // Verify quick supplier change sheet appears
+      expect(find.text('Change Supplier & Best Rate'), findsOneWidget);
+      expect(find.text('Fortune Basmati Rice'), findsNWidgets(2)); // Card & sheet header
+      expect(find.byType(ElevatedButton), findsOneWidget); // Submit button
     });
   });
 }

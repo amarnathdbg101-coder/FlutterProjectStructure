@@ -510,8 +510,8 @@ class CustomerPrivacyShield {
     'floor_price', 'floorprice', 'min_price', 'bottom_price', 'allow_bargain', 'is_bargain_allowed',
 
     // Supplier & Dealer Contacts
-    'supplier', 'supplier_name', 'distributor', 'distributor_name', 'vendor',
-    'dealer', 'dealer_name', 'dealer_phone', 'wholesaler',
+    'supplier', 'supplier_name', 'supplier_phone', 'distributor', 'distributor_name', 'vendor',
+    'dealer', 'dealer_name', 'dealer_phone', 'wholesaler', 'wholesaler_name', 'wholesaler_phone',
 
     // Inventory Restocking Thresholds
     'reorder_point', 'reorder_qty', 'threshold', 'stock_alert_threshold',
@@ -725,6 +725,27 @@ class ProductModel {
   /// Public specifications filtered for safe customer storefront viewing
   List<MapEntry<String, String>> get customerSpecifications =>
       CustomerPrivacyShield.extractPublicSpecifications(this);
+
+  /// Preferred Wholesaler / Supplier Name (Stored safely inside attributes JSONB)
+  String get wholesalerName => (attributes['wholesaler_name'] ??
+          attributes['wholesaler'] ??
+          attributes['supplier_name'] ??
+          attributes['supplier'] ??
+          attributes['dealer_name'] ??
+          '')
+      .toString()
+      .trim();
+
+  /// Preferred Wholesaler / Supplier Phone Contact
+  String get wholesalerPhone => (attributes['wholesaler_phone'] ??
+          attributes['supplier_phone'] ??
+          attributes['dealer_phone'] ??
+          '')
+      .toString()
+      .trim();
+
+  /// Whether product has a designated supplier/wholesaler assigned
+  bool get hasWholesaler => wholesalerName.isNotEmpty;
 
   ProductModel copyWith({
     dynamic id,
