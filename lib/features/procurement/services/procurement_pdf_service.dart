@@ -116,7 +116,17 @@ class ProcurementPdfService {
     }
   }
 
+  static double _parseQtyNumber(String qtyStr) {
+    final clean = qtyStr.trim();
+    final match = RegExp(r'^([0-9]+(?:\.[0-9]+)?)').firstMatch(clean);
+    if (match != null) {
+      return double.tryParse(match.group(1)!) ?? 1.0;
+    }
+    return 1.0;
+  }
+
   /// Builds printable A4 PDF bytes for the given list of procurement items.
+  /// Designed specifically for wholesale Mandi procurement with zero checkbox tick clutter.
   static Future<Uint8List> generateProcurementPdf({
     required String shopName,
     required List<ProcurementItemModel> items,
@@ -128,7 +138,8 @@ class ProcurementPdfService {
     final logoImg = await _getLogoImage();
     final pdf = pw.Document(theme: theme);
 
-    final dateStr = DateFormat('dd-MMM-yyyy HH:mm').format(DateTime.now());
+    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
+    final poRefNo = 'PO-MND-${DateFormat('yyMMdd').format(DateTime.now())}-${(items.length * 19).toString().padLeft(3, '0')}';
     final cachedShop = LocalCacheService.getShop();
     final cleanShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Merchant'
         ? shopName.trim()
@@ -148,210 +159,424 @@ class ProcurementPdfService {
                 ? cachedShop.whatsappNumber.trim()
                 : null));
 
-    // Executive Color Palette
-    const cTopBanner = PdfColor.fromInt(0xFF0F172A); // #0f172a
-    const cHeaderSub = PdfColor.fromInt(0xFF94A3B8); // #94a3b8
-    const cMuted = PdfColor.fromInt(0xFF475569);     // #475569
-    const cTblHeader = PdfColor.fromInt(0xFF312E81); // #312e81
-    const cAltRow = PdfColor.fromInt(0xFFF8FAFC);    // #f8fafc
-    const cBorder = PdfColor.fromInt(0xFFE2E8F0);    // #e2e8f0
-    const cCardBg = PdfColor.fromInt(0xFFF8FAFC);    // #f8fafc
-    const cCardBorder = PdfColor.fromInt(0xFFCBD5E1);// #cbd5e1
-    const cBlueAccent = PdfColor.fromInt(0xFF1E3A8A);// #1e3a8a
+    // Calculate total procurement estimate
+    final computedTotalBudget = items.fold(0.0, (sum, it) {
+      final q = _parseQtyNumber(it.qty);
+      return sum + (it.estimatedPrice > 0 ? (q * it.estimatedPrice) : 0.0);
+    });
+    final effectiveTotal = totalBudget > 0 ? totalBudget : computedTotalBudget;
+
+    final uniqueDealers = items
+        .map((it) => it.dealerName.trim())
+        .where((d) => d.isNotEmpty && d != '-')
+        .toSet()
+        .toList();
+
+    // Professional Executive Wholesale Palette
+    const cTopBanner = PdfColor.fromInt(0xFF0F172A); // #0f172a Deep Slate Navy
+    const cTblHeader = PdfColor.fromInt(0xFF1E3A8A); // #1e3a8a Deep Royal Blue
+    const cBlueAccent = PdfColor.fromInt(0xFF2563EB); // #2563eb Primary Accent
+    const cTextDark = PdfColor.fromInt(0xFF0F172A);
+    const cMuted = PdfColor.fromInt(0xFF64748B);
+    const cAltRow = PdfColor.fromInt(0xFFF8FAFC);
+    const cBorder = PdfColor.fromInt(0xFFCBD5E1);
+    const cSuccessGreen = PdfColor.fromInt(0xFF166534);
+    const cLightBg = PdfColor.fromInt(0xFFF1F5F9);
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.zero,
+        margin: const pw.EdgeInsets.fromLTRB(24, 20, 24, 20),
+        header: (pw.Context context) {
+          if (context.pageNumber > 1) {
+            return pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 10),
+              padding: const pw.EdgeInsets.only(bottom: 5),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.6)),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    '${cleanShopName.toUpperCase()} • MANDI WHOLESALE PURCHASE ORDER ($poRefNo)',
+                    style: pw.TextStyle(fontSize: 8.0, fontWeight: pw.FontWeight.bold, color: cTextDark),
+                  ),
+                  pw.Text(
+                    dateStr,
+                    style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
+                  ),
+                ],
+              ),
+            );
+          }
+          return pw.SizedBox.shrink();
+        },
+        footer: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(top: 10),
+            padding: const pw.EdgeInsets.only(top: 5),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(top: pw.BorderSide(color: cBorder, width: 0.6)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'ShopSilo Retail Wholesale OS • Mandi Procurement Requisition Sheet',
+                  style: const pw.TextStyle(fontSize: 7.2, color: cMuted),
+                ),
+                pw.Text(
+                  'Page ${context.pageNumber} of ${context.pagesCount}',
+                  style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: cTextDark),
+                ),
+              ],
+            ),
+          );
+        },
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              // 1. TOP FULL-WIDTH DARK NAVY EXECUTIVE BANNER
-              pw.Container(
+          return [
+            // 1. TOP EXECUTIVE HEADER BANNER
+            pw.Container(
+              decoration: const pw.BoxDecoration(
                 color: cTopBanner,
-                padding: const pw.EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.center,
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    if (logoImg != null) ...[
-                      pw.Container(
-                        width: 36,
-                        height: 30,
-                        margin: const pw.EdgeInsets.only(right: 12),
-                        child: pw.Image(logoImg, fit: pw.BoxFit.contain),
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
+              ),
+              padding: const pw.EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Row(
+                    children: [
+                      if (logoImg != null) ...[
+                        pw.Container(
+                          width: 32,
+                          height: 28,
+                          margin: const pw.EdgeInsets.only(right: 10),
+                          child: pw.Image(logoImg, fit: pw.BoxFit.contain),
+                        ),
+                      ],
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            cleanShopName.toUpperCase(),
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15, color: PdfColors.white),
+                          ),
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            'MANDI WHOLESALE PURCHASE ORDER (थोक खरीद मांग पत्र)',
+                            style: const pw.TextStyle(fontSize: 8.0, color: PdfColor.fromInt(0xFF94A3B8)),
+                          ),
+                        ],
                       ),
                     ],
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        poRefNo,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.0, color: PdfColor.fromInt(0xFF38BDF8)),
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        dateStr,
+                        style: const pw.TextStyle(fontSize: 7.5, color: PdfColor.fromInt(0xFF94A3B8)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+
+            // 2. STORE & MANDI PROCUREMENT META INFO
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: cAltRow,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+                border: pw.Border.all(color: cBorder, width: 0.6),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  // Store details
+                  pw.Expanded(
+                    flex: 6,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          cleanShopName.toUpperCase(),
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16, color: PdfColors.white),
-                          textAlign: pw.TextAlign.center,
+                          'खरीदार / फर्म (Buyer Details): $cleanShopName',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cTextDark),
+                        ),
+                        if (cleanAddress != null) ...[
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            'Address: $cleanAddress',
+                            style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
+                          ),
+                        ],
+                        if (cleanPhone != null) ...[
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            'Contact / WhatsApp: $cleanPhone',
+                            style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Mandi / Procurement metrics
+                  pw.Expanded(
+                    flex: 4,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'कुल सामान (Total Items): ${items.length}',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cBlueAccent),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'अनुमानित बजट: Rs. ${effectiveTotal.toStringAsFixed(0)}',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.0, color: cSuccessGreen),
+                        ),
+                        if (uniqueDealers.isNotEmpty) ...[
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            'सप्लायर / डीलर: ${uniqueDealers.length} फर्म',
+                            style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+
+            // 3. WHOLESALE MANDI PROCUREMENT TABLE (NO TICK/CHECKBOX COLUMN)
+            pw.Container(
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: cBorder, width: 0.6),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Table(
+                border: pw.TableBorder.all(color: cBorder, width: 0.5),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(24), // #
+                  1: const pw.FlexColumnWidth(5.2), // Item Name & Specs
+                  2: const pw.FlexColumnWidth(2.4), // Category
+                  3: const pw.FlexColumnWidth(2.8), // Wholesale Qty
+                  4: const pw.FlexColumnWidth(2.2), // Est. Rate
+                  5: const pw.FlexColumnWidth(2.4), // Line Total
+                  6: const pw.FlexColumnWidth(2.8), // Mandi Dealer / Wholesaler
+                },
+                children: [
+                  // Header Row
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: cTblHeader),
+                    children: [
+                      _tableCell('#', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell('सामान का नाम व विवरण (Item Name & Specs)', isHeader: true),
+                      _tableCell('श्रेणी (Category)', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell('थोक मात्रा (Qty)', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell('अनु. दर (Rate)', isHeader: true, align: pw.TextAlign.right),
+                      _tableCell('कुल रकम (Total)', isHeader: true, align: pw.TextAlign.right),
+                      _tableCell('डीलर / फर्म (Supplier)', isHeader: true),
+                    ],
+                  ),
+
+                  // Data Rows
+                  ...List.generate(items.length, (index) {
+                    final item = items[index];
+                    final isAlt = index % 2 == 1;
+                    final qVal = _parseQtyNumber(item.qty);
+                    final lineTotal = item.estimatedPrice > 0 ? (qVal * item.estimatedPrice) : 0.0;
+
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                        color: isAlt ? cAltRow : PdfColors.white,
+                      ),
+                      children: [
+                        _tableCell('${index + 1}', align: pw.TextAlign.center, isBold: true),
+                        _tableCell(
+                          null,
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                item.name.trim().isNotEmpty ? item.name.trim() : 'Item #${index + 1}',
+                                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cTextDark),
+                              ),
+                              if (item.notes.trim().isNotEmpty) ...[
+                                pw.SizedBox(height: 1.5),
+                                pw.Text(
+                                  item.notes.trim(),
+                                  style: const pw.TextStyle(fontSize: 7.2, color: cMuted),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        _tableCell(
+                          null,
+                          align: pw.TextAlign.center,
+                          child: pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                            decoration: const pw.BoxDecoration(
+                              color: cLightBg,
+                              borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
+                            ),
+                            child: pw.Text(
+                              item.category.trim().isNotEmpty ? item.category.trim() : 'General',
+                              style: const pw.TextStyle(fontSize: 7.2, color: cMuted),
+                              textAlign: pw.TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        _tableCell(
+                          item.qty,
+                          align: pw.TextAlign.center,
+                          isBold: true,
+                          color: cBlueAccent,
+                        ),
+                        _tableCell(
+                          item.estimatedPrice > 0 ? 'Rs. ${item.estimatedPrice.toStringAsFixed(0)}' : '-',
+                          align: pw.TextAlign.right,
+                          isBold: item.estimatedPrice > 0,
+                        ),
+                        _tableCell(
+                          lineTotal > 0 ? 'Rs. ${lineTotal.toStringAsFixed(0)}' : '-',
+                          align: pw.TextAlign.right,
+                          isBold: true,
+                          color: cSuccessGreen,
+                        ),
+                        _tableCell(
+                          null,
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                item.dealerName.trim().isNotEmpty ? item.dealerName.trim() : 'Mandi / Open Market',
+                                style: pw.TextStyle(
+                                  fontSize: 7.8,
+                                  fontWeight: item.dealerName.trim().isNotEmpty ? pw.FontWeight.bold : pw.FontWeight.normal,
+                                  color: item.dealerName.trim().isNotEmpty ? cTextDark : cMuted,
+                                ),
+                              ),
+                              if (item.dealerPhone.trim().isNotEmpty) ...[
+                                pw.SizedBox(height: 1),
+                                pw.Text(
+                                  item.dealerPhone.trim(),
+                                  style: const pw.TextStyle(fontSize: 6.8, color: cMuted),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+
+                  // Table Bottom Totals Row
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: cLightBg),
+                    children: [
+                      _tableCell('', padding: const pw.EdgeInsets.all(5)),
+                      _tableCell(
+                        'TOTAL ESTIMATED BUDGET (कुल थोक खरीद अनुमान)',
+                        isBold: true,
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                      ),
+                      _tableCell('', padding: const pw.EdgeInsets.all(5)),
+                      _tableCell(
+                        '${items.length} Items',
+                        align: pw.TextAlign.center,
+                        isBold: true,
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                      ),
+                      _tableCell('', padding: const pw.EdgeInsets.all(5)),
+                      _tableCell(
+                        'Rs. ${effectiveTotal.toStringAsFixed(0)}',
+                        align: pw.TextAlign.right,
+                        isBold: true,
+                        color: cBlueAccent,
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                      ),
+                      _tableCell('', padding: const pw.EdgeInsets.all(5)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 14),
+
+            // 4. MANDI INSTRUCTIONS & SIGNATURE BLOCK
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                // Instructions
+                pw.Expanded(
+                  flex: 5,
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: cAltRow,
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                      border: pw.Border.all(color: cBorder, width: 0.5),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'MANDI INSTRUCTIONS / महत्वपूर्ण निर्देश:',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.8, color: cTextDark),
                         ),
                         pw.SizedBox(height: 3),
                         pw.Text(
-                          '${cleanShopName.toUpperCase()} - MANDI PROCUREMENT SHEET',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cHeaderSub),
-                          textAlign: pw.TextAlign.center,
+                          '1. माल की सही पैकेजिंग, एक्सपायरी डेट और बैच नंबर की जांच करके ही डिलीवरी लें।\n2. थोक दर के अनुसार पक्का चालान/बिल व जीएसटी रसीद अवश्य प्रदान करें।',
+                          style: const pw.TextStyle(fontSize: 7.0, color: cMuted),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-
-              // 2. INNER CONTENT WRAPPER
-              pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                  children: [
-                    // Centered Store Meta
-                    if (cleanAddress != null && cleanAddress.isNotEmpty) ...[
-                      pw.Text(
-                        cleanAddress,
-                        style: const pw.TextStyle(fontSize: 8.5, color: cMuted),
-                        textAlign: pw.TextAlign.center,
-                      ),
-                      pw.SizedBox(height: 2),
-                    ],
-                    if (cleanPhone != null && cleanPhone.isNotEmpty) ...[
-                      pw.Text(
-                        'Phone / WhatsApp: $cleanPhone',
-                        style: const pw.TextStyle(fontSize: 8.5, color: cMuted),
-                        textAlign: pw.TextAlign.center,
-                      ),
-                      pw.SizedBox(height: 2),
-                    ],
-                    pw.Text(
-                      'Date Generated: $dateStr',
-                      style: const pw.TextStyle(fontSize: 8.5, color: cMuted),
-                      textAlign: pw.TextAlign.center,
-                    ),
-
-                    pw.SizedBox(height: 12),
-
-                    // 3. ROUNDED SUMMARY CALLOUT PILL
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 14),
-                      decoration: pw.BoxDecoration(
-                        color: cCardBg,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                        border: pw.Border.all(color: cCardBorder, width: 0.8),
-                      ),
-                      child: pw.Center(
-                        child: pw.Text(
-                          'TOTAL ITEMS ON PROCUREMENT SHEET: ${items.length}',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5, color: cBlueAccent),
+                pw.SizedBox(width: 20),
+                // Signatures
+                pw.Expanded(
+                  flex: 4,
+                  child: pw.Column(
+                    children: [
+                      pw.Container(
+                        height: 35,
+                        decoration: const pw.BoxDecoration(
+                          border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.8)),
                         ),
                       ),
-                    ),
-
-                    pw.SizedBox(height: 12),
-
-                    // 4. PROCUREMENT TABLE
-                    pw.Container(
-                      decoration: pw.BoxDecoration(
-                        border: pw.Border.all(color: cBorder, width: 0.6),
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'आढ़ती / थोक सप्लायर मुहर व हस्ताक्षर',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5, color: cTextDark),
+                        textAlign: pw.TextAlign.center,
                       ),
-                      child: pw.Table(
-                        columnWidths: {
-                          0: const pw.FixedColumnWidth(26), // #
-                          1: const pw.FlexColumnWidth(5.2), // Item Description & Category
-                          2: const pw.FlexColumnWidth(2.2), // Required Qty
-                          3: const pw.FlexColumnWidth(2.0), // Est. Rate
-                          4: const pw.FlexColumnWidth(3.0), // Mandi Dealer / Wholesaler
-                          5: const pw.FixedColumnWidth(42), // Check
-                        },
-                        children: [
-                          // Header Row
-                          pw.TableRow(
-                            decoration: const pw.BoxDecoration(color: cTblHeader),
-                            children: [
-                              _tableCell('#', isHeader: true, align: pw.TextAlign.center),
-                              _tableCell('Item Description & Category', isHeader: true),
-                              _tableCell('Required Qty', isHeader: true, align: pw.TextAlign.center),
-                              _tableCell('Est. Rate', isHeader: true, align: pw.TextAlign.center),
-                              _tableCell('Mandi Dealer / Wholesaler', isHeader: true),
-                              _tableCell('Check', isHeader: true, align: pw.TextAlign.center),
-                            ],
-                          ),
-
-                          // Data Rows
-                          ...List.generate(items.length, (index) {
-                            final item = items[index];
-                            final isAlt = index % 2 == 1;
-
-                            final cleanName = item.name.trim();
-                            final cleanCat = item.category.trim();
-
-                            String itemTitle;
-                            if (cleanName.isNotEmpty) {
-                              if (cleanCat.isNotEmpty &&
-                                  cleanCat.toLowerCase() != 'general store' &&
-                                  cleanCat.toLowerCase() != cleanName.toLowerCase()) {
-                                itemTitle = '$cleanName ($cleanCat)';
-                              } else {
-                                itemTitle = cleanName;
-                              }
-                            } else if (cleanCat.isNotEmpty && cleanCat.toLowerCase() != 'general store') {
-                              itemTitle = cleanCat;
-                            } else if (item.notes.trim().isNotEmpty) {
-                              itemTitle = item.notes.trim();
-                            } else {
-                              itemTitle = 'Item #${index + 1}';
-                            }
-
-                            return pw.TableRow(
-                              decoration: pw.BoxDecoration(
-                                color: isAlt ? cAltRow : PdfColors.white,
-                              ),
-                              children: [
-                                _tableCell('${index + 1}', align: pw.TextAlign.center),
-                                _tableCell(itemTitle, isBold: true),
-                                _tableCell(item.qty, align: pw.TextAlign.center, isBold: true, color: cBlueAccent),
-                                _tableCell(
-                                  item.estimatedPrice > 0 ? '₹${item.estimatedPrice.toStringAsFixed(0)}' : '₹0',
-                                  align: pw.TextAlign.center,
-                                  isBold: true,
-                                ),
-                                _tableCell(
-                                  item.dealerName.trim().isNotEmpty ? item.dealerName.trim() : '-',
-                                ),
-                                _tableCell('[   ]', align: pw.TextAlign.center),
-                              ],
-                            );
-                          }),
-                        ],
+                      pw.Text(
+                        'Wholesaler / Dealer Signature & Stamp',
+                        style: const pw.TextStyle(fontSize: 6.8, color: cMuted),
+                        textAlign: pw.TextAlign.center,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-
-              pw.Spacer(),
-
-              // 5. FOOTER SECTION
-              pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                child: pw.Column(
-                  children: [
-                    pw.Divider(thickness: 0.6, color: cBorder),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'Notes: Please verify stock availability and wholesale rates. Generated automatically by ShopSilo Retail OS.',
-                      style: const pw.TextStyle(fontSize: 7.8, color: cMuted),
-                      textAlign: pw.TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
+              ],
+            ),
+          ];
         },
       ),
     );
@@ -360,22 +585,26 @@ class ProcurementPdfService {
   }
 
   static pw.Widget _tableCell(
-    String text, {
+    String? text, {
+    pw.Widget? child,
     bool isHeader = false,
     bool isBold = false,
     pw.TextAlign align = pw.TextAlign.left,
     PdfColor? color,
+    pw.EdgeInsets padding = const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
   }) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      child: pw.Text(
-        text,
-        textAlign: align,
-        style: pw.TextStyle(
-          color: isHeader ? PdfColors.white : (color ?? const PdfColor.fromInt(0xFF0F172A)),
-          fontSize: isHeader ? 8.5 : 8.0,
-        ),
-      ),
+      padding: padding,
+      child: child ??
+          pw.Text(
+            text ?? '',
+            textAlign: align,
+            style: pw.TextStyle(
+              color: isHeader ? PdfColors.white : (color ?? const PdfColor.fromInt(0xFF0F172A)),
+              fontWeight: (isHeader || isBold) ? pw.FontWeight.bold : pw.FontWeight.normal,
+              fontSize: isHeader ? 8.5 : 8.0,
+            ),
+          ),
     );
   }
 
