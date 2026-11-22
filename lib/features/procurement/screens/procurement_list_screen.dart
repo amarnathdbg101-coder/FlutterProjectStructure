@@ -1,5 +1,6 @@
 import 'dart:convert' show base64Encode;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -174,19 +175,26 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
   }
 
   /// 📷 1-Tap Barcode Scanner for Mandi Sourcing:
-  /// Instantly matches package barcode against shop owner's inventory and opens fast add sheet
+  /// Supports both Single-Item Confirmation and Continuous Rapid Multi-Scan mode.
   Future<void> _openBarcodeScannerForMandi(
     BuildContext context,
     ProcurementController controller,
-    ProductController prodController,
-  ) async {
+    ProductController prodController, {
+    bool continuous = false,
+  }) async {
     MobileBarcodeScannerDialog.show(
       context,
-      title: context.isHindi ? 'मंडी सामान बारकोड स्कैनर' : 'Scan Product for Mandi',
-      subtitle: context.isHindi
-          ? 'दुकान के सामान का बारकोड स्कैन करें और तुरंत रीस्टॉक लिस्ट में जोड़ें'
-          : 'Scan barcode of low-stock item to add directly to Mandi list',
-      autoCloseOnSuccess: true,
+      title: continuous
+          ? (context.isHindi ? '⚡ लगातार बारकोड स्कैन (सुपरफास्ट)' : 'Rapid Multi-Scan Mode')
+          : (context.isHindi ? 'मंडी सामान बारकोड स्कैनर' : 'Scan Product for Mandi'),
+      subtitle: continuous
+          ? (context.isHindi
+              ? 'खाली डिब्बों या पैकेटों को एक-एक कर स्कैन करते जाएं — सीधे मंडी लिस्ट में जुड़ता जाएगा'
+              : 'Scan barcodes back-to-back — directly auto-added to Mandi list')
+          : (context.isHindi
+              ? 'दुकान के सामान का बारकोड स्कैन करें और तुरंत रीस्टॉक लिस्ट में जोड़ें'
+              : 'Scan barcode of low-stock item to add directly to Mandi list'),
+      autoCloseOnSuccess: !continuous,
       onBarcodeScanned: (barcode) async {
         final clean = barcode.trim();
         if (clean.isEmpty) return false;
@@ -195,7 +203,25 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
         if (!context.mounted) return true;
 
         if (prod != null) {
-          _showQuickAddFromProductSheet(context, controller, prod);
+          if (continuous) {
+            final defaultUnit = _buildDefaultWholesaleUnit(prod.unit);
+            final double defaultRate = prod.costPrice > 0 ? prod.costPrice : (prod.price > 0 ? prod.price * 0.85 : 0.0);
+            final int reorderQty = prod.stock == 0 ? 5 : (prod.stock <= 3 ? 3 : 1);
+            controller.addItem(
+              name: prod.name,
+              qty: '$reorderQty $defaultUnit',
+              category: prod.category.isNotEmpty ? prod.category : 'General Store',
+              estimatedPrice: defaultRate,
+              notes: prod.barcode.isNotEmpty ? 'Barcode: ${prod.barcode}' : '',
+            );
+            try {
+              HapticFeedback.mediumImpact();
+            } catch (_) {}
+            return true;
+          } else {
+            _showQuickAddFromProductSheet(context, controller, prod);
+            return true;
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -207,20 +233,22 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
               backgroundColor: AppColors.warning,
             ),
           );
-          _showAddEditSourcingItemSheet(
-            context,
-            controller,
-            prodController,
-            initialBarcode: clean,
-          );
+          if (!continuous) {
+            _showAddEditSourcingItemSheet(
+              context,
+              controller,
+              prodController,
+              initialBarcode: clean,
+            );
+          }
+          return false;
         }
-        return true;
       },
     );
   }
 
   /// 🔍 Select from Shop Inventory Sheet:
-  /// Allows searching store catalog by name or filtering low-stock products to add to Mandi
+  /// Allows searching store catalog, filtering low-stock products, or multi-selecting in bulk
   void _openShopProductPickerForMandi(
     BuildContext context,
     ProcurementController controller,
@@ -240,6 +268,45 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
             Navigator.pop(sheetCtx);
             _showQuickAddFromProductSheet(context, controller, prod);
           },
+          onProductsBatchSelected: (batch) {
+            Navigator.pop(sheetCtx);
+            for (final prod in batch) {
+              final defaultUnit = _buildDefaultWholesaleUnit(prod.unit);
+              final double defaultRate = prod.costPrice > 0 ? prod.costPrice : (prod.price > 0 ? prod.price * 0.85 : 0.0);
+              final int reorderQty = prod.stock == 0 ? 5 : (prod.stock <= 3 ? 3 : 1);
+              controller.addItem(
+                name: prod.name,
+                qty: '$reorderQty $defaultUnit',
+                category: prod.category.isNotEmpty ? prod.category : 'General Store',
+                estimatedPrice: defaultRate,
+                notes: prod.barcode.isNotEmpty ? 'Barcode: ${prod.barcode}' : '',
+              );
+            }
+            try {
+              HapticFeedback.mediumImpact();
+            } catch (_) {}
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        context.isHindi
+                            ? '✓ ${batch.length} सामान मंडी खरीद लिस्ट में जुड़ गए!'
+                            : '✓ ${batch.length} items added to Mandi List!',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: AppColors.success,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          },
           onScanBarcode: () {
             Navigator.pop(sheetCtx);
             _openBarcodeScannerForMandi(context, controller, prodController);
@@ -250,13 +317,15 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
   }
 
   /// ⚡ Effortless 1-Tap Quick Add Confirmation Sheet for Store Products
+  /// Enhanced with Quantity Stepper, Quick Presets (+1, +5, +10), Unit Pills & Restock Advice
   void _showQuickAddFromProductSheet(
     BuildContext context,
     ProcurementController controller,
     ProductModel prod,
   ) {
     final defaultUnit = _buildDefaultWholesaleUnit(prod.unit);
-    final TextEditingController qtyCtrl = TextEditingController(text: '1');
+    final int initialSuggestedQty = prod.stock == 0 ? 5 : (prod.stock <= 3 ? 3 : 1);
+    final TextEditingController qtyCtrl = TextEditingController(text: '$initialSuggestedQty');
     final double defaultRate = prod.costPrice > 0 ? prod.costPrice : (prod.price > 0 ? prod.price * 0.85 : 0.0);
     final TextEditingController rateCtrl = TextEditingController(
       text: defaultRate > 0 ? defaultRate.toStringAsFixed(0) : '',
@@ -277,6 +346,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
             final double qtyVal = double.tryParse(qtyCtrl.text.trim()) ?? 1.0;
             final double rateVal = double.tryParse(rateCtrl.text.trim()) ?? 0.0;
             final double totalEst = qtyVal * rateVal;
+            final bool isLowStock = prod.stock <= 5;
 
             return Padding(
               padding: EdgeInsets.only(bottom: bottomInset),
@@ -304,12 +374,17 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          width: 46,
+                          height: 46,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
+                            color: (isLowStock ? AppColors.error : AppColors.primary).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.shopping_basket_rounded, color: AppColors.primary, size: 24),
+                          child: Icon(
+                            Icons.inventory_2_rounded,
+                            color: isLowStock ? AppColors.error : AppColors.primary,
+                            size: 24,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -331,21 +406,22 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                 spacing: 8,
                                 runSpacing: 4,
                                 children: [
+                                  if (prod.category.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: ctx.colorSurfaceSubtle,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        prod.category,
+                                        style: TextStyle(fontSize: 11, color: ctx.colorTextMuted, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: ctx.colorSurfaceSubtle,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      prod.category.isNotEmpty ? prod.category : 'General',
-                                      style: TextStyle(fontSize: 11, color: ctx.colorTextMuted, fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: prod.stock <= 5 ? AppColors.errorLight : AppColors.successLight,
+                                      color: isLowStock ? AppColors.errorLight : AppColors.successLight,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
@@ -355,7 +431,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: prod.stock <= 5 ? AppColors.error : AppColors.success,
+                                        color: isLowStock ? AppColors.error : AppColors.success,
                                       ),
                                     ),
                                   ),
@@ -370,16 +446,70 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         ),
                       ],
                     ),
+
+                    // Low Stock Alert & 1-Tap Reorder Suggestion
+                    if (isLowStock) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.errorLight.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                ctx.isHindi
+                                    ? 'स्टॉक बहुत कम है! थोक में कम से कम $initialSuggestedQty $selectedUnit मंगाएं'
+                                    : 'Stock is critical! Reorder at least $initialSuggestedQty $selectedUnit',
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.error),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
-                    // Inputs Row: Quantity & Unit
+                    // Quantity Stepper Row
                     Row(
                       children: [
+                        // Minus button
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: ctx.colorSurfaceSubtle,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: ctx.colorBorder),
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.remove_rounded, size: 20),
+                            onPressed: () {
+                              final cur = int.tryParse(qtyCtrl.text.trim()) ?? 1;
+                              if (cur > 1) {
+                                qtyCtrl.text = '${cur - 1}';
+                                try {
+                                  HapticFeedback.selectionClick();
+                                } catch (_) {}
+                                setModalState(() {});
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Number field
                         Expanded(
-                          flex: 4,
                           child: TextFormField(
                             controller: qtyCtrl,
                             keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             onChanged: (_) => setModalState(() {}),
                             decoration: InputDecoration(
                               labelText: ctx.isHindi ? 'थोक मात्रा *' : 'Wholesale Qty *',
@@ -390,26 +520,114 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Expanded(
-                          flex: 6,
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _kWholesaleUnits.contains(selectedUnit) ? selectedUnit : _kWholesaleUnits.first,
-                            decoration: InputDecoration(
-                              labelText: ctx.isHindi ? 'थोक इकाई (Unit) *' : 'Wholesale Unit *',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            ),
-                            items: _kWholesaleUnits.map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontSize: 12.5)))).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setModalState(() => selectedUnit = val);
-                              }
+                        // Plus button
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: ctx.colorSurfaceSubtle,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: ctx.colorBorder),
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.add_rounded, size: 20),
+                            onPressed: () {
+                              final cur = int.tryParse(qtyCtrl.text.trim()) ?? 1;
+                              qtyCtrl.text = '${cur + 1}';
+                              try {
+                                HapticFeedback.selectionClick();
+                              } catch (_) {}
+                              setModalState(() {});
                             },
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
+
+                    // Quick Quantity Increment Pills (+1, +2, +5, +10, +25)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Text(
+                            ctx.isHindi ? 'त्वरित जोड़ें: ' : 'Quick Add: ',
+                            style: TextStyle(fontSize: 11.5, color: ctx.colorTextMuted, fontWeight: FontWeight.w600),
+                          ),
+                          ...[1, 2, 5, 10, 20, 50].map((preset) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: InkWell(
+                                onTap: () {
+                                  final cur = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                                  qtyCtrl.text = '${cur + preset}';
+                                  try {
+                                    HapticFeedback.selectionClick();
+                                  } catch (_) {}
+                                  setModalState(() {});
+                                },
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                                  ),
+                                  child: Text(
+                                    '+$preset',
+                                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Wholesale Unit Fast Pills
+                    Text(
+                      ctx.isHindi ? 'थोक इकाई चुनें:' : 'Select Wholesale Unit:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ctx.colorTextMuted),
+                    ),
+                    const SizedBox(height: 6),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          'पेटी / बॉक्स (Box)',
+                          'बोरी (Bags)',
+                          'दर्जन (Dzn)',
+                          'पैकेट (Pkt)',
+                          'लीटर (Ltr)',
+                          'kg',
+                          'कार्टन (Carton)',
+                          'पीस (Pcs)',
+                        ].map((u) {
+                          final isSelected = selectedUnit == u;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ChoiceChip(
+                              label: Text(u, style: TextStyle(fontSize: 11.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                              selected: isSelected,
+                              selectedColor: AppColors.primary,
+                              labelStyle: TextStyle(color: isSelected ? Colors.white : ctx.colorTextPrimary),
+                              backgroundColor: ctx.colorSurfaceSubtle,
+                              onSelected: (_) {
+                                try {
+                                  HapticFeedback.selectionClick();
+                                } catch (_) {}
+                                setModalState(() => selectedUnit = u);
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
 
                     // Target Rate Input
                     TextFormField(
@@ -420,6 +638,7 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         labelText: ctx.isHindi ? 'अनुमानित थोक दर (₹ प्रति यूनिट)' : 'Estimated Wholesale Rate (₹/unit)',
                         hintText: '0',
                         prefixText: '₹ ',
+                        helperText: prod.costPrice > 0 ? (ctx.isHindi ? 'पिछली लागत: ₹${prod.costPrice.toStringAsFixed(0)}' : 'Last Cost: ₹${prod.costPrice.toStringAsFixed(0)}') : null,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
@@ -478,14 +697,18 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                           notes: prod.barcode.isNotEmpty ? 'Barcode: ${prod.barcode}' : '',
                         );
 
+                        try {
+                          HapticFeedback.mediumImpact();
+                        } catch (_) {}
+
                         Navigator.pop(sheetCtx);
 
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
                               context.isHindi
-                                  ? '✓ "${prod.name}" मंडी लिस्ट में जुड़ गया!'
-                                  : '✓ "${prod.name}" added to Mandi List!',
+                                  ? '✓ "${prod.name}" ($formattedQty) मंडी लिस्ट में जुड़ गया!'
+                                  : '✓ "${prod.name}" ($formattedQty) added to Mandi List!',
                             ),
                             backgroundColor: AppColors.success,
                             duration: const Duration(seconds: 2),
@@ -2216,31 +2439,49 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                 foregroundColor: AppColors.primary,
                                 side: BorderSide(color: AppColors.primary.withValues(alpha: 0.35)),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
                                 backgroundColor: AppColors.primary.withValues(alpha: 0.04),
                               ),
-                              icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                              icon: const Icon(Icons.qr_code_scanner_rounded, size: 17),
                               label: Text(
-                                context.isHindi ? 'बारकोड स्कैन' : 'Scan Barcode',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                context.isHindi ? 'बारकोड स्कैन' : 'Scan',
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                               ),
                               onPressed: () => _openBarcodeScannerForMandi(context, controller, prodController),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFE65100),
+                                side: BorderSide(color: const Color(0xFFE65100).withValues(alpha: 0.35)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                                backgroundColor: const Color(0xFFE65100).withValues(alpha: 0.04),
+                              ),
+                              icon: const Icon(Icons.flash_on_rounded, size: 17),
+                              label: Text(
+                                context.isHindi ? 'लगातार स्कैन' : 'Multi-Scan',
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () => _openBarcodeScannerForMandi(context, controller, prodController, continuous: true),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF0D9488),
                                 side: BorderSide(color: const Color(0xFF0D9488).withValues(alpha: 0.35)),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
                                 backgroundColor: const Color(0xFF0D9488).withValues(alpha: 0.04),
                               ),
-                              icon: const Icon(Icons.search_rounded, size: 18),
+                              icon: const Icon(Icons.inventory_2_outlined, size: 17),
                               label: Text(
-                                context.isHindi ? 'दुकान स्टॉक से जोड़ें' : 'From Shop Stock',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                context.isHindi ? 'दुकान स्टॉक' : 'Shop Stock',
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                               ),
                               onPressed: () => _openShopProductPickerForMandi(context, controller, prodController),
                             ),
@@ -2599,15 +2840,17 @@ class _AiProposalItemState {
   });
 }
 
-/// 🔍 Searchable Shop Product Picker for Mandi Sourcing with Low Stock Filter
+/// 🔍 Searchable Shop Product Picker for Mandi Sourcing with Low Stock & Bulk Multi-Select
 class _ShopProductPickerSheet extends StatefulWidget {
   final List<ProductModel> products;
   final ValueChanged<ProductModel> onProductSelected;
+  final ValueChanged<List<ProductModel>> onProductsBatchSelected;
   final VoidCallback onScanBarcode;
 
   const _ShopProductPickerSheet({
     required this.products,
     required this.onProductSelected,
+    required this.onProductsBatchSelected,
     required this.onScanBarcode,
   });
 
@@ -2617,6 +2860,8 @@ class _ShopProductPickerSheet extends StatefulWidget {
 
 class _ShopProductPickerSheetState extends State<_ShopProductPickerSheet> {
   final TextEditingController _searchCtrl = TextEditingController();
+  final Set<String> _selectedProductIds = {};
+  String _selectedCategory = 'ALL';
   bool _onlyLowStock = false;
   String _query = '';
 
@@ -2628,8 +2873,15 @@ class _ShopProductPickerSheetState extends State<_ShopProductPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Unique list of shop categories
+    final rawCats = widget.products.map((p) => p.category.trim()).where((c) => c.isNotEmpty).toSet().toList();
+    rawCats.sort();
+    final categories = ['ALL', ...rawCats];
+
+    // Filtered products list
     final filtered = widget.products.where((p) {
       if (_onlyLowStock && p.stock > 5) return false;
+      if (_selectedCategory != 'ALL' && p.category.trim() != _selectedCategory) return false;
       if (_query.isEmpty) return true;
       final q = _query.toLowerCase();
       return p.name.toLowerCase().contains(q) ||
@@ -2637,10 +2889,20 @@ class _ShopProductPickerSheetState extends State<_ShopProductPickerSheet> {
           p.barcode.toLowerCase().contains(q);
     }).toList();
 
+    // Low stock count for quick bulk-select
+    final lowStockItems = widget.products.where((p) => p.stock <= 5).toList();
+
+    // Budget sum of selected items
+    final selectedProductsList = widget.products.where((p) => _selectedProductIds.contains(p.id)).toList();
+    final double totalEstimatedBudget = selectedProductsList.fold(
+      0.0,
+      (sum, p) => sum + (p.costPrice > 0 ? p.costPrice : (p.price > 0 ? p.price * 0.85 : 0.0)),
+    );
+
     return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
+      initialChildSize: 0.88,
+      minChildSize: 0.55,
+      maxChildSize: 0.96,
       expand: false,
       builder: (context, scrollCtrl) {
         return Container(
@@ -2663,9 +2925,9 @@ class _ShopProductPickerSheetState extends State<_ShopProductPickerSheet> {
                 ),
               ),
 
-              // Title bar
+              // Title bar with Barcode Scan and Close buttons
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Row(
                   children: [
                     const Icon(Icons.inventory_2_outlined, color: Color(0xFF0D9488), size: 22),
@@ -2714,16 +2976,17 @@ class _ShopProductPickerSheetState extends State<_ShopProductPickerSheet> {
                 ),
               ),
 
-              // Filter Chips Row
+              // Filter & Bulk-Select Actions Bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Row(
                   children: [
+                    // Low Stock Filter Chip
                     FilterChip(
                       label: Text(
-                        context.isHindi ? 'कम स्टॉक वाले (≤5)' : 'Low Stock Only (≤5)',
+                        context.isHindi ? 'कम स्टॉक (≤5)' : 'Low Stock (≤5)',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11.5,
                           fontWeight: _onlyLowStock ? FontWeight.bold : FontWeight.normal,
                           color: _onlyLowStock ? Colors.white : context.colorTextPrimary,
                         ),
@@ -2734,13 +2997,90 @@ class _ShopProductPickerSheetState extends State<_ShopProductPickerSheet> {
                       onSelected: (val) => setState(() => _onlyLowStock = val),
                     ),
                     const SizedBox(width: 8),
+
+                    // 1-Tap Select All Low Stock
+                    if (lowStockItems.isNotEmpty) ...[
+                      InkWell(
+                        onTap: () {
+                          try {
+                            HapticFeedback.selectionClick();
+                          } catch (_) {}
+                          setState(() {
+                            final allSelected = lowStockItems.every((p) => _selectedProductIds.contains(p.id));
+                            if (allSelected) {
+                              for (final p in lowStockItems) {
+                                _selectedProductIds.remove(p.id);
+                              }
+                            } else {
+                              for (final p in lowStockItems) {
+                                _selectedProductIds.add(p.id);
+                              }
+                            }
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE65100).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFE65100).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.flash_on_rounded, size: 14, color: Color(0xFFE65100)),
+                              const SizedBox(width: 4),
+                              Text(
+                                context.isHindi
+                                    ? 'कम स्टॉक वाले सभी (${lowStockItems.length})'
+                                    : 'All Low Stock (${lowStockItems.length})',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFE65100)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
                     Text(
                       '${filtered.length} ${context.isHindi ? 'सामान' : 'items'}',
-                      style: TextStyle(fontSize: 12, color: context.colorTextMuted),
+                      style: TextStyle(fontSize: 11.5, color: context.colorTextMuted),
                     ),
                   ],
                 ),
               ),
+
+              // Category Filter Pills
+              if (categories.length > 2) ...[
+                Container(
+                  height: 36,
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 6),
+                    itemBuilder: (ctx, idx) {
+                      final cat = categories[idx];
+                      final isSelected = _selectedCategory == cat;
+                      final label = cat == 'ALL' ? (context.isHindi ? 'सभी' : 'All') : cat;
+
+                      return ChoiceChip(
+                        label: Text(label, style: const TextStyle(fontSize: 11)),
+                        selected: isSelected,
+                        selectedColor: AppColors.primary,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : context.colorTextPrimary,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        backgroundColor: context.colorSurfaceSubtle,
+                        onSelected: (_) => setState(() => _selectedCategory = cat),
+                      );
+                    },
+                  ),
+                ),
+              ],
               const Divider(height: 1),
 
               // Product list
@@ -2761,77 +3101,185 @@ class _ShopProductPickerSheetState extends State<_ShopProductPickerSheet> {
                       )
                     : ListView.separated(
                         controller: scrollCtrl,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         itemCount: filtered.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (ctx, idx) {
                           final prod = filtered[idx];
                           final isLowStock = prod.stock <= 5;
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                            leading: Container(
-                              width: 40,
-                              height: 40,
+                          final isSelected = _selectedProductIds.contains(prod.id);
+
+                          return InkWell(
+                            onTap: () {
+                              try {
+                                HapticFeedback.selectionClick();
+                              } catch (_) {}
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedProductIds.remove(prod.id);
+                                } else {
+                                  _selectedProductIds.add(prod.id);
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                               decoration: BoxDecoration(
-                                color: (isLowStock ? AppColors.error : AppColors.primary).withValues(alpha: 0.1),
+                                color: isSelected
+                                    ? AppColors.primary.withValues(alpha: 0.06)
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Icon(
-                                Icons.inventory_2_rounded,
-                                color: isLowStock ? AppColors.error : AppColors.primary,
-                                size: 20,
-                              ),
-                            ),
-                            title: Text(
-                              prod.name,
-                              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Row(
-                              children: [
-                                if (prod.costPrice > 0)
-                                  Text(
-                                    'लागत: ₹${prod.costPrice.toStringAsFixed(0)}  •  ',
-                                    style: TextStyle(fontSize: 11.5, color: ctx.colorTextMuted),
+                              child: Row(
+                                children: [
+                                  // Selection Checkbox
+                                  Checkbox(
+                                    value: isSelected,
+                                    activeColor: AppColors.primary,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    onChanged: (val) {
+                                      try {
+                                        HapticFeedback.selectionClick();
+                                      } catch (_) {}
+                                      setState(() {
+                                        if (val == true) {
+                                          _selectedProductIds.add(prod.id);
+                                        } else {
+                                          _selectedProductIds.remove(prod.id);
+                                        }
+                                      });
+                                    },
                                   ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: isLowStock ? AppColors.errorLight : AppColors.successLight,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    'स्टॉक: ${prod.stock} ${prod.unit}',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: isLowStock ? AppColors.error : AppColors.success,
+
+                                  // Product Icon
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: (isLowStock ? AppColors.error : AppColors.primary).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.inventory_2_rounded,
+                                      color: isLowStock ? AppColors.error : AppColors.primary,
+                                      size: 19,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            trailing: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  const SizedBox(width: 10),
+
+                                  // Product Info
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          prod.name,
+                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            if (prod.costPrice > 0)
+                                              Text(
+                                                'लागत: ₹${prod.costPrice.toStringAsFixed(0)} • ',
+                                                style: TextStyle(fontSize: 11, color: ctx.colorTextMuted),
+                                              ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: isLowStock ? AppColors.errorLight : AppColors.successLight,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'स्टॉक: ${prod.stock} ${prod.unit}',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isLowStock ? AppColors.error : AppColors.success,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Customize Single Item Button
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_note_rounded, size: 22, color: AppColors.primary),
+                                    tooltip: ctx.isHindi ? 'कस्टमाइज़ करके जोड़ें' : 'Customize Qty/Rate',
+                                    onPressed: () => widget.onProductSelected(prod),
+                                  ),
+                                ],
                               ),
-                              onPressed: () => widget.onProductSelected(prod),
-                              child: Text(
-                                ctx.isHindi ? '+ जोड़ें' : '+ Add',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
                             ),
-                            onTap: () => widget.onProductSelected(prod),
                           );
                         },
                       ),
               ),
+
+              // Sticky Bottom Multi-Add Bar (When items are checked)
+              if (_selectedProductIds.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  decoration: BoxDecoration(
+                    color: context.colorSurface,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                    border: Border(top: BorderSide(color: context.colorBorder)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.isHindi
+                                  ? '${_selectedProductIds.length} सामान चुने गए'
+                                  : '${_selectedProductIds.length} items selected',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                            if (totalEstimatedBudget > 0)
+                              Text(
+                                context.isHindi
+                                    ? 'अनु. कुल: ₹${totalEstimatedBudget.toStringAsFixed(0)}'
+                                    : 'Est. Total: ₹${totalEstimatedBudget.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 11.5, color: AppColors.success, fontWeight: FontWeight.bold),
+                              ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.playlist_add_check_rounded, size: 19),
+                        label: Text(
+                          context.isHindi ? '⚡ मंडी लिस्ट में जोड़ें' : 'Add to Mandi',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          widget.onProductsBatchSelected(selectedProductsList);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         );
