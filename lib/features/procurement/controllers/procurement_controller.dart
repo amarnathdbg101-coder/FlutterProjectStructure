@@ -6,15 +6,22 @@ import '../../../core/services/event_bus_service.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../products/models/product_model.dart';
 import '../models/procurement_model.dart';
+import '../models/wholesaler_model.dart';
 import '../repositories/procurement_repository.dart';
+import '../repositories/wholesaler_repository.dart';
 import '../screens/mandi_pdf_preview_screen.dart';
 import '../services/procurement_pdf_service.dart';
 
 class ProcurementController extends BaseController {
   final ProcurementRepository _repo = ProcurementRepository();
+  final WholesalerRepository _wholesalerRepo = WholesalerRepository();
+
   List<ProcurementItemModel> _items = [];
+  List<WholesalerModel> _wholesalers = [];
 
   List<ProcurementItemModel> get items => _items;
+  List<WholesalerModel> get wholesalers => List.unmodifiable(_wholesalers);
+
   int get totalCount => _items.length;
   int get completedCount => _items.where((i) => i.isCompleted).length;
   int get pendingCount => totalCount - completedCount;
@@ -29,17 +36,20 @@ class ProcurementController extends BaseController {
   ProcurementController() {
     _hydrateFromLocalCache();
     fetchBackendProcurement();
+    fetchBackendWholesalers(silent: true);
     _subscribeToEvents();
   }
 
   void _subscribeToEvents() {
     _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
       _items = [];
+      _wholesalers = [];
       notifyListeners();
     });
 
     _procurementSub = AppEventBus().on(AppCacheEventType.procurementMutated, (_) {
       fetchBackendProcurement(silent: true);
+      fetchBackendWholesalers(silent: true);
     });
   }
 
@@ -52,15 +62,147 @@ class ProcurementController extends BaseController {
 
   void refreshList() {
     fetchBackendProcurement();
+    fetchBackendWholesalers(silent: true);
   }
 
   void _hydrateFromLocalCache() {
     _items = LocalCacheService.getProcurementItems();
+    _wholesalers = LocalCacheService.getWholesalers();
+
+    // Auto-seed wholesalers from existing items if directory is empty
+    if (_wholesalers.isEmpty && _items.isNotEmpty) {
+      final Map<String, String> seeds = {};
+      for (final it in _items) {
+        final name = it.dealerName.trim();
+        if (name.isNotEmpty && !seeds.containsKey(name.toLowerCase())) {
+          seeds[name.toLowerCase()] = it.dealerPhone.trim();
+          _wholesalers.add(WholesalerModel(
+            id: 'wh_${DateTime.now().millisecondsSinceEpoch}_${seeds.length}',
+            name: name,
+            phone: it.dealerPhone.trim(),
+          ));
+        }
+      }
+      if (_wholesalers.isNotEmpty) {
+        LocalCacheService.saveWholesalers(_wholesalers);
+      }
+    }
+
     notifyListeners();
   }
 
   Future<void> _persistCache() async {
     await LocalCacheService.saveProcurementItems(_items);
+  }
+
+  Future<void> _persistWholesalersCache() async {
+    await LocalCacheService.saveWholesalers(_wholesalers);
+  }
+
+  /// Syncs wholesalers directory with PostgreSQL backend
+  Future<void> fetchBackendWholesalers({bool silent = false}) async {
+    try {
+      final res = await _wholesalerRepo.getWholesalers();
+      if (res.success && res.data != null) {
+        _wholesalers = res.data!;
+        await _persistWholesalersCache();
+      }
+    } catch (e) {
+      debugPrint('[Procurement] Wholesalers backend sync failed: $e');
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// Registers a new permanent wholesaler in local cache & syncs to cloud
+  Future<WholesalerModel> addWholesaler({
+    required String name,
+    String phone = '',
+    String address = '',
+    String gstin = '',
+    String notes = '',
+  }) async {
+    final cleanName = name.trim();
+    final tempId = 'wh_${DateTime.now().millisecondsSinceEpoch}';
+
+    final newW = WholesalerModel(
+      id: tempId,
+      name: cleanName,
+      phone: phone.trim(),
+      address: address.trim(),
+      gstin: gstin.trim(),
+      notes: notes.trim(),
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    // 0ms Optimistic local storage save
+    _wholesalers.insert(0, newW);
+    await _persistWholesalersCache();
+    notifyListeners();
+
+    // Background cloud sync
+    try {
+      final res = await _wholesalerRepo.createWholesaler({
+        'name': cleanName,
+        'phone': phone.trim(),
+        'address': address.trim(),
+        'gstin': gstin.trim(),
+        'notes': notes.trim(),
+      });
+      if (res.success && res.data != null) {
+        final serverW = res.data!;
+        final idx = _wholesalers.indexWhere((w) => w.id == tempId);
+        if (idx >= 0) {
+          _wholesalers[idx] = serverW;
+          await _persistWholesalersCache();
+          notifyListeners();
+          return serverW;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Procurement] Cloud wholesaler create failed: $e');
+    }
+    return newW;
+  }
+
+  /// Updates an existing wholesaler
+  Future<bool> updateWholesaler(WholesalerModel w) async {
+    final idx = _wholesalers.indexWhere((it) => it.id == w.id);
+    if (idx >= 0) {
+      _wholesalers[idx] = w;
+      await _persistWholesalersCache();
+      notifyListeners();
+
+      try {
+        await _wholesalerRepo.updateWholesaler(w.id, {
+          'name': w.name,
+          'phone': w.phone,
+          'address': w.address,
+          'gstin': w.gstin,
+          'notes': w.notes,
+        });
+        return true;
+      } catch (e) {
+        debugPrint('[Procurement] Cloud wholesaler update failed: $e');
+      }
+    }
+    return false;
+  }
+
+  /// Deletes a wholesaler from the shop directory
+  Future<bool> deleteWholesaler(String id) async {
+    _wholesalers.removeWhere((w) => w.id == id);
+    await _persistWholesalersCache();
+    notifyListeners();
+
+    try {
+      await _wholesalerRepo.deleteWholesaler(id);
+      return true;
+    } catch (e) {
+      debugPrint('[Procurement] Cloud wholesaler delete failed: $e');
+      return false;
+    }
   }
 
   /// Syncs procurement items with PostgreSQL backend database

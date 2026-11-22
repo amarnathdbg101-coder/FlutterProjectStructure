@@ -20,6 +20,7 @@ import '../../products/models/product_model.dart';
 import '../../products/widgets/color_shade_selector.dart';
 import '../controllers/procurement_controller.dart';
 import '../models/procurement_model.dart';
+import '../models/wholesaler_model.dart';
 
 /// Standard wholesale units for Indian Mandi / Retail sourcing
 const List<String> _kWholesaleUnits = [
@@ -1479,6 +1480,406 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
     );
   }
 
+  /// Opens dialog to register or edit a permanent wholesaler / supplier
+  Future<WholesalerModel?> _showWholesalerFormDialog(
+    BuildContext context,
+    ProcurementController controller, {
+    WholesalerModel? editWholesaler,
+    String initialName = '',
+    String initialPhone = '',
+  }) async {
+    final nameCtrl = TextEditingController(text: editWholesaler?.name ?? initialName);
+    final phoneCtrl = TextEditingController(text: editWholesaler?.phone ?? initialPhone);
+    final addressCtrl = TextEditingController(text: editWholesaler?.address ?? '');
+    final notesCtrl = TextEditingController(text: editWholesaler?.notes ?? '');
+    final isHindi = context.isHindi;
+
+    return showDialog<WholesalerModel>(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.storefront_rounded, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                editWholesaler != null
+                    ? (isHindi ? 'सप्लायर विवरण संपादित करें' : 'Edit Wholesaler')
+                    : (isHindi ? 'नया थोक व्यापारी / सप्लायर' : 'Add Wholesaler / Dealer'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isHindi
+                    ? 'स्थायी सप्लायर लिस्ट में जोड़ें ताकि बार-बार नाम और नंबर न लिखना पड़े:'
+                    : 'Save to permanent supplier directory for 1-tap reordering:',
+                style: TextStyle(fontSize: 12, color: context.colorTextMuted),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: nameCtrl,
+                autofocus: editWholesaler == null && initialName.isEmpty,
+                decoration: InputDecoration(
+                  labelText: isHindi ? 'व्यापारी / फर्म का नाम *' : 'Wholesaler / Firm Name *',
+                  hintText: isHindi ? 'उदा. श्याम ट्रेडिंग - मंडी शेड 4' : 'e.g. Shyam Trading Co.',
+                  prefixIcon: const Icon(Icons.business_rounded, size: 18),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: isHindi ? 'फोन / व्हाट्सएप *' : 'Phone / WhatsApp *',
+                  hintText: '9876543210',
+                  prefixIcon: const Icon(Icons.phone_rounded, size: 18),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: addressCtrl,
+                decoration: InputDecoration(
+                  labelText: isHindi ? 'मंडी शेड / दुकान पता' : 'Mandi Shed / Market Location',
+                  hintText: isHindi ? 'उदा. शेड नं. 4, अनाज मंडी' : 'e.g. Shed #4, Grain Market',
+                  prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: notesCtrl,
+                decoration: InputDecoration(
+                  labelText: isHindi ? 'नोट्स / मुख्य सामग्री' : 'Notes / Main Items',
+                  hintText: isHindi ? 'उदा. दाल, चावल, तेल मुख्य सप्लायर' : 'e.g. Pulses, Grains, Edible Oil',
+                  prefixIcon: const Icon(Icons.notes_rounded, size: 18),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dlgCtx, null),
+            child: Text(isHindi ? 'रद्द करें' : 'Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+
+              if (editWholesaler != null) {
+                final updated = editWholesaler.copyWith(
+                  name: name,
+                  phone: phoneCtrl.text.trim(),
+                  address: addressCtrl.text.trim(),
+                  notes: notesCtrl.text.trim(),
+                );
+                await controller.updateWholesaler(updated);
+                if (dlgCtx.mounted) Navigator.pop(dlgCtx, updated);
+              } else {
+                final created = await controller.addWholesaler(
+                  name: name,
+                  phone: phoneCtrl.text.trim(),
+                  address: addressCtrl.text.trim(),
+                  notes: notesCtrl.text.trim(),
+                );
+                if (dlgCtx.mounted) Navigator.pop(dlgCtx, created);
+              }
+            },
+            child: Text(isHindi ? 'सुरक्षित करें' : 'Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Opens the Wholesalers & Suppliers Directory Bottom Sheet
+  void _showWholesalersDirectorySheet(
+    BuildContext context,
+    ProcurementController controller,
+  ) {
+    final isHindi = context.isHindi;
+    String search = '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colorSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final allWholesalers = controller.wholesalers;
+            final filtered = allWholesalers.where((w) {
+              if (search.isEmpty) return true;
+              final q = search.toLowerCase();
+              return w.name.toLowerCase().contains(q) ||
+                  w.phone.contains(q) ||
+                  w.address.toLowerCase().contains(q) ||
+                  w.notes.toLowerCase().contains(q);
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(ctx).size.height * 0.8,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Drag Handle
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: ctx.colorBorder,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // Header with Add Button
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.storefront_rounded, color: AppColors.primary, size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isHindi ? 'थोक व्यापारी डायरेक्टरी' : 'Wholesalers Directory',
+                              style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              '${allWholesalers.length} ${isHindi ? "स्थायी सप्लायर पंजीकृत" : "Registered Suppliers"}',
+                              style: TextStyle(fontSize: 11.5, color: ctx.colorTextMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: Text(
+                          isHindi ? 'नया सप्लायर' : 'Add New',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          final created = await _showWholesalerFormDialog(context, controller);
+                          if (created != null) {
+                            setModalState(() {});
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Search Field
+                  TextField(
+                    onChanged: (val) => setModalState(() => search = val.trim()),
+                    decoration: InputDecoration(
+                      hintText: isHindi ? 'सप्लायर का नाम या फोन नंबर खोजें...' : 'Search wholesaler or phone...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Wholesalers List
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.storefront_outlined, size: 48, color: ctx.colorTextMuted),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    search.isNotEmpty
+                                        ? (isHindi ? 'कोई सप्लायर नहीं मिला' : 'No matching wholesalers found')
+                                        : (isHindi ? 'कोई स्थायी सप्लायर नहीं है' : 'No saved wholesalers yet'),
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    isHindi
+                                        ? 'नियमित सप्लायर को एक बार जोड़ें — फिर मंडी लिस्ट में सिर्फ 1-टैप में चुनें!'
+                                        : 'Add regular mandi dealers once and pick them in 1-tap during procurement!',
+                                    style: TextStyle(fontSize: 12, color: ctx.colorTextMuted),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 8),
+                            itemBuilder: (_, idx) {
+                              final w = filtered[idx];
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: ctx.colorSurfaceSubtle,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: ctx.colorBorder),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(Icons.storefront_rounded, color: AppColors.primary, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            w.name,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (w.phone.isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '📞 ${w.phone}',
+                                              style: TextStyle(fontSize: 12, color: ctx.colorTextMuted),
+                                            ),
+                                          ],
+                                          if (w.address.isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '📍 ${w.address}',
+                                              style: TextStyle(fontSize: 11, color: ctx.colorTextMuted),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    if (w.phone.isNotEmpty)
+                                      IconButton(
+                                        icon: const Icon(Icons.phone_rounded, color: Color(0xFF16A34A), size: 20),
+                                        tooltip: isHindi ? 'कॉल करें' : 'Call',
+                                        onPressed: () {
+                                          final uri = Uri.parse('tel:${w.phone}');
+                                          launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        },
+                                      ),
+                                    IconButton(
+                                      icon: Icon(Icons.edit_outlined, size: 18, color: ctx.colorTextPrimary),
+                                      tooltip: isHindi ? 'संपादित करें' : 'Edit',
+                                      onPressed: () async {
+                                        final edited = await _showWholesalerFormDialog(
+                                          context,
+                                          controller,
+                                          editWholesaler: w,
+                                        );
+                                        if (edited != null) setModalState(() {});
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                                      tooltip: isHindi ? 'हटाएं' : 'Delete',
+                                      onPressed: () async {
+                                        final confirm = await showDialog<bool>(
+                                          context: context,
+                                          builder: (dCtx) => AlertDialog(
+                                            title: Text(isHindi ? 'सप्लायर हटाएं?' : 'Delete Wholesaler?'),
+                                            content: Text(
+                                              isHindi
+                                                  ? 'क्या आप "${w.name}" को सप्लायर सूची से हटाना चाहते हैं?'
+                                                  : 'Are you sure you want to remove "${w.name}"?',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(dCtx, false),
+                                                child: Text(isHindi ? 'रद्द करें' : 'Cancel'),
+                                              ),
+                                              ElevatedButton(
+                                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                                                onPressed: () => Navigator.pop(dCtx, true),
+                                                child: Text(isHindi ? 'हटाएं' : 'Delete', style: const TextStyle(color: Colors.white)),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        if (confirm == true) {
+                                          await controller.deleteWholesaler(w.id);
+                                          setModalState(() {});
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// Opens the professional, structured Add/Edit Sourcing Item Sheet
   void _showAddEditSourcingItemSheet(
     BuildContext context,
@@ -1886,11 +2287,130 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                       ),
                       if (showDealerNotes) ...[
                         const SizedBox(height: 8),
+
+                        // Dropdown / Quick Selector for saved Wholesalers
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: ctx.colorSurfaceSubtle,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: ctx.colorBorder),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.storefront_rounded, size: 16, color: AppColors.primary),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        context.isHindi ? 'स्थायी सप्लायर चुनें:' : 'Select Wholesaler:',
+                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                  InkWell(
+                                    onTap: () async {
+                                      final created = await _showWholesalerFormDialog(context, controller);
+                                      if (created != null) {
+                                        setModalState(() {
+                                          dealerCtrl.text = created.name;
+                                          dealerPhoneCtrl.text = created.phone;
+                                        });
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.add_circle_outline_rounded, size: 14, color: AppColors.primary),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            context.isHindi ? '+ नया सप्लायर' : '+ New',
+                                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (controller.wholesalers.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: ctx.colorSurface,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: ctx.colorBorder),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      isExpanded: true,
+                                      hint: Text(
+                                        context.isHindi ? 'सप्लायर सूची से चुनें...' : 'Choose from saved directory...',
+                                        style: TextStyle(fontSize: 12.5, color: ctx.colorTextMuted),
+                                      ),
+                                      value: controller.wholesalers.any((w) => w.name == dealerCtrl.text.trim())
+                                          ? dealerCtrl.text.trim()
+                                          : null,
+                                      items: controller.wholesalers.map((w) {
+                                        return DropdownMenuItem<String>(
+                                          value: w.name,
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  w.name,
+                                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (w.phone.isNotEmpty)
+                                                Text(
+                                                  ' (${w.phone})',
+                                                  style: TextStyle(fontSize: 11, color: ctx.colorTextMuted),
+                                                ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          final found = controller.wholesalers.firstWhere((w) => w.name == val);
+                                          setModalState(() {
+                                            dealerCtrl.text = found.name;
+                                            dealerPhoneCtrl.text = found.phone;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ] else ...[
+                                Text(
+                                  context.isHindi
+                                      ? 'कोई स्थायी सप्लायर सेव नहीं है। "+ नया सप्लायर" दबाकर सेव करें।'
+                                      : 'No saved wholesalers yet. Tap "+ New" to save one.',
+                                  style: TextStyle(fontSize: 11.5, color: ctx.colorTextMuted),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
                         Row(
                           children: [
                             Expanded(
                               child: TextFormField(
                                 controller: dealerCtrl,
+                                onChanged: (_) => setModalState(() {}),
                                 decoration: InputDecoration(
                                   labelText: context.isHindi ? 'व्यापारी / सप्लायर' : 'Wholesaler / Dealer',
                                   hintText: 'उदा. श्याम ट्रेडिंग कंपनी',
@@ -1916,6 +2436,52 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                             ),
                           ],
                         ),
+
+                        // If user typed a custom dealer name not in wholesalers, show 1-tap save prompt
+                        if (dealerCtrl.text.trim().isNotEmpty &&
+                            !controller.wholesalers.any((w) => w.name.toLowerCase() == dealerCtrl.text.trim().toLowerCase())) ...[
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: InkWell(
+                              onTap: () async {
+                                await controller.addWholesaler(
+                                  name: dealerCtrl.text.trim(),
+                                  phone: dealerPhoneCtrl.text.trim(),
+                                );
+                                setModalState(() {});
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(context.isHindi
+                                          ? '✓ ${dealerCtrl.text} सप्लायर सूची में स्थायी रूप से सेव हो गया!'
+                                          : '✓ ${dealerCtrl.text} saved to Wholesalers Directory!'),
+                                      backgroundColor: AppColors.success,
+                                      duration: const Duration(seconds: 1),
+                                    ),
+                                  );
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.bookmark_add_outlined, size: 15, color: AppColors.primary),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      context.isHindi
+                                          ? '💾 "${dealerCtrl.text.trim()}" को स्थायी सप्लायर सूची में सेव करें'
+                                          : '💾 Save "${dealerCtrl.text.trim()}" to Wholesalers Directory',
+                                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 10),
                         TextFormField(
                           controller: notesCtrl,
@@ -2106,6 +2672,8 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     duration: const Duration(seconds: 1),
                   ),
                 );
+              } else if (value == 'wholesalers') {
+                _showWholesalersDirectorySheet(context, controller);
               } else if (value == 'import') {
                 if (lowStockProducts.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2162,6 +2730,19 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     const SizedBox(width: 10),
                     Text(
                       context.tr('mandi_whatsapp_sheet'),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'wholesalers',
+                child: Row(
+                  children: [
+                    const Icon(Icons.storefront_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Text(
+                      ctx.isHindi ? 'थोक व्यापारी डायरेक्टरी' : 'Wholesalers Directory',
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ],

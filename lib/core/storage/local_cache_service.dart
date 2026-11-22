@@ -6,6 +6,7 @@ import '../../features/dashboard/repositories/dashboard_repository.dart';
 import '../../features/products/models/product_model.dart';
 import '../../features/khata/models/khata_model.dart';
 import '../../features/procurement/models/procurement_model.dart';
+import '../../features/procurement/models/wholesaler_model.dart';
 import '../../features/analytics/models/analytics_model.dart';
 import '../../features/expenses/models/expense_model.dart';
 import '../../features/offers/models/offer_model.dart';
@@ -32,6 +33,7 @@ class LocalCacheService {
   static List<ProductModel>? _memoryProducts;
   static List<KhataCustomerModel>? _memoryKhataCustomers;
   static List<ProcurementItemModel>? _memoryProcurementItems;
+  static List<WholesalerModel>? _memoryWholesalers;
   static List<ExpenseModel>? _memoryExpenses;
   static List<OfferModel>? _memoryOffers;
   static List<SaleModel>? _memorySalesHistory;
@@ -289,6 +291,48 @@ class LocalCacheService {
       }
     } catch (e) {
       debugPrint('[LocalCacheService] Error reading procurement items: $e');
+    }
+    return [];
+  }
+
+  // ==========================================
+  // MANDI WHOLESALERS DIRECTORY PERSISTENCE
+  // ==========================================
+  static const String _keyWholesalers = 'shopsilo_cache_wholesalers';
+
+  /// Save Mandi permanent wholesalers directory to local device storage
+  static Future<void> saveWholesalers(List<WholesalerModel> wholesalers) async {
+    try {
+      _memoryWholesalers = List<WholesalerModel>.from(wholesalers);
+      await init();
+      final listJson = jsonEncode(wholesalers.map((w) => w.toJson()).toList());
+      await _prefs!.setString(_keyWholesalers, listJson);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving wholesalers: $e');
+    }
+  }
+
+  /// Retrieve Mandi permanent wholesalers synchronously from local storage for 0ms startup
+  static List<WholesalerModel> getWholesalers() {
+    if (_memoryWholesalers != null && _memoryWholesalers!.isNotEmpty) {
+      return List<WholesalerModel>.from(_memoryWholesalers!);
+    }
+    try {
+      final raw = _prefs?.getString(_keyWholesalers);
+      if (raw == null || raw.trim().isEmpty) return [];
+
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded
+            .map((item) => WholesalerModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        if (list.isNotEmpty) {
+          _memoryWholesalers = List<WholesalerModel>.from(list);
+        }
+        return list;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading wholesalers: $e');
     }
     return [];
   }
