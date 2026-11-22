@@ -407,7 +407,7 @@ class _ReservationsListScreenState extends State<ReservationsListScreen> {
 
                 // Orders List
                 resCtrl.isLoading
-                    ? const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
+                    ? const AppListSkeleton(itemCount: 5)
                     : resCtrl.filteredReservations.isEmpty
                         ? Center(
                             child: Padding(

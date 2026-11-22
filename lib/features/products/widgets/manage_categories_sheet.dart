@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/localization/language_controller.dart';
+import '../../../core/widgets/app_ui_components.dart';
 import '../controllers/category_controller.dart';
 import '../models/category_model.dart';
 import 'add_category_dialog.dart';
@@ -89,7 +91,7 @@ class ManageCategoriesSheet extends StatelessWidget {
           // Categories List
           Expanded(
             child: catCtrl.isLoading && categories.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppListSkeleton(itemCount: 4)
                 : categories.isEmpty
                     ? Center(
                         child: Column(
@@ -98,11 +100,16 @@ class ManageCategoriesSheet extends StatelessWidget {
                             const Text('📦', style: TextStyle(fontSize: 48)),
                             const SizedBox(height: 12),
                             Text(
-                              'Koi category nahi mili',
+                              context.isHindi ? 'कोई श्रेणी नहीं मिली' : 'No categories found',
                               style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 6),
-                            const Text('Nayi custom category add karne ke liye upar button dabayein'),
+                            Text(
+                              context.isHindi
+                                  ? 'नई श्रेणी जोड़ने के लिए ऊपर बटन दबाएं'
+                                  : 'Tap above button to add a custom category',
+                              style: theme.textTheme.bodySmall,
+                            ),
                           ],
                         ),
                       )

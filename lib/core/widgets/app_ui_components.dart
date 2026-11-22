@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../constants/app_colors.dart';
@@ -52,7 +53,10 @@ class AppCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onTap!();
+          },
           child: cardContent,
         ),
       );
@@ -882,6 +886,28 @@ class AppStatCardSkeleton extends StatelessWidget {
           AppShimmer(width: 70, height: 10),
         ],
       ),
+    );
+  }
+}
+
+/// Smooth cross-fade transition widget for switching between loading skeleton and content
+class AppSmoothTransition extends StatelessWidget {
+  final Widget child;
+  final Duration duration;
+
+  const AppSmoothTransition({
+    super.key,
+    required this.child,
+    this.duration = const Duration(milliseconds: 250),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: duration,
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      child: child,
     );
   }
 }

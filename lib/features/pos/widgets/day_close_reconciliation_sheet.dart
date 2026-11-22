@@ -14,6 +14,7 @@ import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/token_storage.dart';
+import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 
 /// Interactive Day Close & Cash Reconciliation Bottom Sheet (गल्ला मिलान & Z-Report)
@@ -200,7 +201,7 @@ class _DayCloseReconciliationSheetState extends State<DayCloseReconciliationShee
 
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppListSkeleton(itemCount: 4)
                 : _error != null
                     ? Center(
                         child: Column(

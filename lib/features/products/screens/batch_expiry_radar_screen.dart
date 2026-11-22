@@ -1345,7 +1345,7 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
           // 3. Expiry Items List or Clean Empty State
           Expanded(
             child: batchCtrl.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppListSkeleton(itemCount: 6)
                 : totalCount == 0
                     ? _buildZeroTrackedState(context, isHindi)
                     : filteredItems.isEmpty

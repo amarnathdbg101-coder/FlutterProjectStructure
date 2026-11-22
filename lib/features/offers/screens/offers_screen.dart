@@ -241,10 +241,7 @@ class _OffersScreenState extends State<OffersScreen> {
                   const SizedBox(height: 6),
 
                   if (offerController.isLoading && offers.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
+                    const AppListSkeleton(itemCount: 4)
                   else if (offers.isEmpty)
                     AppCard(
                       padding: const EdgeInsets.all(32),
