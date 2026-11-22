@@ -266,8 +266,8 @@ class ProcurementPdfService {
                           ),
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'MANDI WHOLESALE PURCHASE ORDER (थोक खरीद मांग पत्र)',
-                            style: const pw.TextStyle(fontSize: 8.0, color: PdfColor.fromInt(0xFF94A3B8)),
+                            'PURCHASE ORDER / क्रय आदेश',
+                            style: const pw.TextStyle(fontSize: 8.5, color: PdfColor.fromInt(0xFF94A3B8)),
                           ),
                         ],
                       ),
@@ -310,7 +310,7 @@ class ProcurementPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'खरीदार / फर्म (Buyer Details): $cleanShopName',
+                          'Buyer / क्रेता प्रतिष्ठान: $cleanShopName',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cTextDark),
                         ),
                         if (cleanAddress != null) ...[
@@ -323,7 +323,7 @@ class ProcurementPdfService {
                         if (cleanPhone != null) ...[
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'Contact / WhatsApp: $cleanPhone',
+                            'Contact: $cleanPhone',
                             style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
                           ),
                         ],
@@ -337,18 +337,18 @@ class ProcurementPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text(
-                          'कुल सामान (Total Items): ${items.length}',
+                          'Total Items: ${items.length}',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5, color: cBlueAccent),
                         ),
                         pw.SizedBox(height: 2),
                         pw.Text(
-                          'अनुमानित बजट: Rs. ${effectiveTotal.toStringAsFixed(0)}',
+                          'Est. Budget: Rs. ${effectiveTotal.toStringAsFixed(0)}',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.0, color: cSuccessGreen),
                         ),
                         if (uniqueDealers.isNotEmpty) ...[
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'सप्लायर / डीलर: ${uniqueDealers.length} फर्म',
+                            'Suppliers: ${uniqueDealers.length} Firm(s)',
                             style: const pw.TextStyle(fontSize: 7.5, color: cMuted),
                           ),
                         ],
@@ -383,12 +383,12 @@ class ProcurementPdfService {
                     decoration: const pw.BoxDecoration(color: cTblHeader),
                     children: [
                       _tableCell('#', isHeader: true, align: pw.TextAlign.center),
-                      _tableCell('सामान का नाम व विवरण (Item Name & Specs)', isHeader: true),
-                      _tableCell('श्रेणी (Category)', isHeader: true, align: pw.TextAlign.center),
-                      _tableCell('थोक मात्रा (Qty)', isHeader: true, align: pw.TextAlign.center),
-                      _tableCell('अनु. दर (Rate)', isHeader: true, align: pw.TextAlign.right),
-                      _tableCell('कुल रकम (Total)', isHeader: true, align: pw.TextAlign.right),
-                      _tableCell('डीलर / फर्म (Supplier)', isHeader: true),
+                      _tableCell('Item Description', isHeader: true),
+                      _tableCell('Category', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell('Quantity', isHeader: true, align: pw.TextAlign.center),
+                      _tableCell('Rate (₹)', isHeader: true, align: pw.TextAlign.right),
+                      _tableCell('Amount (₹)', isHeader: true, align: pw.TextAlign.right),
+                      _tableCell('Supplier / फर्म', isHeader: true),
                     ],
                   ),
 
@@ -490,7 +490,7 @@ class ProcurementPdfService {
                     children: [
                       _tableCell('', padding: const pw.EdgeInsets.all(5)),
                       _tableCell(
-                        'TOTAL ESTIMATED BUDGET (कुल थोक खरीद अनुमान)',
+                        'TOTAL AMOUNT / कुल योग',
                         isBold: true,
                         padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
                       ),
@@ -536,12 +536,12 @@ class ProcurementPdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'MANDI INSTRUCTIONS / महत्वपूर्ण निर्देश:',
+                          'TERMS & INSTRUCTIONS / निर्देश:',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.8, color: cTextDark),
                         ),
                         pw.SizedBox(height: 3),
                         pw.Text(
-                          '1. माल की सही पैकेजिंग, एक्सपायरी डेट और बैच नंबर की जांच करके ही डिलीवरी लें।\n2. थोक दर के अनुसार पक्का चालान/बिल व जीएसटी रसीद अवश्य प्रदान करें।',
+                          '1. सामग्री की पैकेजिंग, बैच संख्या एवं समाप्ति तिथि (Expiry Date) की जांच उपरांत ही आपूर्ति स्वीकार की जाएगी।\n2. क्रय आदेशानुसार पक्का बिल / चालान संलग्न करना अनिवार्य है।',
                           style: const pw.TextStyle(fontSize: 7.0, color: cMuted),
                         ),
                       ],
@@ -562,12 +562,12 @@ class ProcurementPdfService {
                       ),
                       pw.SizedBox(height: 4),
                       pw.Text(
-                        'आढ़ती / थोक सप्लायर मुहर व हस्ताक्षर',
+                        'Authorized Signatory / अधिकृत हस्ताक्षर',
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5, color: cTextDark),
                         textAlign: pw.TextAlign.center,
                       ),
                       pw.Text(
-                        'Wholesaler / Dealer Signature & Stamp',
+                        'Signature & Stamp',
                         style: const pw.TextStyle(fontSize: 6.8, color: cMuted),
                         textAlign: pw.TextAlign.center,
                       ),

@@ -45,11 +45,11 @@ class MandiPdfPreviewScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isHindi ? 'मंडी मांग पत्र (PDF प्रिव्यू)' : 'Mandi Order (PDF Preview)',
+              isHindi ? 'क्रय मांग पत्र (PDF प्रिव्यू)' : 'Purchase Order (PDF Preview)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
             ),
             Text(
-              '${items.length} ${isHindi ? "सामान • थोक खरीद" : "Items • Wholesale"}',
+              '${items.length} ${isHindi ? "सामग्री • थोक क्रय" : "Items • Wholesale"}',
               style: TextStyle(fontSize: 11, color: context.colorTextMuted),
             ),
           ],
@@ -94,7 +94,7 @@ class MandiPdfPreviewScreen extends StatelessWidget {
               const CircularProgressIndicator(color: AppColors.primary),
               const SizedBox(height: 12),
               Text(
-                isHindi ? 'मंडी PDF तैयार हो रहा है...' : 'Generating Mandi PDF...',
+                isHindi ? 'मांग पत्र तैयार हो रहा है...' : 'Generating Purchase Order PDF...',
                 style: TextStyle(fontSize: 13, color: context.colorTextMuted, fontWeight: FontWeight.w600),
               ),
             ],

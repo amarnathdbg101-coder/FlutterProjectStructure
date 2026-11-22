@@ -861,7 +861,7 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                   ),
                   const SizedBox(width: 8),
                   _buildMetricChip(
-                    label: isHindi ? '🔴 एक्सपायर' : '🔴 Expired',
+                    label: isHindi ? '🔴 एक्सपायर्ड' : '🔴 Expired',
                     count: expiredCount,
                     isSelected: _selectedFilter == 'expired',
                     color: const Color(0xFFDC2626),
@@ -1074,20 +1074,20 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
     if (item.isExpired) {
       urgencyColor = const Color(0xFFDC2626);
       urgencyLabel = isHindi
-          ? '🔴 एक्सपायर (${item.daysRemaining.abs()} दिन पहले)'
+          ? '🔴 एक्सपायर्ड (${item.daysRemaining.abs()} दिन पूर्व)'
           : '🔴 EXPIRED (${item.daysRemaining.abs()}d ago)';
     } else if (item.daysRemaining == 0) {
       urgencyColor = const Color(0xFFDC2626);
-      urgencyLabel = isHindi ? '⚠️ आज ही एक्सपायर!' : '⚠️ EXPIRES TODAY!';
+      urgencyLabel = isHindi ? '⚠️ आज समाप्ति' : '⚠️ EXPIRES TODAY!';
     } else if (item.daysRemaining <= 7) {
       urgencyColor = const Color(0xFFEA580C);
-      urgencyLabel = isHindi ? '🟠 गंभीर (${item.daysRemaining} दिन बाकी)' : '🟠 CRITICAL (${item.daysRemaining}d left)';
+      urgencyLabel = isHindi ? '🟠 गंभीर (${item.daysRemaining} दिन शेष)' : '🟠 CRITICAL (${item.daysRemaining}d left)';
     } else if (item.daysRemaining <= 30) {
       urgencyColor = const Color(0xFFD97706);
-      urgencyLabel = isHindi ? '🟡 चेतावनी (${item.daysRemaining} दिन बाकी)' : '🟡 WARNING (${item.daysRemaining}d left)';
+      urgencyLabel = isHindi ? '🟡 चेतावनी (${item.daysRemaining} दिन शेष)' : '🟡 WARNING (${item.daysRemaining}d left)';
     } else {
       urgencyColor = const Color(0xFF16A34A);
-      urgencyLabel = isHindi ? '🟢 सुरक्षित (${item.daysRemaining} दिन)' : '🟢 SAFE (${item.daysRemaining}d)';
+      urgencyLabel = isHindi ? '🟢 सुरक्षित (${item.daysRemaining} दिन शेष)' : '🟢 SAFE (${item.daysRemaining}d)';
     }
 
     final formattedDate = DateFormat('dd MMM yyyy').format(item.expiryDate);
@@ -1325,14 +1325,14 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              isHindi ? 'दुकान के किसी भी सामान पर एक्सपायरी दर्ज नहीं है' : 'No products tracked with expiry date',
+              isHindi ? 'किसी भी उत्पाद पर समाप्ति तिथि दर्ज नहीं है' : 'No products tracked with expiry date',
               style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               isHindi
-                  ? 'जब आप दुकान में दूध, ब्रेड, किराना या दवाइयाँ जोड़ते हैं, तो उनकी एक्सपायरी डेट डालें। वे सभी सामान यहाँ अपने आप ट्रैक होंगे और नुकसान होने से बचेंगे!'
+                  ? 'डेयरी, बेकरी, किराना या औषधियों पर समाप्ति तिथि (Expiry Date) दर्ज करें ताकि समय रहते अलर्ट मिल सके और नुकसान से बचा जा सके।'
                   : 'Add expiry dates to perishable items like dairy, bakery, FMCG, and medicines. They will automatically be tracked here with smart alerts!',
               style: TextStyle(fontSize: 12.5, color: context.colorTextMuted, height: 1.4),
               textAlign: TextAlign.center,
@@ -1347,7 +1347,7 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
               ),
               icon: const Icon(Icons.add_rounded, size: 18),
               label: Text(
-                isHindi ? 'दुकान के सामान पर एक्सपायरी जोड़ें' : 'Set Expiry on Shop Products',
+                isHindi ? 'उत्पाद पर समाप्ति तिथि दर्ज करें' : 'Set Expiry on Shop Products',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               onPressed: _showTrackExistingProductSheet,
