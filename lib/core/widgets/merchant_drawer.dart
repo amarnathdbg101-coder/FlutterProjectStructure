@@ -188,14 +188,6 @@ class MerchantDrawer extends StatelessWidget {
                         context.push('/merchant/batch-expiry');
                       },
                     ),
-                    _DrawerTile(
-                      icon: Icons.assignment_return_rounded,
-                      title: context.isHindi ? 'डैमेज व रिटर्न क्लेम' : 'Damage & Return Claims',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/merchant/damage-claims');
-                      },
-                    ),
 
                     _DrawerDivider(color: context.colorBorder),
 

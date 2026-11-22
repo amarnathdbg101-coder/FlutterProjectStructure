@@ -4879,9 +4879,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       );
                     }
                     break;
-                  case 'register_list':
-                    context.push('/merchant/products/list');
-                    break;
                   case 'refresh':
                     final prod = context.read<ProductController>();
                     await prod.loadProducts(forceRefresh: true);
@@ -4903,16 +4900,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                 }
               },
               itemBuilder: (ctx) => [
-                PopupMenuItem(
-                  value: 'register_list',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.view_list_rounded, color: AppColors.primary, size: 18),
-                      const SizedBox(width: 10),
-                      Text(ctx.isHindi ? 'रजिस्टर सूची (List View)' : 'Register List View'),
-                    ],
-                  ),
-                ),
                 PopupMenuItem(
                   value: 'import',
                   child: Row(

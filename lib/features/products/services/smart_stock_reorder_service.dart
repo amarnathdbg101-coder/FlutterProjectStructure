@@ -40,6 +40,12 @@ class SmartStockReorderService {
     if (existingIdx != -1) {
       // Update quantity if already in procurement
       final cur = items[existingIdx];
+      final wholesaler = product.wholesalerName.isNotEmpty
+          ? product.wholesalerName
+          : product.supplier.trim();
+      final wholesalerPhone = product.wholesalerPhone.isNotEmpty
+          ? product.wholesalerPhone
+          : cur.dealerPhone;
       items[existingIdx] = ProcurementItemModel(
         id: cur.id,
         name: cur.name,
@@ -47,12 +53,15 @@ class SmartStockReorderService {
         qty: qtyStr,
         estimatedPrice: estPrice,
         actualPrice: cur.actualPrice,
-        dealerName: product.supplier.trim().isNotEmpty ? product.supplier.trim() : cur.dealerName,
-        dealerPhone: cur.dealerPhone,
+        dealerName: wholesaler.isNotEmpty ? wholesaler : cur.dealerName,
+        dealerPhone: wholesalerPhone,
         notes: cur.notes.isNotEmpty ? cur.notes : 'Auto-reorder for low stock',
         isCompleted: false,
       );
     } else {
+      final wholesaler = product.wholesalerName.isNotEmpty
+          ? product.wholesalerName
+          : product.supplier.trim();
       // Insert new procurement item at top
       items.insert(
         0,
@@ -62,7 +71,8 @@ class SmartStockReorderService {
           category: product.category,
           qty: qtyStr,
           estimatedPrice: estPrice,
-          dealerName: product.supplier.trim().isNotEmpty ? product.supplier.trim() : '',
+          dealerName: wholesaler,
+          dealerPhone: product.wholesalerPhone,
           notes: 'Auto-reorder for low stock',
         ),
       );
@@ -117,6 +127,9 @@ class SmartStockReorderService {
       if (!exists) {
         final qty = getRecommendedReorderQuantity(product);
         final estPrice = product.costPrice > 0 ? product.costPrice : product.price;
+        final wholesaler = product.wholesalerName.isNotEmpty
+            ? product.wholesalerName
+            : product.supplier.trim();
 
         items.insert(
           0,
@@ -126,7 +139,8 @@ class SmartStockReorderService {
             category: product.category,
             qty: '$qty ${product.unit}s',
             estimatedPrice: estPrice,
-            dealerName: product.supplier.trim().isNotEmpty ? product.supplier.trim() : '',
+            dealerName: wholesaler,
+            dealerPhone: product.wholesalerPhone,
             notes: 'Auto-reorder from Low Stock Alert',
           ),
         );
