@@ -2071,23 +2071,32 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
           style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
         ),
         actions: [
-          // 1. Direct Share Action (WhatsApp & PDF)
+          // 1. Live In-App PDF Preview & Print Action
           IconButton(
-            icon: const Icon(Icons.share_rounded, size: 20, color: AppColors.primary),
+            icon: const Icon(Icons.picture_as_pdf_rounded, size: 21, color: AppColors.primary),
+            tooltip: context.isHindi ? 'PDF देखें व प्रिंट करें' : 'View & Print PDF',
+            onPressed: () => controller.previewPdfSheet(context, shopName),
+          ),
+
+          // 2. Direct Share Action (WhatsApp, Bluetooth, etc.)
+          IconButton(
+            icon: const Icon(Icons.share_rounded, size: 20, color: Color(0xFF0D9488)),
             tooltip: context.isHindi ? 'मंडी लिस्ट शेयर करें' : 'Share Mandi Sheet',
             onPressed: () => controller.sharePdfSheet(context, shopName),
           ),
 
-          // 2. More Options Menu
+          // 3. More Options Menu
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             color: context.colorSurface,
             onSelected: (value) {
-              if (value == 'whatsapp') {
+              if (value == 'preview_pdf') {
+                controller.previewPdfSheet(context, shopName);
+              } else if (value == 'share_pdf') {
+                controller.sharePdfSheet(context, shopName);
+              } else if (value == 'whatsapp') {
                 _sendWhatsAppOrderSheet(context, items, shopName);
-              } else if (value == 'pdf') {
-                controller.generatePdfSheet(context, shopName);
               } else if (value == 'refresh') {
                 controller.refreshList();
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -2120,6 +2129,32 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
             },
             itemBuilder: (ctx) => [
               PopupMenuItem<String>(
+                value: 'preview_pdf',
+                child: Row(
+                  children: [
+                    const Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Text(
+                      ctx.isHindi ? 'PDF देखें व प्रिंट करें' : 'View & Print PDF',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'share_pdf',
+                child: Row(
+                  children: [
+                    const Icon(Icons.share_rounded, size: 18, color: Color(0xFF0D9488)),
+                    const SizedBox(width: 10),
+                    Text(
+                      ctx.isHindi ? 'मंडी PDF शेयर करें' : 'Share PDF Sheet',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
                 value: 'whatsapp',
                 child: Row(
                   children: [
@@ -2127,19 +2162,6 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                     const SizedBox(width: 10),
                     Text(
                       context.tr('mandi_whatsapp_sheet'),
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'pdf',
-                child: Row(
-                  children: [
-                    const Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
-                    const SizedBox(width: 10),
-                    Text(
-                      ctx.isHindi ? 'मंडी PDF शीट डाउनलोड / प्रिंट' : 'Mandi PDF (Download/Print)',
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ],

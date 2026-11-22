@@ -7,6 +7,7 @@ import '../../../core/storage/local_cache_service.dart';
 import '../../products/models/product_model.dart';
 import '../models/procurement_model.dart';
 import '../repositories/procurement_repository.dart';
+import '../screens/mandi_pdf_preview_screen.dart';
 import '../services/procurement_pdf_service.dart';
 
 class ProcurementController extends BaseController {
@@ -260,11 +261,43 @@ class ProcurementController extends BaseController {
     }
   }
 
+  /// 🖨️ Opens live interactive In-App PDF Preview & Print Screen
+  void previewPdfSheet(BuildContext context, String shopName) {
+    if (_items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.isHindi ? 'मंडी लिस्ट खाली है' : 'Mandi procurement list is empty')),
+      );
+      return;
+    }
+
+    final pending = _items.where((i) => !i.isCompleted).toList();
+    final target = pending.isNotEmpty ? pending : _items;
+
+    final cachedShop = LocalCacheService.getShop();
+    final effectiveShopName = shopName.trim().isNotEmpty && shopName.trim() != 'ShopSilo Merchant'
+        ? shopName.trim()
+        : (cachedShop?.name.trim().isNotEmpty ?? false
+            ? cachedShop!.name.trim()
+            : 'ShopSilo Partner Store');
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => MandiPdfPreviewScreen(
+          shopName: effectiveShopName,
+          items: target,
+          totalBudget: totalEstimatedBudget,
+          shopAddress: cachedShop?.address,
+          shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
+        ),
+      ),
+    );
+  }
+
   /// 📤 1-Tap Native Share Sheet (Bluetooth, WhatsApp, Instagram, Quick Share, etc.)
   Future<void> sharePdfSheet(BuildContext context, String shopName) async {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mandi procurement list is empty')),
+        SnackBar(content: Text(context.isHindi ? 'मंडी लिस्ट खाली है' : 'Mandi procurement list is empty')),
       );
       return;
     }
@@ -300,8 +333,8 @@ class ProcurementController extends BaseController {
     }
   }
 
-  /// 🖨️ 1-Tap Mandi Procurement PDF Sheet Engine (Shares or Prints)
+  /// 🖨️ 1-Tap Mandi Procurement PDF Sheet Engine (Previews in App with Print & Share)
   Future<void> generatePdfSheet(BuildContext context, String shopName) async {
-    await sharePdfSheet(context, shopName);
+    previewPdfSheet(context, shopName);
   }
 }
