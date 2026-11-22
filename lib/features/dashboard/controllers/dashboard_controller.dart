@@ -103,7 +103,19 @@ class DashboardController extends BaseController {
     _isSyncing = false;
 
     if (response.success && response.data != null) {
-      _stats = response.data!;
+      final fetched = response.data!;
+      // Guard against race conditions overwriting real positive sales with 0
+      final mergedSales = (fetched.todaySales > 0)
+          ? fetched.todaySales
+          : _stats.todaySales;
+      final mergedCount = (fetched.salesCount > 0)
+          ? fetched.salesCount
+          : _stats.salesCount;
+
+      _stats = fetched.copyWith(
+        todaySales: mergedSales,
+        salesCount: mergedCount,
+      );
       await LocalCacheService.saveDashboardStats(_stats);
       notifyListeners();
     } else {

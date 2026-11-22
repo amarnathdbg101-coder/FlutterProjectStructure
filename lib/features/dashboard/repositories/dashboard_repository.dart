@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/storage/local_cache_service.dart';
 
 class DashboardStats {
   final double todaySales;
@@ -85,22 +86,38 @@ class DashboardRepository {
         }
       } catch (_) {}
 
-      // Fallback to POS Daily Summary if digest not available
-      if (!hasDigest) {
+      // Fallback 1: POS Daily Summary if digest returned zero sales or was unavailable
+      if (!hasDigest || (todaySales == 0 && salesCount == 0)) {
         try {
           final posRes = await _dio.get(ApiConstants.posDailySummary);
-          final posData = posRes.data is Map ? posRes.data : {};
-          todaySales = (posData['total_sales'] is num)
-              ? (posData['total_sales'] as num).toDouble()
-              : (posData['total_amount'] is num)
-                  ? (posData['total_amount'] as num).toDouble()
-                  : 0.0;
-          salesCount = (posData['bill_count'] is num)
-              ? (posData['bill_count'] as num).toInt()
-              : (posData['total_bills'] is num)
-                  ? (posData['total_bills'] as num).toInt()
+          final rawPos = posRes.data is Map ? posRes.data : {};
+          final posData = (rawPos['data'] is Map) ? rawPos['data'] : rawPos;
+          final pSales = (posData['total_revenue'] is num)
+              ? (posData['total_revenue'] as num).toDouble()
+              : (posData['total_sales'] is num)
+                  ? (posData['total_sales'] as num).toDouble()
+                  : (posData['total_amount'] is num)
+                      ? (posData['total_amount'] as num).toDouble()
+                      : 0.0;
+          final pCount = (posData['total_bills'] is num)
+              ? (posData['total_bills'] as num).toInt()
+              : (posData['bill_count'] is num)
+                  ? (posData['bill_count'] as num).toInt()
                   : 0;
+          if (pSales > 0 || pCount > 0) {
+            todaySales = pSales;
+            salesCount = pCount;
+          }
         } catch (_) {}
+      }
+
+      // Fallback 2: LocalCache 24-hour sales (guarantees offline & immediate real sales consistency)
+      if (todaySales == 0 && salesCount == 0) {
+        final localSales = LocalCacheService.get24HourSales();
+        if (localSales.isNotEmpty) {
+          todaySales = localSales.fold<double>(0.0, (acc, s) => acc + s.totalAmount);
+          salesCount = localSales.length;
+        }
       }
 
       // 2. Fetch Khata Summary

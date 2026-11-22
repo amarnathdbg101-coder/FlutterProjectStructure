@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../features/auth/controllers/auth_controller.dart';
 import '../../features/dashboard/controllers/dashboard_controller.dart';
+import '../../features/pos/controllers/pos_controller.dart';
 import '../../features/products/controllers/product_controller.dart';
 import '../../features/reservations/controllers/reservation_controller.dart';
 import '../storage/token_storage.dart';
@@ -55,15 +56,24 @@ class DataSyncService {
       final prodCtrl = Provider.of<ProductController>(context, listen: false);
       final dashCtrl = Provider.of<DashboardController>(context, listen: false);
       final resCtrl = Provider.of<ReservationController>(context, listen: false);
+      PosController? posCtrl;
+      try {
+        posCtrl = Provider.of<PosController?>(context, listen: false);
+      } catch (_) {}
 
       // Execute essential API pre-fetches concurrently in background
-      await Future.wait([
+      final syncTasks = <Future<void>>[
         authCtrl.fetchShopDetails(silent: true),
         authCtrl.fetchUserProfile(silent: true),
         prodCtrl.loadProducts(silent: true),
         dashCtrl.fetchDashboardData(silent: true),
         resCtrl.loadReservations(silent: true),
-      ]).catchError((err) {
+      ];
+      if (posCtrl != null) {
+        syncTasks.add(posCtrl.fetchBackendSales());
+      }
+
+      await Future.wait(syncTasks).catchError((err) {
         debugPrint('[DataSyncService] Background API sync error (non-fatal): $err');
         hasAnyError = true;
         return <void>[];

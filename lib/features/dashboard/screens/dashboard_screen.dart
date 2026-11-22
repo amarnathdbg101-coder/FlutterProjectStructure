@@ -217,6 +217,22 @@ class _TodaySalesHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isHindi = context.isHindi;
 
+    final posMetrics = context.select<PosController?, PosSalesMetrics?>(
+      (controller) => controller?.getSalesMetrics(windowDays: 1),
+    );
+
+    final effectiveSales = (stats.todaySales > 0)
+        ? stats.todaySales
+        : (posMetrics != null && posMetrics.totalRevenue > 0)
+            ? posMetrics.totalRevenue
+            : 0.0;
+
+    final effectiveBills = (stats.salesCount > 0)
+        ? stats.salesCount
+        : (posMetrics != null && posMetrics.totalBills > 0)
+            ? posMetrics.totalBills
+            : 0;
+
     return InkWell(
       onTap: () => context.push('/merchant/today-sales'),
       borderRadius: BorderRadius.circular(16),
@@ -280,7 +296,7 @@ class _TodaySalesHeroCard extends StatelessWidget {
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                  '₹${stats.todaySales.toStringAsFixed(0)}',
+                  '₹${effectiveSales.toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
@@ -290,7 +306,7 @@ class _TodaySalesHeroCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  '${stats.salesCount} ${isHindi ? "बिल कटे • आज का गल्ला" : "bills recorded today"}',
+                  '$effectiveBills ${isHindi ? "बिल कटे • आज का गल्ला" : "bills recorded today"}',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
