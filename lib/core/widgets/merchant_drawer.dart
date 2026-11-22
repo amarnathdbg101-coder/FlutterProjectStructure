@@ -165,14 +165,6 @@ class MerchantDrawer extends StatelessWidget {
                       },
                     ),
                     _DrawerTile(
-                      icon: Icons.qr_code_2_rounded,
-                      title: context.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio',
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/merchant/barcode-studio');
-                      },
-                    ),
-                    _DrawerTile(
                       icon: Icons.local_shipping_rounded,
                       title: context.isHindi ? 'खरीद व सप्लायर ऑर्डर' : 'Purchase & Procurement',
                       onTap: () {

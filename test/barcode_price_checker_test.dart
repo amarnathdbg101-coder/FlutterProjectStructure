@@ -185,6 +185,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hardware Barcode Gun or Camera Scanner Ready'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('PriceCheckerDialog triggers database fallback and displays graceful state for unknown items', (tester) async {
@@ -224,6 +225,7 @@ void main() {
 
       // Verify widget doesn't crash and handles fallback
       expect(find.byType(PriceCheckerDialog), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('BarcodeStickerDialog renders preview, format toggle, copies stepper and Code128 vector widget', (tester) async {

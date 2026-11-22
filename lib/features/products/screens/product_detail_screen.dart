@@ -8,11 +8,9 @@ import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
-import '../widgets/barcode_sticker_dialog.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../core/storage/local_cache_service.dart';
 import '../../../core/utils/whatsapp_share_helper.dart';
-import 'barcode_sheet_studio_screen.dart';
 import 'inventory_screen.dart' show showAddProductDialog;
 
 /// Clean, Aesthetic, High-Vibe E-Commerce Product Details Showcase.
@@ -288,10 +286,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 } else {
                   showAddProductDialog(context, initialProduct: p, isDuplicate: true);
                 }
-              } else if (value == 'barcode') {
-                BarcodeStickerDialog.show(context, p);
-              } else if (value == 'barcode_studio') {
-                BarcodeSheetStudioScreen.show(context, initialProduct: p);
               } else if (value == 'delete') {
                 _confirmDelete(context, p.id);
               }
@@ -312,32 +306,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                         fontWeight: FontWeight.bold,
                         color: p.barcode.trim().isEmpty ? AppColors.primary : ctx.colorTextPrimary,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'barcode',
-                child: Row(
-                  children: [
-                    const Icon(Icons.qr_code_2_rounded, size: 18, color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      ctx.isHindi ? 'बारकोड स्टीकर प्रिंट' : 'Print Barcodes',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'barcode_studio',
-                child: Row(
-                  children: [
-                    const Icon(Icons.print_rounded, size: 18, color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      ctx.isHindi ? 'बारकोड प्रिंट स्टूडियो (A4)' : 'Barcode Sheet Studio',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],
                 ),
@@ -2130,52 +2098,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
               ],
             ],
           ),
-          const SizedBox(height: 12),
-
-          // Print Actions Buttons
-          Row(
-            children: [
-              // Single / Multi Barcode Sticker
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    side: const BorderSide(color: AppColors.primary),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 16, color: AppColors.primary),
-                  label: Text(
-                    context.isHindi ? 'स्टीकर प्रिंट' : 'Print Sticker',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onPressed: () => BarcodeStickerDialog.show(context, p),
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // A4 Barcode Sheet Studio
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: const Icon(Icons.print_rounded, size: 16),
-                  label: Text(
-                    context.isHindi ? 'शीट स्टूडियो' : 'Sheet Studio',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onPressed: () => BarcodeSheetStudioScreen.show(context, initialProduct: p),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -2333,25 +2255,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         top: false,
         child: Row(
           children: [
-            // Print Barcode Button (Height 48)
-            SizedBox(
-              height: 48,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: context.colorBorder),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: const Icon(Icons.qr_code_2_rounded, size: 20, color: AppColors.primary),
-                label: Text(
-                  context.isHindi ? 'बारकोड' : 'Barcode',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary),
-                ),
-                onPressed: () => BarcodeStickerDialog.show(context, p),
-              ),
-            ),
-            const SizedBox(width: 10),
-
             // Primary Update / Edit Details Button (Height 48)
             Expanded(
               child: SizedBox(

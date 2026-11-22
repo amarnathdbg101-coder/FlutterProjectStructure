@@ -6,7 +6,6 @@ import '../../../core/widgets/app_product_image.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../controllers/product_controller.dart';
 import '../models/product_model.dart';
-import '../widgets/barcode_sticker_dialog.dart';
 import 'inventory_screen.dart' show showAddProductDialog;
 import 'product_detail_screen.dart';
 
@@ -434,8 +433,6 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                                       onSelected: (val) {
                                         if (val == 'edit') {
                                           showAddProductDialog(context, initialProduct: p);
-                                        } else if (val == 'barcode') {
-                                          BarcodeStickerDialog.show(context, p);
                                         } else if (val == 'delete') {
                                           _confirmDelete(context, p);
                                         }
@@ -448,16 +445,6 @@ class _ProductsListScreenState extends State<ProductsListScreen> {
                                               const Icon(Icons.edit_note_rounded, size: 18, color: AppColors.primary),
                                               const SizedBox(width: 8),
                                               Text(ctx.isHindi ? 'विवरण बदलें' : 'Edit Details', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                                            ],
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'barcode',
-                                          child: Row(
-                                            children: [
-                                              const Icon(Icons.qr_code_2_rounded, size: 18, color: AppColors.primary),
-                                              const SizedBox(width: 8),
-                                              Text(ctx.isHindi ? 'बारकोड प्रिंट' : 'Print Barcode', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                                             ],
                                           ),
                                         ),

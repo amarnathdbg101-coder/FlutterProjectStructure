@@ -199,9 +199,12 @@ class BarcodeLabelItem {
   final double mrp;
   final String unit;
   final String? pkdDate;
+  final String? batchNumber;
+  final String? expiryDate;
   final bool showShopName;
   final bool showPrice;
   final bool showPkd;
+  final bool showBatchExpiry;
 
   BarcodeLabelItem({
     required this.productName,
@@ -212,9 +215,12 @@ class BarcodeLabelItem {
     this.mrp = 0.0,
     this.unit = '',
     this.pkdDate,
+    this.batchNumber,
+    this.expiryDate,
     this.showShopName = true,
     this.showPrice = false, // Hidden by default for clean label presentation
     this.showPkd = false,
+    this.showBatchExpiry = true,
   });
 
   factory BarcodeLabelItem.fromProduct({
@@ -223,6 +229,7 @@ class BarcodeLabelItem {
     bool showShopName = true,
     bool showPrice = false, // Clean label presentation default
     bool showPkd = false,
+    bool showBatchExpiry = true,
   }) {
     String rawBarcode = product.barcode.trim();
     if (rawBarcode.isEmpty) {
@@ -247,6 +254,48 @@ class BarcodeLabelItem {
       showShopName: showShopName,
       showPrice: showPrice,
       showPkd: showPkd,
+      showBatchExpiry: showBatchExpiry,
+    );
+  }
+
+  factory BarcodeLabelItem.fromBatchDetails({
+    required String name,
+    required String barcode,
+    required String? batchNumber,
+    required DateTime? expiryDate,
+    required double mrp,
+    required double sellingPrice,
+    String unit = 'Pcs',
+    String shopName = 'SHOPSILO STORE',
+    bool showShopName = true,
+    bool showPrice = true,
+    bool showPkd = false,
+    bool showBatchExpiry = true,
+  }) {
+    String rawBarcode = barcode.trim();
+    if (rawBarcode.isEmpty && batchNumber != null && batchNumber.trim().isNotEmpty) {
+      rawBarcode = batchNumber.trim();
+    }
+    if (rawBarcode.isEmpty) {
+      rawBarcode = 'LOT-000001';
+    }
+    final cleanBarcode = rawBarcode.replaceAll(RegExp(r'[^\x20-\x7E]'), '').trim();
+
+    return BarcodeLabelItem(
+      productName: name.trim(),
+      shopName: shopName.trim().toUpperCase(),
+      barcode: cleanBarcode.isNotEmpty ? cleanBarcode : 'LOT-000001',
+      sku: batchNumber ?? rawBarcode,
+      sellingPrice: sellingPrice,
+      mrp: mrp > sellingPrice ? mrp : 0.0,
+      unit: unit.trim(),
+      pkdDate: DateFormat('dd/MM/yyyy').format(DateTime.now()),
+      batchNumber: batchNumber?.trim(),
+      expiryDate: expiryDate != null ? DateFormat('dd/MM/yyyy').format(expiryDate) : null,
+      showShopName: showShopName,
+      showPrice: showPrice,
+      showPkd: showPkd,
+      showBatchExpiry: showBatchExpiry,
     );
   }
 }
@@ -755,6 +804,24 @@ class BarcodeGeneratorService {
             textAlign: pw.TextAlign.center,
           ),
 
+          // Batch Lot & Expiry Row
+          if (item.showBatchExpiry && (item.batchNumber != null || item.expiryDate != null))
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                if (item.batchNumber != null && item.batchNumber!.isNotEmpty)
+                  pw.Text(
+                    'LOT: ${item.batchNumber}',
+                    style: pw.TextStyle(fontSize: 4.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+                  ),
+                if (item.expiryDate != null && item.expiryDate!.isNotEmpty)
+                  pw.Text(
+                    'EXP: ${item.expiryDate}',
+                    style: pw.TextStyle(fontSize: 4.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+                  ),
+              ],
+            ),
+
           // Optional Price only if explicitly enabled
           if (item.showPrice)
             pw.Row(
@@ -905,6 +972,24 @@ class BarcodeGeneratorService {
             textAlign: pw.TextAlign.center,
           ),
 
+          // Batch Lot & Expiry Row (Standard Retail / Pharma)
+          if (item.showBatchExpiry && (item.batchNumber != null || item.expiryDate != null))
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                if (item.batchNumber != null && item.batchNumber!.isNotEmpty)
+                  pw.Text(
+                    'LOT: ${item.batchNumber}',
+                    style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+                  ),
+                if (item.expiryDate != null && item.expiryDate!.isNotEmpty)
+                  pw.Text(
+                    'EXP: ${item.expiryDate}',
+                    style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+                  ),
+              ],
+            ),
+
           // Optional Price & MRP Row
           if (item.showPrice)
             pw.Row(
@@ -988,38 +1073,44 @@ class BarcodeGeneratorService {
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                // Store Name & PKD
-                if (item.showShopName || (item.showPkd && item.pkdDate != null))
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (item.showShopName)
-                        pw.Row(
-                          children: [
-                            if (_cachedLogo != null)
-                              pw.Container(
-                                width: 6.5,
-                                height: 6.5,
-                                margin: const pw.EdgeInsets.only(right: 2),
-                                child: pw.Image(_cachedLogo!),
-                              ),
-                            pw.Text(
-                              item.shopName,
-                              style: pw.TextStyle(
-                                fontSize: 5,
-                                fontWeight: pw.FontWeight.bold,
-                                color: PdfColors.grey700,
-                              ),
+                // Top Row: Store Name & Batch Lot / PKD
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (item.showShopName)
+                      pw.Row(
+                        children: [
+                          if (_cachedLogo != null)
+                            pw.Container(
+                              width: 6.5,
+                              height: 6.5,
+                              margin: const pw.EdgeInsets.only(right: 2),
+                              child: pw.Image(_cachedLogo!),
                             ),
-                          ],
-                        ),
-                      if (item.showPkd && item.pkdDate != null)
-                        pw.Text(
-                          'PKD: ${item.pkdDate}',
-                          style: const pw.TextStyle(fontSize: 4.5, color: PdfColors.grey600),
-                        ),
-                    ],
-                  ),
+                          pw.Text(
+                            item.shopName,
+                            style: pw.TextStyle(
+                              fontSize: 5,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      pw.SizedBox(),
+                    if (item.showBatchExpiry && item.batchNumber != null && item.batchNumber!.isNotEmpty)
+                      pw.Text(
+                        'LOT: ${item.batchNumber}',
+                        style: pw.TextStyle(fontSize: 4.8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                      )
+                    else if (item.showPkd && item.pkdDate != null)
+                      pw.Text(
+                        'PKD: ${item.pkdDate}',
+                        style: const pw.TextStyle(fontSize: 4.5, color: PdfColors.grey600),
+                      ),
+                  ],
+                ),
 
                 // Product Name
                 pw.Text(
@@ -1034,36 +1125,9 @@ class BarcodeGeneratorService {
                   textAlign: pw.TextAlign.center,
                 ),
 
-                // Optional Price Row
-                if (item.showPrice)
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.center,
-                    children: [
-                      pw.Text(
-                        'Rs. ${item.sellingPrice.toStringAsFixed(0)}',
-                        style: pw.TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.black,
-                        ),
-                      ),
-                      if (item.mrp > item.sellingPrice) ...[
-                        pw.SizedBox(width: 4),
-                        pw.Text(
-                          'MRP: Rs. ${item.mrp.toStringAsFixed(0)}',
-                          style: const pw.TextStyle(
-                            fontSize: 5,
-                            color: PdfColors.grey600,
-                            decoration: pw.TextDecoration.lineThrough,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-
-                // Code 128 Barcode (Enlarged when price omitted)
+                // Code 128 Barcode
                 pw.Container(
-                  height: item.showPrice ? 17 : 21,
+                  height: 16,
                   child: pw.BarcodeWidget(
                     barcode: pw.Barcode.code128(),
                     data: item.barcode,
@@ -1072,14 +1136,37 @@ class BarcodeGeneratorService {
                   ),
                 ),
 
-                // Barcode text
-                pw.Text(
-                  item.barcode,
-                  style: pw.TextStyle(
-                    fontSize: 5.2,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.grey800,
-                  ),
+                // Bottom Row: Barcode text | Price / MRP | Expiry Date
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      item.barcode,
+                      style: pw.TextStyle(
+                        fontSize: 5.2,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey800,
+                      ),
+                    ),
+                    if (item.showPrice)
+                      pw.Text(
+                        'Rs. ${item.sellingPrice.toStringAsFixed(0)}',
+                        style: pw.TextStyle(
+                          fontSize: 6.0,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.black,
+                        ),
+                      ),
+                    if (item.showBatchExpiry && item.expiryDate != null && item.expiryDate!.isNotEmpty)
+                      pw.Text(
+                        'EXP: ${item.expiryDate}',
+                        style: pw.TextStyle(
+                          fontSize: 4.8,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.grey800,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             );

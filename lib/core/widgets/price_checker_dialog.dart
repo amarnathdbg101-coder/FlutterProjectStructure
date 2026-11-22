@@ -7,7 +7,6 @@ import '../../features/products/controllers/product_controller.dart';
 import '../../features/products/models/product_model.dart';
 import '../../features/products/repositories/product_repository.dart';
 import '../../features/products/screens/inventory_screen.dart';
-import '../../features/products/widgets/barcode_sticker_dialog.dart';
 import '../constants/app_colors.dart';
 import '../localization/language_controller.dart';
 import 'app_product_image.dart';
@@ -1442,40 +1441,6 @@ class _PriceCheckerDialogState extends State<PriceCheckerDialog> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: () => _showQuickPriceEditDialog(context, product),
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // Print Barcode Stickers
-            Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: context.colorSurfaceSubtle,
-                  foregroundColor: context.colorTextPrimary,
-                  elevation: 0,
-                  minimumSize: const Size(0, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(color: context.colorBorder),
-                  ),
-                ),
-                icon: const Icon(
-                  Icons.qr_code_2_rounded,
-                  size: 15,
-                  color: AppColors.primary,
-                ),
-                label: Text(
-                  context.tr('price_checker_btn_labels'),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: context.colorTextPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onPressed: () => BarcodeStickerDialog.show(context, product),
               ),
             ),
           ],

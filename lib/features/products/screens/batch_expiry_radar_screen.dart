@@ -9,6 +9,7 @@ import '../../../core/widgets/custom_snackbar.dart';
 import '../controllers/batch_expiry_controller.dart';
 import '../controllers/product_controller.dart';
 import '../../procurement/controllers/procurement_controller.dart';
+import 'barcode_sheet_studio_screen.dart';
 import 'product_detail_screen.dart';
 
 /// Expiry & Batch Radar Screen
@@ -1096,6 +1097,17 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
         scrolledUnderElevation: 0,
         actions: [
           IconButton(
+            tooltip: isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio',
+            icon: const Icon(Icons.qr_code_2_rounded, color: AppColors.primary, size: 22),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              BarcodeSheetStudioScreen.show(
+                context,
+                initialBatches: filteredItems,
+              );
+            },
+          ),
+          IconButton(
             tooltip: isHindi ? 'ऑटो-छूट चलाएं' : 'Auto Markdown',
             icon: const Icon(Icons.bolt_rounded, color: Color(0xFFEA580C), size: 22),
             onPressed: () async {
@@ -1761,6 +1773,23 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                   onPressed: () {
                     HapticFeedback.lightImpact();
                     _showAddToMandiDialog(item);
+                  },
+                ),
+                const SizedBox(width: 8),
+                IconButton.outlined(
+                  tooltip: isHindi ? 'बारकोड प्रिंट करें' : 'Print Barcode',
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 16, color: AppColors.primary),
+                  style: IconButton.styleFrom(
+                    padding: const EdgeInsets.all(8),
+                    side: const BorderSide(color: AppColors.primary, width: 1.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    BarcodeSheetStudioScreen.show(
+                      context,
+                      initialBatch: item,
+                    );
                   },
                 ),
               ],

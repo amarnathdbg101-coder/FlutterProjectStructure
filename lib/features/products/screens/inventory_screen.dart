@@ -36,7 +36,6 @@ import '../../../core/widgets/price_checker_dialog.dart';
 import '../../../core/widgets/mobile_barcode_scanner_dialog.dart';
 import '../widgets/batch_barcode_pairing_dialog.dart';
 import 'product_detail_screen.dart';
-import 'barcode_sheet_studio_screen.dart';
 
 /// Comprehensive Inventory Ordering & Sorting Options for Merchants
 enum InventorySortOption {
@@ -4657,9 +4656,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
               elevation: 4,
               onSelected: (val) async {
                 switch (val) {
-                  case 'barcode_studio':
-                    BarcodeSheetStudioScreen.show(context);
-                    break;
                   case 'import':
                     _showBulkImportDialog(context);
                     break;
@@ -4708,16 +4704,6 @@ class _InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAli
                       const Icon(Icons.view_list_rounded, color: AppColors.primary, size: 18),
                       const SizedBox(width: 10),
                       Text(ctx.isHindi ? 'रजिस्टर सूची (List View)' : 'Register List View'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'barcode_studio',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.print_rounded, color: AppColors.primary, size: 18),
-                      const SizedBox(width: 10),
-                      Text(ctx.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio'),
                     ],
                   ),
                 ),
