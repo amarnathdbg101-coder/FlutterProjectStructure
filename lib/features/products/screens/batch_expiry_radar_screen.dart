@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
@@ -75,6 +76,17 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: context.colorBorder,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             Row(
               children: [
                 Container(
@@ -228,6 +240,17 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: context.colorBorder,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
                 Row(
                   children: [
                     Container(
@@ -455,6 +478,17 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: context.colorBorder,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
                 Row(
                   children: [
                     Container(
@@ -722,6 +756,17 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: context.colorBorder,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1277,6 +1322,9 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
           ),
           Divider(height: 1, color: context.colorBorder),
 
+          // 2.5 Horizontal Category Filter Row
+          _buildCategoryChipsRow(context, batchCtrl, isHindi),
+
           // 3. Expiry Items List or Clean Empty State
           Expanded(
             child: batchCtrl.isLoading
@@ -1310,13 +1358,23 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
       margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: context.isDark ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: context.isDark
+              ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+              : [const Color(0xFF1E293B), const Color(0xFF334155)],
+        ),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1499,9 +1557,13 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
     required VoidCallback onTap,
   }) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       borderRadius: BorderRadius.circular(20),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? color : color.withValues(alpha: 0.08),
@@ -1510,6 +1572,15 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
             color: isSelected ? color : color.withValues(alpha: 0.3),
             width: isSelected ? 1.5 : 1,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1606,19 +1677,7 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: urgencyColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    item.isExpired ? Icons.event_busy_rounded : Icons.hourglass_top_rounded,
-                    color: urgencyColor,
-                    size: 20,
-                  ),
-                ),
+                _buildProductThumbnail(item, urgencyColor),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -1713,6 +1772,9 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
               ],
             ),
 
+            const SizedBox(height: 8),
+            _buildShelfLifeProgressBar(item, urgencyColor, isHindi),
+
             if (item.markdownDiscount > 0) ...[
               const SizedBox(height: 6),
               Container(
@@ -1794,7 +1856,10 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
 
                 // 3. Edit Expiry Date
                 InkWell(
-                  onTap: () => _updateExpiryDate(item),
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    _updateExpiryDate(item);
+                  },
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
                     padding: const EdgeInsets.all(7),
@@ -1811,6 +1876,160 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // Horizontal Category Filter Row for Quick Department Scoping
+  Widget _buildCategoryChipsRow(BuildContext context, BatchExpiryController batchCtrl, bool isHindi) {
+    final categoriesSet = <String>{};
+    for (final i in batchCtrl.allTrackedItems) {
+      if (i.category.trim().isNotEmpty && i.category.trim() != 'General Store') {
+        categoriesSet.add(i.category.trim());
+      }
+    }
+    if (categoriesSet.isEmpty) return const SizedBox.shrink();
+
+    final categories = ['All', ...categoriesSet.toList()..sort()];
+
+    return Container(
+      color: context.colorSurface,
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (ctx, idx) {
+          final cat = categories[idx];
+          final isSel = _selectedCategory.toLowerCase() == cat.toLowerCase();
+          final label = cat == 'All' ? (isHindi ? 'सभी श्रेणियां' : 'All Categories') : cat;
+
+          return InkWell(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _selectedCategory = cat);
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isSel ? AppColors.primary.withValues(alpha: 0.12) : context.colorSurfaceSubtle,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isSel ? AppColors.primary : context.colorBorder,
+                  width: isSel ? 1.2 : 0.8,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                    color: isSel ? AppColors.primary : context.colorTextPrimary,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Visual Product Thumbnail with Category Avatar Fallback
+  Widget _buildProductThumbnail(ExpiryTrackedItem item, Color urgencyColor) {
+    if (item.imageUrl != null && item.imageUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          item.imageUrl!,
+          width: 42,
+          height: 42,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildFallbackCategoryIcon(item, urgencyColor),
+        ),
+      );
+    }
+    return _buildFallbackCategoryIcon(item, urgencyColor);
+  }
+
+  Widget _buildFallbackCategoryIcon(ExpiryTrackedItem item, Color urgencyColor) {
+    final cat = item.category.toLowerCase();
+    IconData iconData = Icons.inventory_2_outlined;
+    if (cat.contains('cloth') || cat.contains('wear') || cat.contains('shirt') || cat.contains('pant') || cat.contains('saree')) {
+      iconData = Icons.checkroom_rounded;
+    } else if (cat.contains('cosmetic') || cat.contains('beauty') || cat.contains('cream') || cat.contains('lotion')) {
+      iconData = Icons.face_retouching_natural_rounded;
+    } else if (cat.contains('dairy') || cat.contains('milk') || cat.contains('paneer') || cat.contains('butter')) {
+      iconData = Icons.egg_alt_outlined;
+    } else if (cat.contains('medicine') || cat.contains('pharma') || cat.contains('tablet') || cat.contains('syrup')) {
+      iconData = Icons.medication_rounded;
+    } else if (cat.contains('grain') || cat.contains('rice') || cat.contains('dal') || cat.contains('atta')) {
+      iconData = Icons.grain_rounded;
+    }
+
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: urgencyColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: urgencyColor.withValues(alpha: 0.2)),
+      ),
+      child: Icon(iconData, color: urgencyColor, size: 22),
+    );
+  }
+
+  // Visual Shelf Life Indicator Bar
+  Widget _buildShelfLifeProgressBar(ExpiryTrackedItem item, Color urgencyColor, bool isHindi) {
+    double progress;
+    String statusNote;
+
+    if (item.isExpired) {
+      progress = 1.0;
+      statusNote = isHindi ? 'अवधि समाप्त' : 'Expired';
+    } else if (item.daysRemaining <= 7) {
+      progress = (7 - item.daysRemaining) / 7.0;
+      progress = progress.clamp(0.15, 1.0);
+      statusNote = isHindi ? '${item.daysRemaining} दिन शेष' : '${item.daysRemaining}d left';
+    } else if (item.daysRemaining <= 30) {
+      progress = (30 - item.daysRemaining) / 30.0;
+      progress = progress.clamp(0.1, 0.9);
+      statusNote = isHindi ? '${item.daysRemaining} दिन शेष' : '${item.daysRemaining}d left';
+    } else {
+      progress = 0.1;
+      statusNote = isHindi ? 'सुरक्षित स्टॉक' : 'Safe';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              isHindi ? 'शेल्फ लाइफ स्थिति:' : 'Shelf Life Status:',
+              style: TextStyle(fontSize: 10.5, color: context.colorTextMuted, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              statusNote,
+              style: TextStyle(fontSize: 10.5, color: urgencyColor, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 4,
+            backgroundColor: urgencyColor.withValues(alpha: 0.12),
+            valueColor: AlwaysStoppedAnimation<Color>(urgencyColor),
+          ),
+        ),
+      ],
     );
   }
 
