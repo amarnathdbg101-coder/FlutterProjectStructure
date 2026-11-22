@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../constants/api_constants.dart';
@@ -234,24 +235,67 @@ class ApiClient {
       isHindi ? _hindiNetworkError : _englishNetworkError;
 
   /// Sanitizes SQL/PostgreSQL exceptions, technical stack dumps, and raw errors
-  /// into crystal-clear merchant friendly messages.
+  /// into crystal-clear merchant friendly messages. Zero technical jargon leaks to UI.
   static String _sanitizeErrorMessage(String raw, {required bool isHindi}) {
-    final lower = raw.toLowerCase();
+    var cleaned = raw.trim();
 
+    // 0. Parse JSON if string is wrapped in JSON e.g. {"error": "..."} or {"message": "..."}
+    if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+      try {
+        final decoded = jsonDecode(cleaned);
+        if (decoded is Map) {
+          final extracted = decoded['error'] ?? decoded['message'] ?? decoded['msg'];
+          if (extracted != null) {
+            cleaned = extracted.toString().trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    final lower = cleaned.toLowerCase();
+
+    // 1. Network, Socket, DNS, Handshake, Connection Errors
     if (lower.contains('socketexception') ||
+        lower.contains('handshakeexception') ||
+        lower.contains('certificateexception') ||
         lower.contains('network is unreachable') ||
         lower.contains('failed host lookup') ||
         lower.contains('connection refused') ||
+        lower.contains('connection reset') ||
         lower.contains('connection error') ||
+        lower.contains('connection closed') ||
         lower.contains('timed out') ||
+        lower.contains('timeout') ||
         lower.contains('network request failed') ||
-        lower.contains('no address associated with hostname')) {
+        lower.contains('no address associated with hostname') ||
+        lower.contains('broken pipe') ||
+        lower.contains('software caused connection abort') ||
+        lower.contains('clientexception') ||
+        lower.contains('xmlhttprequest') ||
+        lower.contains('failed to fetch')) {
       return _networkErrorMessage(isHindi: isHindi);
     }
 
-    // Database: Unique constraint collisions
-    if (lower.contains('duplicate key') ||
-        lower.contains('unique constraint')) {
+    // 2. Server Errors (500, 502, 503, 504, Bad Gateway, Internal Server Error)
+    if (lower.contains('internal server error') ||
+        lower.contains('bad gateway') ||
+        lower.contains('gateway timeout') ||
+        lower.contains('service unavailable') ||
+        lower.contains('status code of 500') ||
+        lower.contains('status code of 502') ||
+        lower.contains('status code of 503') ||
+        lower.contains('status code of 504') ||
+        lower.contains('500 internal') ||
+        lower.contains('502 bad gateway') ||
+        lower.contains('503 service') ||
+        lower.contains('504 gateway')) {
+      return isHindi
+          ? 'सर्वर पर अस्थायी समस्या है। कृपया कुछ पलों में पुनः प्रयास करें।'
+          : 'Server is temporarily unavailable. Please try again shortly.';
+    }
+
+    // 3. Database: Unique constraint collisions (Barcode, SKU, Phone, Email)
+    if (lower.contains('duplicate key') || lower.contains('unique constraint')) {
       if (lower.contains('barcode')) {
         return isHindi
             ? 'इस बारकोड वाला सामान आपकी इन्वेंटरी में पहले से मौजूद है।'
@@ -277,7 +321,7 @@ class ApiClient {
           : 'A record with these unique details already exists.';
     }
 
-    // Database: Foreign key violation
+    // 4. Database: Foreign key violation / Dependent records
     if (lower.contains('foreign key constraint') ||
         lower.contains('violates foreign key')) {
       return isHindi
@@ -285,67 +329,103 @@ class ApiClient {
           : 'Cannot complete this action because other active records depend on it.';
     }
 
-    // Database: Record not found / SQL no rows
-    if (lower.contains('sql: no rows') || lower.contains('record not found')) {
+    // 5. Database: Record not found / SQL no rows
+    if (lower.contains('sql: no rows') ||
+        lower.contains('record not found') ||
+        lower.contains('404 not found') ||
+        lower.contains('item not found')) {
       return isHindi
           ? 'अनुरोधित रिकॉर्ड नहीं मिला।'
           : 'The requested record was not found.';
     }
 
-    // Database: Text length exceeded
+    // 6. Database: Text length exceeded
     if (lower.contains('value too long')) {
       return isHindi
           ? 'दर्ज किया गया विवरण बहुत लंबा है। कृपया छोटा नाम या टेक्स्ट दर्ज करें।'
           : 'Entered text is too long. Please shorten your input.';
     }
 
-    // Database: Not null violation
+    // 7. Database: Not null violation
     if (lower.contains('violates not-null constraint') ||
-        lower.contains('null value in column')) {
+        lower.contains('null value in column') ||
+        lower.contains('missing required')) {
       return isHindi
           ? 'कुछ आवश्यक जानकारी छूट गई है। कृपया सभी अनिवार्य फ़ील्ड भरें।'
           : 'Required details are missing. Please complete all required fields.';
     }
 
-    // Rate limiting / BotGuard
+    // 8. Rate limiting / BotGuard
     if (lower.contains('rate limit') || lower.contains('too many requests')) {
       return isHindi
           ? 'बहुत अधिक अनुरोध। कृपया 1 मिनट प्रतीक्षा करें और फिर प्रयास करें।'
           : 'Too many requests. Please wait a minute and try again.';
     }
 
-    // Session / Auth tokens
+    // 9. Session / Auth tokens
     if (lower.contains('token expired') ||
         lower.contains('signature is invalid') ||
-        lower.contains('jwt')) {
+        lower.contains('jwt') ||
+        lower.contains('unauthorized') ||
+        lower.contains('401 unauthorized')) {
       return isHindi
           ? 'लॉगिन सत्र समाप्त हो गया। कृपया दोबारा लॉगिन करें।'
           : 'Your session has expired. Please log in again.';
     }
 
-    // HTML / Cloudflare error pages
-    if (raw.contains('<html') ||
-        raw.contains('<!doctype') ||
-        raw.contains('<div') ||
-        raw.contains('<title>')) {
+    // 10. HTML / Cloudflare error pages
+    if (cleaned.contains('<html') ||
+        cleaned.contains('<!doctype') ||
+        cleaned.contains('<div') ||
+        cleaned.contains('<title>')) {
       return isHindi
           ? 'शॉपसाइलो सर्वर अस्थायी रूप से अनुपलब्ध है। कृपया थोड़ी देर बाद पुनः प्रयास करें।'
           : 'ShopSilo server is temporarily unavailable. Please try again shortly.';
     }
 
-    // Strip "Exception: " prefix if present
-    var cleaned = raw;
+    // 11. Dart Framework Technical Exceptions (Formatting, Parsing, Type, Null, State, StackTraces)
+    if (lower.contains('formatexception') ||
+        lower.contains('typeerror') ||
+        lower.contains('is not a subtype of') ||
+        lower.contains('null check operator') ||
+        lower.contains('nosuchmethoderror') ||
+        lower.contains('lateinitializationerror') ||
+        lower.contains('rangeerror') ||
+        lower.contains('stateerror') ||
+        lower.contains('bad state') ||
+        lower.contains('assertionerror') ||
+        lower.contains('unhandled exception') ||
+        lower.contains('dioexception') ||
+        lower.contains('httpexception') ||
+        lower.contains('platformexception') ||
+        lower.contains('missingpluginexception') ||
+        lower.contains('errno =') ||
+        lower.contains('pq:') ||
+        lower.contains('gorm:') ||
+        lower.contains('sql:') ||
+        lower.contains('stacktrace') ||
+        lower.contains('package:')) {
+      return isHindi
+          ? 'डेटा लोड करने में अस्थायी समस्या हुई। कृपया दोबारा प्रयास करें।'
+          : 'Could not load data. Please try again.';
+    }
+
+    // Strip "Exception: " or "Error: " prefix
     if (cleaned.startsWith('Exception: ')) {
       cleaned = cleaned.substring('Exception: '.length).trim();
     }
+    if (cleaned.startsWith('Error: ')) {
+      cleaned = cleaned.substring('Error: '.length).trim();
+    }
 
-    if (RegExp(
-          r'^(?:[A-Za-z_][A-Za-z0-9_.]*(?:Exception|Error)|StateError|TypeError)\b',
-        ).hasMatch(cleaned) ||
-        lower.contains('is not a subtype of') ||
-        lower.contains('null check operator used on a null value')) {
+    // 12. Final Guard: If message contains code symbols, brackets, or is excessively long
+    if (cleaned.contains('{') ||
+        cleaned.contains('}') ||
+        cleaned.contains('<') ||
+        cleaned.contains('>') ||
+        cleaned.length > 150) {
       return isHindi
-          ? 'कुछ गड़बड़ हुई है। कृपया फिर से प्रयास करें।'
+          ? 'कुछ तकनीकी समस्या हुई। कृपया दोबारा प्रयास करें।'
           : 'Something went wrong. Please try again.';
     }
 

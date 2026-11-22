@@ -11,7 +11,6 @@ import 'core/storage/local_cache_service.dart';
 import 'core/storage/token_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
-import 'core/widgets/custom_snackbar.dart';
 import 'features/analytics/controllers/analytics_controller.dart';
 import 'features/auth/controllers/auth_controller.dart';
 import 'features/dashboard/controllers/dashboard_controller.dart';
@@ -35,20 +34,8 @@ void main() async {
 
   // Global Flutter framework error handling
   FlutterError.onError = (FlutterErrorDetails details) {
+    // Log details to developer console for debugging without interrupting merchant screen navigation
     FlutterError.presentError(details);
-    final msg = details.exception.toString();
-    // Suppress non-critical render layout overflow reports or framework assertions (already logged to console)
-    if (!msg.contains('RenderFlex') && !msg.contains('overflowed') && !msg.contains('ListTile')) {
-      final isHindi = TokenStorage.getLanguage() == 'hi';
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        CustomSnackbar.showError(
-          null,
-          isHindi
-              ? 'एक अप्रत्याशित समस्या उत्पन्न हुई। कृपया पुनः प्रयास करें।'
-              : 'An unexpected issue occurred. Please try again.',
-        );
-      });
-    }
   };
 
   // Global asynchronous platform and Dart exception handling

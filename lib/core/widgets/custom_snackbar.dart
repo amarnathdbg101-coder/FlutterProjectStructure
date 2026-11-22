@@ -21,7 +21,7 @@ class CustomSnackbar {
     BuildContext? context,
     String message, {
     String? title,
-    Duration duration = const Duration(seconds: 4),
+    Duration duration = const Duration(seconds: 2),
     VoidCallback? onRetry,
     String? retryLabel,
   }) {
@@ -41,7 +41,7 @@ class CustomSnackbar {
     BuildContext? context,
     String message, {
     String? title,
-    Duration duration = const Duration(seconds: 3),
+    Duration duration = const Duration(seconds: 2),
   }) {
     _show(
       context: context,
@@ -57,7 +57,7 @@ class CustomSnackbar {
     BuildContext? context,
     String message, {
     String? title,
-    Duration duration = const Duration(seconds: 3),
+    Duration duration = const Duration(seconds: 2),
   }) {
     _show(
       context: context,
@@ -73,7 +73,7 @@ class CustomSnackbar {
     BuildContext? context,
     String message, {
     String? title,
-    Duration duration = const Duration(seconds: 3),
+    Duration duration = const Duration(seconds: 2),
   }) {
     _show(
       context: context,
@@ -89,7 +89,7 @@ class CustomSnackbar {
     required String message,
     required SnackbarType type,
     String? title,
-    Duration duration = const Duration(seconds: 3),
+    Duration duration = const Duration(seconds: 2),
     VoidCallback? onRetry,
     String? retryLabel,
   }) {
@@ -109,7 +109,7 @@ class CustomSnackbar {
       // Avoid showing the same toast repeatedly during rapid UI updates.
       if (_lastMessage == cleanMsg &&
           _lastTime != null &&
-          now.difference(_lastTime!) < const Duration(milliseconds: 2200)) {
+          now.difference(_lastTime!) < const Duration(milliseconds: 2000)) {
         return;
       }
     }
@@ -128,6 +128,10 @@ class CustomSnackbar {
     }
     _lastMessage = cleanMsg;
     _lastTime = now;
+
+    // Strict 2-second upper limit for auto-dismissal as requested
+    final effectiveDuration =
+        duration > const Duration(seconds: 2) ? const Duration(seconds: 2) : duration;
 
     final isHindi = TokenStorage.getLanguage() == 'hi';
 
@@ -173,7 +177,7 @@ class CustomSnackbar {
         backgroundColor: Colors.transparent,
         elevation: 0,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        duration: duration,
+        duration: effectiveDuration,
         padding: EdgeInsets.zero,
         content: Center(
           child: ConstrainedBox(

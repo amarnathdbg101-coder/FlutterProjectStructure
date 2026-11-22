@@ -27,7 +27,7 @@ abstract class BaseController extends ChangeNotifier {
   void setError(
     String? error, {
     bool showToast = true,
-    Duration autoDismissDuration = const Duration(seconds: 4),
+    Duration autoDismissDuration = const Duration(seconds: 2),
   }) {
     _errorAutoClearTimer?.cancel();
     final cleanError = error == null ? null : ApiClient.handleError(error);
@@ -36,9 +36,9 @@ abstract class BaseController extends ChangeNotifier {
 
     if (cleanError != null && cleanError.trim().isNotEmpty) {
       if (showToast) {
-        CustomSnackbar.showError(null, cleanError);
+        CustomSnackbar.showError(null, cleanError, duration: autoDismissDuration);
       }
-      // Auto-clear error banner from UI after specified duration
+      // Auto-clear error banner from UI after specified duration (strictly 2 seconds)
       _errorAutoClearTimer = Timer(autoDismissDuration, () {
         clearError();
       });
