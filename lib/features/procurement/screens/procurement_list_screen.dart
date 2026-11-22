@@ -2071,65 +2071,32 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
           style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: context.colorTextPrimary),
         ),
         actions: [
-          // 📷 Quick Barcode Scanner Action
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner_rounded, size: 21, color: AppColors.primary),
-            tooltip: context.isHindi ? 'बारकोड स्कैन करके जोड़ें' : 'Scan Barcode to Add',
-            onPressed: () => _openBarcodeScannerForMandi(context, controller, prodController),
-          ),
-
-          // 🔍 Shop Inventory Picker Action
-          IconButton(
-            icon: const Icon(Icons.inventory_2_outlined, size: 21, color: Color(0xFF0D9488)),
-            tooltip: context.isHindi ? 'दुकान सामान से चुनें' : 'Select from Shop Stock',
-            onPressed: () => _openShopProductPickerForMandi(context, controller, prodController),
-          ),
-
-          // AI Scan Action
-          IconButton(
-            icon: const Icon(Icons.document_scanner_rounded, size: 21, color: Color(0xFF673AB7)),
-            tooltip: context.isHindi ? '📸 AI मंडी खरीद स्कैन' : 'AI Mandi Scan',
-            onPressed: () => _openAiMandiScanner(context, controller, prodController),
-          ),
-
-          // Refresh Action
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
-            tooltip: context.isHindi ? 'रीफ्रेश करें' : 'Refresh List',
-            onPressed: () {
-              controller.refreshList();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.isHindi ? '✓ मंडी खरीद लिस्ट रीफ्रेश हो गई' : '✓ Mandi List Refreshed'),
-                  backgroundColor: AppColors.success,
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            },
-          ),
-
-          // 1-Tap PDF Share Direct Action (Bluetooth, WhatsApp, Instagram, etc.)
+          // 1. Direct Share Action (WhatsApp & PDF)
           IconButton(
             icon: const Icon(Icons.share_rounded, size: 20, color: AppColors.primary),
-            tooltip: context.isHindi ? 'मंडी लिस्ट शेयर करें (Bluetooth, WhatsApp...)' : 'Share Mandi PDF',
+            tooltip: context.isHindi ? 'मंडी लिस्ट शेयर करें' : 'Share Mandi Sheet',
             onPressed: () => controller.sharePdfSheet(context, shopName),
           ),
 
-          // WhatsApp Share Direct Action
-          IconButton(
-            icon: const Icon(Icons.send_rounded, size: 19, color: Color(0xFF128C7E)),
-            tooltip: context.tr('mandi_whatsapp_sheet'),
-            onPressed: () => _sendWhatsAppOrderSheet(context, items, shopName),
-          ),
-
-          // More Options Menu
+          // 2. More Options Menu
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert_rounded, color: context.colorTextPrimary, size: 22),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             color: context.colorSurface,
             onSelected: (value) {
-              if (value == 'pdf') {
+              if (value == 'whatsapp') {
+                _sendWhatsAppOrderSheet(context, items, shopName);
+              } else if (value == 'pdf') {
                 controller.generatePdfSheet(context, shopName);
+              } else if (value == 'refresh') {
+                controller.refreshList();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(context.isHindi ? '✓ मंडी खरीद लिस्ट रीफ्रेश हो गई' : '✓ Mandi List Refreshed'),
+                    backgroundColor: AppColors.success,
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
               } else if (value == 'import') {
                 if (lowStockProducts.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2153,31 +2120,58 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
             },
             itemBuilder: (ctx) => [
               PopupMenuItem<String>(
-                value: 'pdf',
+                value: 'whatsapp',
                 child: Row(
                   children: [
-                    const Icon(Icons.share_rounded, size: 18, color: AppColors.primary),
+                    const Icon(Icons.send_rounded, size: 18, color: Color(0xFF128C7E)),
                     const SizedBox(width: 10),
                     Text(
-                      ctx.isHindi ? 'मंडी PDF शीट (शेयर व प्रिंट)' : 'Mandi PDF (Share & Print)',
+                      context.tr('mandi_whatsapp_sheet'),
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
               ),
               PopupMenuItem<String>(
-                value: 'import',
+                value: 'pdf',
                 child: Row(
                   children: [
-                    Icon(Icons.sync_rounded, size: 18, color: ctx.colorTextPrimary),
+                    const Icon(Icons.picture_as_pdf_rounded, size: 18, color: AppColors.primary),
                     const SizedBox(width: 10),
                     Text(
-                      '${context.tr('mandi_import_low')} (${lowStockProducts.length})',
+                      ctx.isHindi ? 'मंडी PDF शीट डाउनलोड / प्रिंट' : 'Mandi PDF (Download/Print)',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'refresh',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh_rounded, size: 18, color: ctx.colorTextPrimary),
+                    const SizedBox(width: 10),
+                    Text(
+                      ctx.isHindi ? 'रीफ्रेश करें' : 'Refresh',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: ctx.colorTextPrimary),
                     ),
                   ],
                 ),
               ),
+              if (lowStockProducts.isNotEmpty)
+                PopupMenuItem<String>(
+                  value: 'import',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.flash_on_rounded, size: 18, color: Color(0xFFE65100)),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${context.tr('mandi_import_low')} (${lowStockProducts.length})',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFE65100)),
+                      ),
+                    ],
+                  ),
+                ),
               if (controller.completedCount > 0)
                 PopupMenuItem<String>(
                   value: 'clear',
@@ -2326,26 +2320,26 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         ),
                       ],
 
-                      // Quick Low-Stock Import Banner (if any)
+                      // Low-Stock Quick Pill (Subtle & Compact, only if any exist)
                       if (lowStockProducts.isNotEmpty) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: context.colorSurfaceSubtle,
+                            color: const Color(0xFFFFF3E0),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: context.colorBorder),
+                            border: Border.all(color: const Color(0xFFFFCC80)),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.flash_on_rounded, size: 16, color: AppColors.primary),
+                              const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFE65100)),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
                                   context.isHindi
-                                      ? '${lowStockProducts.length} कम स्टॉक सामान इन्वेंट्री में मिले'
-                                      : '${lowStockProducts.length} low-stock items in inventory',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colorTextPrimary),
+                                      ? '${lowStockProducts.length} सामान कम स्टॉक में हैं'
+                                      : '${lowStockProducts.length} low-stock items in shop',
+                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFFE65100)),
                                 ),
                               ),
                               InkWell(
@@ -2360,16 +2354,16 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                                     ),
                                   );
                                 },
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: BorderRadius.circular(5),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    borderRadius: BorderRadius.circular(6),
+                                    color: const Color(0xFFE65100),
+                                    borderRadius: BorderRadius.circular(5),
                                   ),
                                   child: Text(
                                     context.isHindi ? '+ ऑटो-इंपोर्ट' : '+ Auto-Import',
-                                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white),
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                                   ),
                                 ),
                               ),
@@ -2378,112 +2372,46 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
                         ),
                       ],
 
-                      // AI Mandi Vision Quick Scan Banner
+                      // Unified Quick Sourcing Channels (Single Point of Entry, No Duplicates)
                       const SizedBox(height: 12),
-                      InkWell(
-                        onTap: () => _openAiMandiScanner(context, controller, prodController),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF673AB7), Color(0xFF512DA8)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF673AB7).withValues(alpha: 0.25),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.document_scanner_rounded, size: 20, color: Colors.white),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      context.isHindi
-                                          ? '📸 AI मंडी खरीद स्कैनर'
-                                          : '📸 AI Mandi Sourcing Scanner',
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
-                                    ),
-                                    Text(
-                                      context.isHindi
-                                          ? 'कम सामान या खाली डिब्बे की फोटो लें — AI थोक लिस्ट बना देगा'
-                                          : 'Snap empty cartons or shelves — AI auto-suggests bulk quantities',
-                                      style: const TextStyle(fontSize: 11, color: Colors.white70),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Colors.white70),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // Quick Barcode Scan & Shop Inventory Search Row
-                      const SizedBox(height: 10),
                       Row(
                         children: [
+                          // Channel 1: Barcode Scanner
                           Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                                side: BorderSide(color: AppColors.primary.withValues(alpha: 0.35)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-                                backgroundColor: AppColors.primary.withValues(alpha: 0.04),
-                              ),
-                              icon: const Icon(Icons.qr_code_scanner_rounded, size: 17),
-                              label: Text(
-                                context.isHindi ? 'बारकोड स्कैन' : 'Scan',
-                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => _openBarcodeScannerForMandi(context, controller, prodController),
+                            child: _buildSourcingActionCard(
+                              context,
+                              icon: Icons.qr_code_scanner_rounded,
+                              label: context.isHindi ? 'बारकोड स्कैन' : 'Barcode',
+                              sublabel: context.isHindi ? 'स्कैन करके जोड़ें' : 'Scan to Add',
+                              color: AppColors.primary,
+                              onTap: () => _openBarcodeScannerForMandi(context, controller, prodController),
                             ),
                           ),
                           const SizedBox(width: 8),
+
+                          // Channel 2: Shop Inventory Picker
                           Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFE65100),
-                                side: BorderSide(color: const Color(0xFFE65100).withValues(alpha: 0.35)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-                                backgroundColor: const Color(0xFFE65100).withValues(alpha: 0.04),
-                              ),
-                              icon: const Icon(Icons.flash_on_rounded, size: 17),
-                              label: Text(
-                                context.isHindi ? 'लगातार स्कैन' : 'Multi-Scan',
-                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => _openBarcodeScannerForMandi(context, controller, prodController, continuous: true),
+                            child: _buildSourcingActionCard(
+                              context,
+                              icon: Icons.inventory_2_outlined,
+                              label: context.isHindi ? 'दुकान स्टॉक' : 'Shop Stock',
+                              sublabel: context.isHindi ? 'सामान से चुनें' : 'Pick from Stock',
+                              color: const Color(0xFF0D9488),
+                              badge: lowStockProducts.isNotEmpty ? '${lowStockProducts.length}' : null,
+                              onTap: () => _openShopProductPickerForMandi(context, controller, prodController),
                             ),
                           ),
                           const SizedBox(width: 8),
+
+                          // Channel 3: AI Vision Scanner
                           Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF0D9488),
-                                side: BorderSide(color: const Color(0xFF0D9488).withValues(alpha: 0.35)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-                                backgroundColor: const Color(0xFF0D9488).withValues(alpha: 0.04),
-                              ),
-                              icon: const Icon(Icons.inventory_2_outlined, size: 17),
-                              label: Text(
-                                context.isHindi ? 'दुकान स्टॉक' : 'Shop Stock',
-                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => _openShopProductPickerForMandi(context, controller, prodController),
+                            child: _buildSourcingActionCard(
+                              context,
+                              icon: Icons.document_scanner_rounded,
+                              label: context.isHindi ? 'AI विजन' : 'AI Vision',
+                              sublabel: context.isHindi ? 'फोटो से थोक लिस्ट' : 'Photo Scan',
+                              color: const Color(0xFF673AB7),
+                              onTap: () => _openAiMandiScanner(context, controller, prodController),
                             ),
                           ),
                         ],
@@ -2789,6 +2717,69 @@ class _ProcurementListScreenState extends State<ProcurementListScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSourcingActionCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String sublabel,
+    required Color color,
+    required VoidCallback onTap,
+    String? badge,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.22)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, size: 21, color: color),
+                if (badge != null)
+                  Positioned(
+                    top: -4,
+                    right: -10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.error,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        badge,
+                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: context.colorTextPrimary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              sublabel,
+              style: TextStyle(fontSize: 9.5, color: context.colorTextMuted, fontWeight: FontWeight.w500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
