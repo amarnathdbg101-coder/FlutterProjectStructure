@@ -166,7 +166,7 @@ class MerchantDrawer extends StatelessWidget {
                     ),
                     _DrawerTile(
                       icon: Icons.print_rounded,
-                      title: context.isHindi ? 'बारकोड प्रिंटर' : 'Barcode Printer',
+                      title: context.isHindi ? 'बारकोड प्रिंट स्टूडियो' : 'Barcode Print Studio',
                       onTap: () {
                         Navigator.pop(context);
                         context.push('/merchant/barcode-studio');
