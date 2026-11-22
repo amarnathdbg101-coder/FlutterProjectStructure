@@ -1349,6 +1349,41 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    BarcodeSheetStudioScreen.show(
+                      context,
+                      initialBatches: filteredItems,
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.print_rounded, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          isHindi ? 'बारकोड प्रिंटर' : 'Barcode Printer',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1775,14 +1810,17 @@ class _BatchExpiryRadarScreenState extends State<BatchExpiryRadarScreen> {
                     _showAddToMandiDialog(item);
                   },
                 ),
-                const SizedBox(width: 8),
-                IconButton.outlined(
-                  tooltip: isHindi ? 'बारकोड प्रिंट करें' : 'Print Barcode',
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 16, color: AppColors.primary),
-                  style: IconButton.styleFrom(
-                    padding: const EdgeInsets.all(8),
+                const SizedBox(width: 6),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     side: const BorderSide(color: AppColors.primary, width: 1.1),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.print_rounded, size: 14, color: AppColors.primary),
+                  label: Text(
+                    isHindi ? 'प्रिंट' : 'Print',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary),
                   ),
                   onPressed: () {
                     HapticFeedback.lightImpact();
