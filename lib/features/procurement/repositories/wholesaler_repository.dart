@@ -9,7 +9,7 @@ class WholesalerRepository {
 
   Future<ApiResponse<List<WholesalerModel>>> getWholesalers() async {
     try {
-      final res = await _dio.get('/wholesalers');
+      final res = await _dio.get('/shops/me/wholesalers');
       final raw = res.data;
       List listData = [];
       if (raw is List) {
@@ -28,7 +28,7 @@ class WholesalerRepository {
 
   Future<ApiResponse<WholesalerModel>> createWholesaler(Map<String, dynamic> data) async {
     try {
-      final res = await _dio.post('/wholesalers', data: data);
+      final res = await _dio.post('/shops/me/wholesalers', data: data);
       final raw = res.data;
       final item = (raw is Map<String, dynamic>)
           ? (raw['data'] is Map ? raw['data'] : raw)
@@ -41,7 +41,7 @@ class WholesalerRepository {
 
   Future<ApiResponse<WholesalerModel>> updateWholesaler(String id, Map<String, dynamic> data) async {
     try {
-      final res = await _dio.put('/wholesalers/$id', data: data);
+      final res = await _dio.put('/shops/me/wholesalers/$id', data: data);
       final raw = res.data;
       final item = (raw is Map<String, dynamic>)
           ? (raw['data'] is Map ? raw['data'] : raw)
@@ -54,7 +54,7 @@ class WholesalerRepository {
 
   Future<ApiResponse<void>> deleteWholesaler(String id) async {
     try {
-      await _dio.delete('/wholesalers/$id');
+      await _dio.delete('/shops/me/wholesalers/$id');
       return ApiResponse(success: true, data: null);
     } catch (e) {
       return ApiResponse.failure(ApiClient.handleError(e));
