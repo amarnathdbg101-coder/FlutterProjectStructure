@@ -7,6 +7,42 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../models/product_model.dart';
 
+/// Supported Barcode Symbologies
+enum BarcodeSymbology {
+  /// Code 128: Universal auto-encoding alphanumeric barcode.
+  code128,
+
+  /// EAN-13: 13-digit standard consumer package barcode.
+  ean13,
+
+  /// QR Code: High density 2D matrix barcode.
+  qrCode,
+}
+
+extension BarcodeSymbologyExtension on BarcodeSymbology {
+  String get title {
+    switch (this) {
+      case BarcodeSymbology.code128:
+        return 'Code 128 (Universal)';
+      case BarcodeSymbology.ean13:
+        return 'EAN-13 (Retail)';
+      case BarcodeSymbology.qrCode:
+        return 'QR Code (2D)';
+    }
+  }
+
+  String get shortCode {
+    switch (this) {
+      case BarcodeSymbology.code128:
+        return '128';
+      case BarcodeSymbology.ean13:
+        return 'EAN';
+      case BarcodeSymbology.qrCode:
+        return 'QR';
+    }
+  }
+}
+
 /// Supported Barcode Sticker Formats for Indian Retailers
 enum BarcodeLabelFormat {
   /// Sleek Rectangular Stickers (Max capacity, zero wasted space): 4 cols x 21 rows = 84 labels (~48.5mm x 12.5mm).
@@ -26,6 +62,12 @@ enum BarcodeLabelFormat {
 
   /// Mini Continuous Thermal Sticker Roll: 40mm x 20mm.
   thermalRoll40x20,
+
+  /// Standard Pharmacy / Apparel Thermal Roll: 50mm x 30mm.
+  thermalRoll50x30,
+
+  /// Square 2" Thermal Sticker Roll: 50mm x 50mm (Ideal for QR Codes).
+  thermalRoll50x50,
 }
 
 extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
@@ -43,6 +85,10 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
         return 'Thermal Roll • 50x25 mm (2" x 1")';
       case BarcodeLabelFormat.thermalRoll40x20:
         return 'Thermal Roll • 40x20 mm (Mini)';
+      case BarcodeLabelFormat.thermalRoll50x30:
+        return 'Thermal Roll • 50x30 mm (Pharma)';
+      case BarcodeLabelFormat.thermalRoll50x50:
+        return 'Thermal Roll • 50x50 mm (2" Square)';
     }
   }
 
@@ -60,6 +106,10 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
         return 'Standard 2" desktop thermal barcode printer roll';
       case BarcodeLabelFormat.thermalRoll40x20:
         return 'Compact direct thermal barcode printer roll';
+      case BarcodeLabelFormat.thermalRoll50x30:
+        return 'Pharma & garment thermal label roll (50 x 30 mm)';
+      case BarcodeLabelFormat.thermalRoll50x50:
+        return 'Square 2-inch roll for high-density 2D QR codes';
     }
   }
 
@@ -77,6 +127,10 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
         return '2 इंच कंटीन्यूअस थर्मल प्रिंटर रोल';
       case BarcodeLabelFormat.thermalRoll40x20:
         return 'छोटा थर्मल बारकोड स्टीकर रोल';
+      case BarcodeLabelFormat.thermalRoll50x30:
+        return 'दवा और कपड़ों के लिए थर्मल रोल (50x30मिमी)';
+      case BarcodeLabelFormat.thermalRoll50x50:
+        return '2 इंच चौकोर थर्मल रोल (QR कोड के लिए उत्तम)';
     }
   }
 
@@ -92,6 +146,8 @@ extension BarcodeLabelFormatExtension on BarcodeLabelFormat {
         return 24;
       case BarcodeLabelFormat.thermalRoll50x25:
       case BarcodeLabelFormat.thermalRoll40x20:
+      case BarcodeLabelFormat.thermalRoll50x30:
+      case BarcodeLabelFormat.thermalRoll50x50:
         return 1;
     }
   }
@@ -140,6 +196,7 @@ class SheetPackingStats {
   final int pagesNeeded;
   final int emptySlotsOnLastPage;
   final double utilizationPercentage;
+  final int startOffset;
 
   const SheetPackingStats({
     required this.totalStickers,
@@ -147,11 +204,13 @@ class SheetPackingStats {
     required this.pagesNeeded,
     required this.emptySlotsOnLastPage,
     required this.utilizationPercentage,
+    this.startOffset = 0,
   });
 
   factory SheetPackingStats.calculate({
     required int totalStickers,
     required BarcodeLabelFormat format,
+    int startOffset = 0,
   }) {
     if (totalStickers <= 0) {
       return const SheetPackingStats(
@@ -160,10 +219,13 @@ class SheetPackingStats {
         pagesNeeded: 0,
         emptySlotsOnLastPage: 0,
         utilizationPercentage: 0.0,
+        startOffset: 0,
       );
     }
 
     final perPage = format.labelsPerPage;
+    final safeOffset = format.isA4Sheet ? startOffset.clamp(0, perPage - 1) : 0;
+
     if (!format.isA4Sheet) {
       return SheetPackingStats(
         totalStickers: totalStickers,
@@ -171,20 +233,29 @@ class SheetPackingStats {
         pagesNeeded: totalStickers,
         emptySlotsOnLastPage: 0,
         utilizationPercentage: 100.0,
+        startOffset: 0,
       );
     }
 
-    final pages = (totalStickers / perPage).ceil();
-    final totalCapacity = pages * perPage;
-    final emptySlots = totalCapacity - totalStickers;
-    final utilization = (totalStickers / totalCapacity) * 100.0;
+    final firstPageCapacity = perPage - safeOffset;
+    int pages = 1;
+    final remainingAfterFirst = totalStickers - firstPageCapacity;
+    if (remainingAfterFirst > 0) {
+      pages += (remainingAfterFirst / perPage).ceil();
+    }
+
+    final fullPagesCapacity = pages * perPage;
+    final emptySlots = fullPagesCapacity - safeOffset - totalStickers;
+    final actualUsableCapacity = fullPagesCapacity - safeOffset;
+    final utilization = (totalStickers / actualUsableCapacity) * 100.0;
 
     return SheetPackingStats(
       totalStickers: totalStickers,
       labelsPerPage: perPage,
       pagesNeeded: pages,
-      emptySlotsOnLastPage: emptySlots,
-      utilizationPercentage: utilization,
+      emptySlotsOnLastPage: emptySlots.clamp(0, perPage),
+      utilizationPercentage: utilization.clamp(0.0, 100.0),
+      startOffset: safeOffset,
     );
   }
 }
@@ -205,6 +276,8 @@ class BarcodeLabelItem {
   final bool showPrice;
   final bool showPkd;
   final bool showBatchExpiry;
+  final BarcodeSymbology symbology;
+  final bool showBorder;
 
   BarcodeLabelItem({
     required this.productName,
@@ -221,6 +294,8 @@ class BarcodeLabelItem {
     this.showPrice = false, // Hidden by default for clean label presentation
     this.showPkd = false,
     this.showBatchExpiry = true,
+    this.symbology = BarcodeSymbology.code128,
+    this.showBorder = true,
   });
 
   factory BarcodeLabelItem.fromProduct({
@@ -230,6 +305,8 @@ class BarcodeLabelItem {
     bool showPrice = false, // Clean label presentation default
     bool showPkd = false,
     bool showBatchExpiry = true,
+    BarcodeSymbology symbology = BarcodeSymbology.code128,
+    bool showBorder = true,
   }) {
     String rawBarcode = product.barcode.trim();
     if (rawBarcode.isEmpty) {
@@ -255,6 +332,8 @@ class BarcodeLabelItem {
       showPrice: showPrice,
       showPkd: showPkd,
       showBatchExpiry: showBatchExpiry,
+      symbology: symbology,
+      showBorder: showBorder,
     );
   }
 
@@ -271,6 +350,8 @@ class BarcodeLabelItem {
     bool showPrice = true,
     bool showPkd = false,
     bool showBatchExpiry = true,
+    BarcodeSymbology symbology = BarcodeSymbology.code128,
+    bool showBorder = true,
   }) {
     String rawBarcode = barcode.trim();
     if (rawBarcode.isEmpty && batchNumber != null && batchNumber.trim().isNotEmpty) {
@@ -296,19 +377,23 @@ class BarcodeLabelItem {
       showPrice: showPrice,
       showPkd: showPkd,
       showBatchExpiry: showBatchExpiry,
+      symbology: symbology,
+      showBorder: showBorder,
     );
   }
 }
 
 class BarcodeGeneratorService {
-  /// Computes sheet capacity and page breakdown
+  /// Computes sheet capacity and page breakdown with optional startOffset
   static SheetPackingStats calculatePacking({
     required int totalStickers,
     required BarcodeLabelFormat format,
+    int startOffset = 0,
   }) {
     return SheetPackingStats.calculate(
       totalStickers: totalStickers,
       format: format,
+      startOffset: startOffset,
     );
   }
 
@@ -420,10 +505,61 @@ class BarcodeGeneratorService {
     }
   }
 
+  /// Helper to render the appropriate barcode or QR vector widget based on symbology
+  static pw.Widget _buildBarcodePdfWidget({
+    required String data,
+    required BarcodeSymbology symbology,
+    required double height,
+    double? width,
+  }) {
+    if (symbology == BarcodeSymbology.qrCode) {
+      return pw.Container(
+        height: height,
+        width: height,
+        child: pw.BarcodeWidget(
+          barcode: pw.Barcode.qrCode(),
+          data: data,
+          drawText: false,
+          color: PdfColors.black,
+        ),
+      );
+    }
+
+    if (symbology == BarcodeSymbology.ean13) {
+      final isDigits = RegExp(r'^\d+$').hasMatch(data);
+      if (isDigits && (data.length == 12 || data.length == 13)) {
+        return pw.Container(
+          height: height,
+          width: width,
+          child: pw.BarcodeWidget(
+            barcode: pw.Barcode.ean13(),
+            data: data,
+            drawText: false,
+            color: PdfColors.black,
+          ),
+        );
+      }
+    }
+
+    // Default: Universal Code 128
+    return pw.Container(
+      height: height,
+      width: width,
+      child: pw.BarcodeWidget(
+        barcode: pw.Barcode.code128(),
+        data: data,
+        drawText: false,
+        color: PdfColors.black,
+      ),
+    );
+  }
+
   /// Generates PDF document bytes for a list of label items in the selected format.
+  /// Supports [startOffset] to skip already peeled labels on A4 sticker sheets.
   static Future<Uint8List> generatePdfBytes({
     required List<BarcodeLabelItem> items,
     required BarcodeLabelFormat format,
+    int startOffset = 0,
   }) async {
     final theme = await _getTheme();
     await _getLogoImage();
@@ -431,22 +567,28 @@ class BarcodeGeneratorService {
 
     switch (format) {
       case BarcodeLabelFormat.a4Sheet84:
-        _buildA4Sheet84Pages(pdf, items);
+        _buildA4Sheet84Pages(pdf, items, startOffset: startOffset);
         break;
       case BarcodeLabelFormat.a4Sheet65:
-        _buildA4Sheet65Pages(pdf, items);
+        _buildA4Sheet65Pages(pdf, items, startOffset: startOffset);
         break;
       case BarcodeLabelFormat.a4Sheet40:
-        _buildA4Sheet40Pages(pdf, items);
+        _buildA4Sheet40Pages(pdf, items, startOffset: startOffset);
         break;
       case BarcodeLabelFormat.a4Sheet24:
-        _buildA4Sheet24Pages(pdf, items);
+        _buildA4Sheet24Pages(pdf, items, startOffset: startOffset);
         break;
       case BarcodeLabelFormat.thermalRoll50x25:
         _buildThermalRollPages(pdf, items, widthPt: 141.73, heightPt: 70.86);
         break;
       case BarcodeLabelFormat.thermalRoll40x20:
         _buildThermalRollPages(pdf, items, widthPt: 113.39, heightPt: 56.69);
+        break;
+      case BarcodeLabelFormat.thermalRoll50x30:
+        _buildThermalRollPages(pdf, items, widthPt: 141.73, heightPt: 85.04);
+        break;
+      case BarcodeLabelFormat.thermalRoll50x50:
+        _buildThermalRollPages(pdf, items, widthPt: 141.73, heightPt: 141.73);
         break;
     }
 
@@ -457,9 +599,23 @@ class BarcodeGeneratorService {
   static Future<bool> printLabels({
     required List<BarcodeLabelItem> items,
     required BarcodeLabelFormat format,
+    int startOffset = 0,
     String jobName = 'ShopSilo_Barcode_Labels',
   }) async {
-    final bytes = await generatePdfBytes(items: items, format: format);
+    final bytes = await generatePdfBytes(items: items, format: format, startOffset: startOffset);
+    return await Printing.layoutPdf(
+      onLayout: (PdfPageFormat pdfFormat) async => bytes,
+      name: jobName,
+    );
+  }
+
+  /// Prints a single calibration test label to verify alignment and contrast.
+  static Future<bool> printTestLabel({
+    required BarcodeLabelItem sampleItem,
+    required BarcodeLabelFormat format,
+    String jobName = 'ShopSilo_Test_Label',
+  }) async {
+    final bytes = await generatePdfBytes(items: [sampleItem], format: format, startOffset: 0);
     return await Printing.layoutPdf(
       onLayout: (PdfPageFormat pdfFormat) async => bytes,
       name: jobName,
@@ -470,9 +626,10 @@ class BarcodeGeneratorService {
   static Future<void> shareLabelsPdf({
     required List<BarcodeLabelItem> items,
     required BarcodeLabelFormat format,
+    int startOffset = 0,
     String? filename,
   }) async {
-    final bytes = await generatePdfBytes(items: items, format: format);
+    final bytes = await generatePdfBytes(items: items, format: format, startOffset: startOffset);
     final safeName = filename ?? 'ShopSilo_Labels_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await Printing.sharePdf(bytes: bytes, filename: safeName);
   }
@@ -481,12 +638,16 @@ class BarcodeGeneratorService {
   // 1. A4 84-LABEL SLEEK RECTANGULAR SHEET ENGINE (4 Columns x 21 Rows)
   // Dimensions per label: ~48.5mm x 12.5mm (Ultra-sleek rectangle, 0 extra space)
   // =========================================================================
-  static void _buildA4Sheet84Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
+  static void _buildA4Sheet84Pages(pw.Document pdf, List<BarcodeLabelItem> items, {int startOffset = 0}) {
     const int labelsPerPage = 84;
     const int cols = 4;
+    final List<BarcodeLabelItem?> paddedItems = [
+      ...List.generate(startOffset.clamp(0, labelsPerPage - 1), (_) => null),
+      ...items,
+    ];
 
-    for (int pageStart = 0; pageStart < items.length; pageStart += labelsPerPage) {
-      final pageItems = items.skip(pageStart).take(labelsPerPage).toList();
+    for (int pageStart = 0; pageStart < paddedItems.length; pageStart += labelsPerPage) {
+      final pageItems = paddedItems.skip(pageStart).take(labelsPerPage).toList();
 
       pdf.addPage(
         pw.Page(
@@ -499,7 +660,11 @@ class BarcodeGeneratorService {
               crossAxisSpacing: 3,
               mainAxisSpacing: 2,
               children: List.generate(pageItems.length, (index) {
-                return _buildA4Sheet84SingleLabel(pageItems[index]);
+                final item = pageItems[index];
+                if (item == null) {
+                  return pw.Container();
+                }
+                return _buildA4Sheet84SingleLabel(item);
               }),
             );
           },
@@ -512,14 +677,14 @@ class BarcodeGeneratorService {
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.0),
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300, width: 0.35),
+        border: item.showBorder ? pw.Border.all(color: PdfColors.grey300, width: 0.35) : null,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(1.5)),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          // Top Row: Shop Name & Product Name (No Price!)
+          // Top Row: Shop Name & Product Name
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
@@ -556,15 +721,11 @@ class BarcodeGeneratorService {
               style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
             ),
 
-          // Code 128 Vector Barcode (Dominant, clean, laser-scannable)
-          pw.Container(
+          // Barcode Vector Widget
+          _buildBarcodePdfWidget(
+            data: item.barcode,
+            symbology: item.symbology,
             height: item.showPrice ? 9.5 : 13.5,
-            child: pw.BarcodeWidget(
-              barcode: pw.Barcode.code128(),
-              data: item.barcode,
-              drawText: false,
-              color: PdfColors.black,
-            ),
           ),
 
           // Barcode Digits
@@ -585,12 +746,16 @@ class BarcodeGeneratorService {
   // 2. A4 65-LABEL MICRO SHEET ENGINE (5 Columns x 13 Rows)
   // Dimensions per label: ~38.1mm x 21.2mm (Sleek compact rectangle)
   // =========================================================================
-  static void _buildA4Sheet65Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
+  static void _buildA4Sheet65Pages(pw.Document pdf, List<BarcodeLabelItem> items, {int startOffset = 0}) {
     const int labelsPerPage = 65;
     const int cols = 5;
+    final List<BarcodeLabelItem?> paddedItems = [
+      ...List.generate(startOffset.clamp(0, labelsPerPage - 1), (_) => null),
+      ...items,
+    ];
 
-    for (int pageStart = 0; pageStart < items.length; pageStart += labelsPerPage) {
-      final pageItems = items.skip(pageStart).take(labelsPerPage).toList();
+    for (int pageStart = 0; pageStart < paddedItems.length; pageStart += labelsPerPage) {
+      final pageItems = paddedItems.skip(pageStart).take(labelsPerPage).toList();
 
       pdf.addPage(
         pw.Page(
@@ -603,7 +768,11 @@ class BarcodeGeneratorService {
               crossAxisSpacing: 3,
               mainAxisSpacing: 3,
               children: List.generate(pageItems.length, (index) {
-                return _buildA4Sheet65SingleLabel(pageItems[index]);
+                final item = pageItems[index];
+                if (item == null) {
+                  return pw.Container();
+                }
+                return _buildA4Sheet65SingleLabel(item);
               }),
             );
           },
@@ -616,7 +785,7 @@ class BarcodeGeneratorService {
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.5),
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300, width: 0.35),
+        border: item.showBorder ? pw.Border.all(color: PdfColors.grey300, width: 0.35) : null,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
       ),
       child: pw.Column(
@@ -689,15 +858,11 @@ class BarcodeGeneratorService {
               ],
             ),
 
-          // Code 128 Vector Barcode (Expanded when price is omitted)
-          pw.Container(
+          // Barcode Vector Widget
+          _buildBarcodePdfWidget(
+            data: item.barcode,
+            symbology: item.symbology,
             height: item.showPrice ? 10.5 : 14.5,
-            child: pw.BarcodeWidget(
-              barcode: pw.Barcode.code128(),
-              data: item.barcode,
-              drawText: false,
-              color: PdfColors.black,
-            ),
           ),
 
           // Barcode Text & PKD
@@ -728,12 +893,16 @@ class BarcodeGeneratorService {
   // 3. A4 40-LABEL COMPACT SHEET ENGINE (4 Columns x 10 Rows)
   // Dimensions per label: ~48.5mm x 25.4mm
   // =========================================================================
-  static void _buildA4Sheet40Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
+  static void _buildA4Sheet40Pages(pw.Document pdf, List<BarcodeLabelItem> items, {int startOffset = 0}) {
     const int labelsPerPage = 40;
     const int cols = 4;
+    final List<BarcodeLabelItem?> paddedItems = [
+      ...List.generate(startOffset.clamp(0, labelsPerPage - 1), (_) => null),
+      ...items,
+    ];
 
-    for (int pageStart = 0; pageStart < items.length; pageStart += labelsPerPage) {
-      final pageItems = items.skip(pageStart).take(labelsPerPage).toList();
+    for (int pageStart = 0; pageStart < paddedItems.length; pageStart += labelsPerPage) {
+      final pageItems = paddedItems.skip(pageStart).take(labelsPerPage).toList();
 
       pdf.addPage(
         pw.Page(
@@ -746,7 +915,11 @@ class BarcodeGeneratorService {
               crossAxisSpacing: 5,
               mainAxisSpacing: 4.5,
               children: List.generate(pageItems.length, (index) {
-                return _buildA4Sheet40SingleLabel(pageItems[index]);
+                final item = pageItems[index];
+                if (item == null) {
+                  return pw.Container();
+                }
+                return _buildA4Sheet40SingleLabel(item);
               }),
             );
           },
@@ -759,7 +932,7 @@ class BarcodeGeneratorService {
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 3.5, vertical: 2.0),
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300, width: 0.4),
+        border: item.showBorder ? pw.Border.all(color: PdfColors.grey300, width: 0.4) : null,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2.5)),
       ),
       child: pw.Column(
@@ -850,15 +1023,11 @@ class BarcodeGeneratorService {
               ],
             ),
 
-          // Code 128 Barcode
-          pw.Container(
+          // Barcode Vector Widget
+          _buildBarcodePdfWidget(
+            data: item.barcode,
+            symbology: item.symbology,
             height: item.showPrice ? 13 : 16.5,
-            child: pw.BarcodeWidget(
-              barcode: pw.Barcode.code128(),
-              data: item.barcode,
-              drawText: false,
-              color: PdfColors.black,
-            ),
           ),
 
           // Barcode Text & PKD
@@ -889,12 +1058,16 @@ class BarcodeGeneratorService {
   // 4. A4 24-LABEL STANDARD SHEET ENGINE (3 Columns x 8 Rows)
   // Dimensions per label: ~64mm x 34mm (Standard Desmat/Avery 24L)
   // =========================================================================
-  static void _buildA4Sheet24Pages(pw.Document pdf, List<BarcodeLabelItem> items) {
+  static void _buildA4Sheet24Pages(pw.Document pdf, List<BarcodeLabelItem> items, {int startOffset = 0}) {
     const int labelsPerPage = 24;
     const int cols = 3;
+    final List<BarcodeLabelItem?> paddedItems = [
+      ...List.generate(startOffset.clamp(0, labelsPerPage - 1), (_) => null),
+      ...items,
+    ];
 
-    for (int pageStart = 0; pageStart < items.length; pageStart += labelsPerPage) {
-      final pageItems = items.skip(pageStart).take(labelsPerPage).toList();
+    for (int pageStart = 0; pageStart < paddedItems.length; pageStart += labelsPerPage) {
+      final pageItems = paddedItems.skip(pageStart).take(labelsPerPage).toList();
 
       pdf.addPage(
         pw.Page(
@@ -907,7 +1080,11 @@ class BarcodeGeneratorService {
               crossAxisSpacing: 8,
               mainAxisSpacing: 6,
               children: List.generate(pageItems.length, (index) {
-                return _buildA4Sheet24SingleLabel(pageItems[index]);
+                final item = pageItems[index];
+                if (item == null) {
+                  return pw.Container();
+                }
+                return _buildA4Sheet24SingleLabel(item);
               }),
             );
           },
@@ -920,7 +1097,7 @@ class BarcodeGeneratorService {
     return pw.Container(
       padding: const pw.EdgeInsets.all(4.5),
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+        border: item.showBorder ? pw.Border.all(color: PdfColors.grey300, width: 0.5) : null,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
       ),
       child: pw.Column(
@@ -1018,15 +1195,11 @@ class BarcodeGeneratorService {
               ],
             ),
 
-          // Scannable Code 128 Vector Barcode (Expanded when price is omitted)
-          pw.Container(
+          // Barcode Vector Widget
+          _buildBarcodePdfWidget(
+            data: item.barcode,
+            symbology: item.symbology,
             height: item.showPrice ? 18 : 22,
-            child: pw.BarcodeWidget(
-              barcode: pw.Barcode.code128(),
-              data: item.barcode,
-              drawText: false,
-              color: PdfColors.black,
-            ),
           ),
 
           // Barcode Number / SKU and PKD
@@ -1125,15 +1298,11 @@ class BarcodeGeneratorService {
                   textAlign: pw.TextAlign.center,
                 ),
 
-                // Code 128 Barcode
-                pw.Container(
-                  height: 16,
-                  child: pw.BarcodeWidget(
-                    barcode: pw.Barcode.code128(),
-                    data: item.barcode,
-                    drawText: false,
-                    color: PdfColors.black,
-                  ),
+                // Barcode Vector Widget
+                _buildBarcodePdfWidget(
+                  data: item.barcode,
+                  symbology: item.symbology,
+                  height: heightPt > 80 ? 22 : 16,
                 ),
 
                 // Bottom Row: Barcode text | Price / MRP | Expiry Date

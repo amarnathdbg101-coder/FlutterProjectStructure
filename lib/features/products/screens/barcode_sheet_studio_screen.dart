@@ -128,6 +128,9 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
   final TextEditingController _shopNameController = TextEditingController();
 
   BarcodeLabelFormat _selectedFormat = BarcodeLabelFormat.thermalRoll50x25;
+  BarcodeSymbology _selectedSymbology = BarcodeSymbology.code128;
+  String _formatFilterTab = 'all'; // 'all' | 'thermal' | 'a4'
+
   final List<BarcodeStudioItem> _queue = [];
   final Map<String, int> _quantities = {};
 
@@ -135,6 +138,9 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
   bool _showPrice = true;
   bool _showBatchExpiry = true;
   bool _showPkd = false;
+  bool _showBorder = true;
+  int _startOffset = 0; // Skip peeled sticker slots on A4 sheet
+  int _previewItemIndex = 0;
   bool _isProcessing = false;
   int _activePreviewPage = 1;
   String _searchFilter = '';
@@ -201,6 +207,9 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
         _queue.add(item);
         _quantities[item.id] = count.clamp(1, 999);
       }
+      if (_previewItemIndex >= _queue.length) {
+        _previewItemIndex = 0;
+      }
     });
   }
 
@@ -209,6 +218,9 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       if (newCount <= 0) {
         _queue.removeWhere((p) => p.id == id);
         _quantities.remove(id);
+        if (_previewItemIndex >= _queue.length) {
+          _previewItemIndex = 0;
+        }
       } else {
         _quantities[id] = newCount.clamp(1, 999);
       }
@@ -220,6 +232,8 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       _queue.clear();
       _quantities.clear();
       _activePreviewPage = 1;
+      _previewItemIndex = 0;
+      _startOffset = 0;
     });
   }
 
@@ -232,7 +246,20 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
     CustomSnackbar.showSuccess(
       context,
       context.isHindi ? 'सभी सामानों की संख्या स्टॉक के अनुसार सेट कर दी गई' : 'Quantities matched to in-hand stock',
-      duration: const Duration(seconds: 1),
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  void _setAllQuantities(int count) {
+    setState(() {
+      for (final item in _queue) {
+        _quantities[item.id] = count.clamp(1, 999);
+      }
+    });
+    CustomSnackbar.showSuccess(
+      context,
+      context.isHindi ? 'सभी सामानों की संख्या $count सेट कर दी गई' : 'All quantities set to $count',
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -243,6 +270,7 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       CustomSnackbar.showWarning(
         context,
         context.isHindi ? 'कोई एक्सपायरी सामान नहीं मिला' : 'No expiry tracked items found',
+        duration: const Duration(seconds: 2),
       );
       return;
     }
@@ -260,7 +288,7 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
     CustomSnackbar.showSuccess(
       context,
       context.isHindi ? 'सभी एक्सपायरी लॉट सूची में जोड़ दिए गए' : 'All expiring lots added to print queue',
-      duration: const Duration(seconds: 1),
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -298,6 +326,8 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
               showPrice: _showPrice,
               showPkd: _showPkd,
               showBatchExpiry: _showBatchExpiry,
+              symbology: _selectedSymbology,
+              showBorder: _showBorder,
             )
           : BarcodeLabelItem(
               productName: item.name.trim(),
@@ -314,6 +344,8 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
               showPrice: _showPrice,
               showPkd: _showPkd,
               showBatchExpiry: _showBatchExpiry,
+              symbology: _selectedSymbology,
+              showBorder: _showBorder,
             );
       for (int i = 0; i < count; i++) {
         list.add(labelItem);
@@ -324,7 +356,11 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
 
   Future<void> _handlePrint() async {
     if (_queue.isEmpty || _totalStickers == 0) {
-      CustomSnackbar.showWarning(context, context.isHindi ? 'कृपया प्रिंट करने के लिए सामान जोड़ें' : 'Please add items to print queue');
+      CustomSnackbar.showWarning(
+        context,
+        context.isHindi ? 'कृपया प्रिंट करने के लिए सामान जोड़ें' : 'Please add items to print queue',
+        duration: const Duration(seconds: 2),
+      );
       return;
     }
 
@@ -338,10 +374,75 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       await BarcodeGeneratorService.printLabels(
         items: items,
         format: _selectedFormat,
+        startOffset: _selectedFormat.isA4Sheet ? _startOffset : 0,
         jobName: 'ShopSilo_Barcode_Batch_${items.length}',
       );
     } catch (e) {
-      if (mounted) CustomSnackbar.showError(context, e.toString());
+      if (mounted) CustomSnackbar.showError(context, e.toString(), duration: const Duration(seconds: 2));
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _handleTestPrint() async {
+    if (_queue.isEmpty) {
+      CustomSnackbar.showWarning(
+        context,
+        context.isHindi ? 'कृपया पहले कम से कम एक सामान जोड़ें' : 'Please add at least one item first',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+    try {
+      final shopName = _shopNameController.text.trim().isNotEmpty
+          ? _shopNameController.text.trim().toUpperCase()
+          : 'SHOPSILO STORE';
+      final activeItem = _queue[_previewItemIndex.clamp(0, _queue.length - 1)];
+
+      final sample = activeItem.isBatchLot
+          ? BarcodeLabelItem.fromBatchDetails(
+              name: activeItem.name,
+              barcode: activeItem.barcode,
+              batchNumber: activeItem.batchNumber,
+              expiryDate: activeItem.expiryDate,
+              mrp: activeItem.mrp,
+              sellingPrice: activeItem.price,
+              unit: activeItem.unit,
+              shopName: shopName,
+              showShopName: _showShopName,
+              showPrice: _showPrice,
+              showPkd: _showPkd,
+              showBatchExpiry: _showBatchExpiry,
+              symbology: _selectedSymbology,
+              showBorder: _showBorder,
+            )
+          : BarcodeLabelItem(
+              productName: activeItem.name.trim(),
+              shopName: shopName.trim().toUpperCase(),
+              barcode: activeItem.barcode.replaceAll(RegExp(r'[^\x20-\x7E]'), '').trim(),
+              sku: activeItem.sku,
+              sellingPrice: activeItem.price,
+              mrp: activeItem.mrp,
+              unit: activeItem.unit.trim(),
+              pkdDate: DateFormat('dd/MM/yyyy').format(DateTime.now()),
+              batchNumber: activeItem.batchNumber,
+              expiryDate: activeItem.expiryDate != null ? DateFormat('dd/MM/yyyy').format(activeItem.expiryDate!) : null,
+              showShopName: _showShopName,
+              showPrice: _showPrice,
+              showPkd: _showPkd,
+              showBatchExpiry: _showBatchExpiry,
+              symbology: _selectedSymbology,
+              showBorder: _showBorder,
+            );
+
+      await BarcodeGeneratorService.printTestLabel(
+        sampleItem: sample,
+        format: _selectedFormat,
+      );
+    } catch (e) {
+      if (mounted) CustomSnackbar.showError(context, e.toString(), duration: const Duration(seconds: 2));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -349,7 +450,11 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
 
   Future<void> _handleSharePdf() async {
     if (_queue.isEmpty || _totalStickers == 0) {
-      CustomSnackbar.showWarning(context, context.isHindi ? 'कृपया प्रिंट करने के लिए सामान जोड़ें' : 'Please add items to print queue');
+      CustomSnackbar.showWarning(
+        context,
+        context.isHindi ? 'कृपया प्रिंट करने के लिए सामान जोड़ें' : 'Please add items to print queue',
+        duration: const Duration(seconds: 2),
+      );
       return;
     }
 
@@ -363,10 +468,11 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
       await BarcodeGeneratorService.shareLabelsPdf(
         items: items,
         format: _selectedFormat,
+        startOffset: _selectedFormat.isA4Sheet ? _startOffset : 0,
         filename: 'ShopSilo_Barcode_Labels_${DateTime.now().millisecondsSinceEpoch}.pdf',
       );
     } catch (e) {
-      if (mounted) CustomSnackbar.showError(context, e.toString());
+      if (mounted) CustomSnackbar.showError(context, e.toString(), duration: const Duration(seconds: 2));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -379,9 +485,10 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
     final stats = BarcodeGeneratorService.calculatePacking(
       totalStickers: _totalStickers,
       format: _selectedFormat,
+      startOffset: _selectedFormat.isA4Sheet ? _startOffset : 0,
     );
 
-    final isWide = MediaQuery.of(context).size.width >= 900;
+    final isWide = MediaQuery.of(context).size.width >= 920;
 
     return Scaffold(
       backgroundColor: context.colorBg,
@@ -411,7 +518,12 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
           ],
         ),
         actions: [
-          if (_queue.isNotEmpty)
+          if (_queue.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.speed_rounded, size: 20, color: AppColors.primary),
+              tooltip: isHindi ? 'टेस्ट स्टीकर प्रिंट करें (1x)' : 'Print 1x Test Label',
+              onPressed: _isProcessing ? null : _handleTestPrint,
+            ),
             TextButton.icon(
               icon: const Icon(Icons.delete_sweep_rounded, size: 18, color: AppColors.error),
               label: Text(
@@ -420,6 +532,7 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
               ),
               onPressed: _clearQueue,
             ),
+          ],
           const SizedBox(width: 8),
         ],
       ),
@@ -514,6 +627,17 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
                   onPressed: _addAllExpiringLots,
                 ),
                 const SizedBox(width: 8),
+                ActionChip(
+                  avatar: const Icon(Icons.playlist_add_rounded, size: 16, color: AppColors.primary),
+                  label: Text(
+                    isHindi ? '+ स्टॉक वाले उत्पाद' : '+ In-Stock Items',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                  ),
+                  backgroundColor: context.colorPrimaryLight,
+                  side: const BorderSide(color: AppColors.primary),
+                  onPressed: () => _addAllInStockProducts(allProducts),
+                ),
+                const SizedBox(width: 8),
                 if (_queue.isNotEmpty) ...[
                   ActionChip(
                     avatar: const Icon(Icons.inventory_2_rounded, size: 15, color: AppColors.primary),
@@ -526,18 +650,21 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
                     onPressed: _fillStockQuantities,
                   ),
                   const SizedBox(width: 8),
-                ],
-                ActionChip(
-                  avatar: const Icon(Icons.playlist_add_rounded, size: 16, color: AppColors.primary),
-                  label: Text(
-                    isHindi ? '+ स्टॉक वाले उत्पाद' : '+ In-Stock Items',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                  ActionChip(
+                    label: const Text('⚡ All = 1', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    backgroundColor: context.colorSurfaceSubtle,
+                    side: BorderSide(color: context.colorBorder),
+                    onPressed: () => _setAllQuantities(1),
                   ),
-                  backgroundColor: context.colorPrimaryLight,
-                  side: const BorderSide(color: AppColors.primary),
-                  onPressed: () => _addAllInStockProducts(allProducts),
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
+                  ActionChip(
+                    label: const Text('⚡ All = 5', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    backgroundColor: context.colorSurfaceSubtle,
+                    side: BorderSide(color: context.colorBorder),
+                    onPressed: () => _setAllQuantities(5),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 ...filteredCatalog.map((product) {
                   final inQueue = _queue.any((p) => p.id == product.id);
                   return Padding(
@@ -636,128 +763,136 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
               itemBuilder: (ctx, index) {
                 final item = _queue[index];
                 final count = _quantities[item.id] ?? 1;
+                final isSelectedForPreview = _previewItemIndex == index;
 
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: context.colorSurface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: context.colorBorder),
-                  ),
-                  child: Row(
-                    children: [
-                      // Thumbnail
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: item.imageUrl != null && item.imageUrl!.isNotEmpty
-                            ? AppProductImage(
-                                imageUrl: item.imageUrl,
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                                fallbackIcon: Icons.qr_code_2_rounded,
-                              )
-                            : Container(
-                                width: 40,
-                                height: 40,
-                                color: context.colorPrimaryLight,
-                                child: const Icon(Icons.qr_code_2_rounded, size: 22, color: AppColors.primary),
-                              ),
+                return InkWell(
+                  onTap: () => setState(() => _previewItemIndex = index),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelectedForPreview ? context.colorPrimaryLight : context.colorSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelectedForPreview ? AppColors.primary : context.colorBorder,
+                        width: isSelectedForPreview ? 1.5 : 1.0,
                       ),
-                      const SizedBox(width: 10),
+                    ),
+                    child: Row(
+                      children: [
+                        // Thumbnail
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: item.imageUrl != null && item.imageUrl!.isNotEmpty
+                              ? AppProductImage(
+                                  imageUrl: item.imageUrl,
+                                  width: 40,
+                                  height: 40,
+                                  fit: BoxFit.cover,
+                                  fallbackIcon: Icons.qr_code_2_rounded,
+                                )
+                              : Container(
+                                  width: 40,
+                                  height: 40,
+                                  color: context.colorPrimaryLight,
+                                  child: const Icon(Icons.qr_code_2_rounded, size: 22, color: AppColors.primary),
+                                ),
+                        ),
+                        const SizedBox(width: 10),
 
-                      // Name, Batch Lot & Price
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        // Name, Batch Lot & Price
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                item.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Text(
+                                    '₹${item.price.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  if (item.mrp > item.price) ...[
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '₹${item.mrp.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        color: Colors.grey,
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(width: 6),
+                                  if (item.batchNumber != null && item.batchNumber!.isNotEmpty)
+                                    Flexible(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEFF6FF),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                                        ),
+                                        child: Text(
+                                          '#${item.batchNumber}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF1D4ED8),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Stepper: [-] count [+]
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              item.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _updateQuantity(item.id, count - 1),
                             ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Text(
-                                  '₹${item.price.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.primary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                if (item.mrp > item.price) ...[
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '₹${item.mrp.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      fontSize: 10.5,
-                                      color: Colors.grey,
-                                      decoration: TextDecoration.lineThrough,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(width: 6),
-                                if (item.batchNumber != null && item.batchNumber!.isNotEmpty)
-                                  Flexible(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEFF6FF),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: const Color(0xFFBFDBFE)),
-                                      ),
-                                      child: Text(
-                                        '#${item.batchNumber}',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1D4ED8),
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                            Container(
+                              constraints: const BoxConstraints(minWidth: 26),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline_rounded, size: 20, color: AppColors.primary),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _updateQuantity(item.id, count + 1),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 16, color: AppColors.error),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _updateQuantity(item.id, 0),
                             ),
                           ],
                         ),
-                      ),
-
-                      // Stepper: [-] count [+]
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _updateQuantity(item.id, count - 1),
-                          ),
-                          Container(
-                            constraints: const BoxConstraints(minWidth: 26),
-                            alignment: Alignment.center,
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline_rounded, size: 20, color: AppColors.primary),
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _updateQuantity(item.id, count + 1),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 16, color: AppColors.error),
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _updateQuantity(item.id, 0),
-                          ),
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },
@@ -780,64 +915,165 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
         children: [
           // 1. Live WYSIWYG Physical Label Preview Card
           if (_queue.isNotEmpty) ...[
-            Text(
-              isHindi ? 'लाइव स्टीकर पूर्वावलोकन' : 'Live Sticker Preview',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  isHindi ? 'लाइव स्टीकर पूर्वावलोकन' : 'Live Sticker Preview',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                if (_queue.length > 1)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _previewItemIndex > 0
+                            ? () => setState(() => _previewItemIndex--)
+                            : null,
+                      ),
+                      Text(
+                        '${_previewItemIndex + 1} / ${_queue.length}',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _previewItemIndex < _queue.length - 1
+                            ? () => setState(() => _previewItemIndex++)
+                            : null,
+                      ),
+                    ],
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             _buildLiveStickerPreviewCard(context),
             const SizedBox(height: 16),
           ],
 
-          // 2. Format Selection Header
+          // 2. Format Selection Header & Tabs
           Text(
             isHindi ? '1. स्टीकर शीट व रोल फॉर्मेट चुनें' : '1. Select Sticker Sheet Format',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 8),
 
-          _buildFormatOptionCard(
-            context,
-            format: BarcodeLabelFormat.thermalRoll50x25,
-            badge: isHindi ? '⭐ 2" थर्मल रोल' : '⭐ Standard Thermal',
+          // Format Category Filter Tabs (Horizontally scrollable to eliminate any overflow)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterTabButton(
+                  label: isHindi ? 'सभी प्रारूप' : 'All Formats',
+                  key: 'all',
+                ),
+                const SizedBox(width: 8),
+                _buildFilterTabButton(
+                  label: isHindi ? 'थर्मल रोल' : 'Thermal Roll',
+                  key: 'thermal',
+                ),
+                const SizedBox(width: 8),
+                _buildFilterTabButton(
+                  label: isHindi ? 'A4 स्टीकर शीट' : 'A4 Sheets',
+                  key: 'a4',
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          _buildFormatOptionCard(
-            context,
-            format: BarcodeLabelFormat.thermalRoll40x20,
-            badge: isHindi ? 'छोटा थर्मल रोल' : 'Mini Thermal',
-          ),
-          const SizedBox(height: 6),
-          _buildFormatOptionCard(
-            context,
-            format: BarcodeLabelFormat.a4Sheet24,
-            badge: 'Desmat/Avery',
-          ),
-          const SizedBox(height: 6),
-          _buildFormatOptionCard(
-            context,
-            format: BarcodeLabelFormat.a4Sheet40,
-          ),
-          const SizedBox(height: 6),
-          _buildFormatOptionCard(
-            context,
-            format: BarcodeLabelFormat.a4Sheet65,
-            badge: isHindi ? 'छोटे सामान' : 'Compact Micro',
-          ),
-          const SizedBox(height: 6),
-          _buildFormatOptionCard(
-            context,
-            format: BarcodeLabelFormat.a4Sheet84,
-            badge: isHindi ? '⭐ 84 रेक्टैंगल' : '⭐ Max Density',
-          ),
+          const SizedBox(height: 10),
+
+          // Formats List
+          if (_formatFilterTab == 'all' || _formatFilterTab == 'thermal') ...[
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.thermalRoll50x25,
+              badge: isHindi ? '⭐ 2" थर्मल रोल' : '⭐ Standard Thermal',
+            ),
+            const SizedBox(height: 6),
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.thermalRoll40x20,
+              badge: isHindi ? 'छोटा थर्मल रोल' : 'Mini Thermal',
+            ),
+            const SizedBox(height: 6),
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.thermalRoll50x30,
+              badge: isHindi ? 'फार्मा/कपड़े' : 'Pharma/Apparel',
+            ),
+            const SizedBox(height: 6),
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.thermalRoll50x50,
+              badge: isHindi ? '2" चौकोर' : 'Square 2"',
+            ),
+            const SizedBox(height: 6),
+          ],
+          if (_formatFilterTab == 'all' || _formatFilterTab == 'a4') ...[
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.a4Sheet24,
+              badge: 'Desmat/Avery',
+            ),
+            const SizedBox(height: 6),
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.a4Sheet40,
+            ),
+            const SizedBox(height: 6),
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.a4Sheet65,
+              badge: isHindi ? 'छोटे सामान' : 'Compact Micro',
+            ),
+            const SizedBox(height: 6),
+            _buildFormatOptionCard(
+              context,
+              format: BarcodeLabelFormat.a4Sheet84,
+              badge: isHindi ? '⭐ 84 रेक्टैंगल' : '⭐ Max Density',
+            ),
+          ],
           const SizedBox(height: 16),
 
-          // 3. Customization Toggles
+          // 3. Symbology Choice & Customization Toggles
           Text(
-            isHindi ? '2. स्टीकर पर क्या दिखाना है?' : '2. Label Elements',
+            isHindi ? '2. स्टीकर पर क्या दिखाना है?' : '2. Label Elements & Barcode Type',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
+
+          // Symbology selector
+          Row(
+            children: [
+              Expanded(
+                child: _buildSymbologyChip(
+                  label: 'Code 128',
+                  symbology: BarcodeSymbology.code128,
+                  subtitle: isHindi ? 'यूनिवर्सल' : 'Universal',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildSymbologyChip(
+                  label: 'EAN-13',
+                  symbology: BarcodeSymbology.ean13,
+                  subtitle: isHindi ? 'रीटेल' : 'Retail',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildSymbologyChip(
+                  label: 'QR Code',
+                  symbology: BarcodeSymbology.qrCode,
+                  subtitle: isHindi ? '2D कॉम्पैक्ट' : '2D Matrix',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
           Wrap(
             spacing: 8,
             runSpacing: 6,
@@ -862,11 +1098,83 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
                 label: Text(isHindi ? 'पैकिंग तारीख (PKD)' : 'Packing Date'),
                 onSelected: (val) => setState(() => _showPkd = val),
               ),
+              FilterChip(
+                selected: _showBorder,
+                label: Text(isHindi ? 'कटिंग बॉर्डर लाइन' : 'Cutting Border Lines'),
+                onSelected: (val) => setState(() => _showBorder = val),
+              ),
             ],
           ),
           const SizedBox(height: 16),
 
-          // 4. Live Sheet Packing & Paper Utilization Dashboard
+          // 4. Anti-Waste Start Offset for A4 Sheets
+          if (_selectedFormat.isA4Sheet) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: context.colorSurface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: context.colorBorder),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.recycling_rounded, color: Color(0xFFD97706), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isHindi ? 'छीले हुए खाली स्टीकर छोड़ें (Start Offset)' : 'Skip Peeled Sticker Slots',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          isHindi
+                              ? 'आधी इस्तेमाल शीट को बिना वेस्ट किए फिर से इस्तेमाल करें'
+                              : 'Reuse partially peeled adhesive sheets without waste',
+                          style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove_rounded, size: 20),
+                        onPressed: _startOffset > 0 ? () => setState(() => _startOffset--) : null,
+                      ),
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 28),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$_startOffset',
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_rounded, size: 20, color: AppColors.primary),
+                        onPressed: _startOffset < _selectedFormat.labelsPerPage - 1
+                            ? () => setState(() => _startOffset++)
+                            : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 5. Live Sheet Packing & Paper Utilization Dashboard
           Text(
             isHindi ? '3. शीट उपयोग और पेपर हिसाब' : '3. Sheet Utilization & Paper Stats',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -943,7 +1251,7 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 5. Interactive Visual Sheet Mini-Map Preview
+          // 6. Interactive Visual Sheet Mini-Map Preview
           if (_selectedFormat.isA4Sheet && stats.totalStickers > 0) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -984,12 +1292,79 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
     );
   }
 
+  Widget _buildFilterTabButton({required String label, required String key}) {
+    final isSelected = _formatFilterTab == key;
+    return InkWell(
+      onTap: () => setState(() => _formatFilterTab = key),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : context.colorSurfaceSubtle,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSelected ? AppColors.primary : context.colorBorder),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : context.colorTextPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSymbologyChip({
+    required String label,
+    required BarcodeSymbology symbology,
+    required String subtitle,
+  }) {
+    final isSel = _selectedSymbology == symbology;
+    return InkWell(
+      onTap: () => setState(() => _selectedSymbology = symbology),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSel ? context.colorPrimaryLight : context.colorSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSel ? AppColors.primary : context.colorBorder,
+            width: isSel ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isSel ? AppColors.primary : context.colorTextPrimary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 9.5,
+                color: isSel ? AppColors.primary : context.colorTextMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // =========================================================================
   // LIVE PHYSICAL LABEL WYSIWYG PREVIEW CARD
   // =========================================================================
   Widget _buildLiveStickerPreviewCard(BuildContext context) {
     if (_queue.isEmpty) return const SizedBox.shrink();
-    final sample = _queue.first;
+    final sample = _queue[_previewItemIndex.clamp(0, _queue.length - 1)];
     final shopName = _shopNameController.text.trim().isNotEmpty
         ? _shopNameController.text.trim().toUpperCase()
         : 'SHOPSILO STORE';
@@ -999,12 +1374,15 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
 
     return Center(
       child: Container(
-        width: 260,
+        width: 280,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade400, width: 1.2),
+          border: Border.all(
+            color: _showBorder ? Colors.grey.shade400 : Colors.transparent,
+            width: 1.2,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.08),
@@ -1065,14 +1443,32 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
             ),
             const SizedBox(height: 6),
 
-            // Code 128 Barcode Widget
-            BarcodeWidget(
-              barcode: Barcode.code128(),
-              data: validBarcode,
-              height: 38,
-              drawText: false,
-              color: Colors.black,
-            ),
+            // Barcode or QR Widget
+            if (_selectedSymbology == BarcodeSymbology.qrCode)
+              BarcodeWidget(
+                barcode: Barcode.qrCode(),
+                data: validBarcode,
+                height: 44,
+                drawText: false,
+                color: Colors.black,
+              )
+            else if (_selectedSymbology == BarcodeSymbology.ean13 &&
+                RegExp(r'^\d{12,13}$').hasMatch(validBarcode))
+              BarcodeWidget(
+                barcode: Barcode.ean13(),
+                data: validBarcode,
+                height: 38,
+                drawText: false,
+                color: Colors.black,
+              )
+            else
+              BarcodeWidget(
+                barcode: Barcode.code128(),
+                data: validBarcode,
+                height: 38,
+                drawText: false,
+                color: Colors.black,
+              ),
             const SizedBox(height: 4),
 
             // Bottom Row: Barcode Alphanumeric | Price | Expiry
@@ -1127,6 +1523,7 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
         setState(() {
           _selectedFormat = format;
           _activePreviewPage = 1;
+          _startOffset = _startOffset.clamp(0, format.labelsPerPage - 1);
         });
       },
       borderRadius: BorderRadius.circular(12),
@@ -1232,7 +1629,8 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
     final rows = _selectedFormat.rows;
 
     final flatItems = _generateFlatLabelItems(_shopNameController.text.trim());
-    final startIndex = (_activePreviewPage - 1) * perPage;
+    final isFirstPage = _activePreviewPage == 1;
+    final currentOffset = isFirstPage ? _startOffset : 0;
 
     return Center(
       child: AspectRatio(
@@ -1261,11 +1659,31 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
               mainAxisSpacing: 3,
             ),
             itemBuilder: (ctx, slotIdx) {
-              final globalItemIdx = startIndex + slotIdx;
-              final isFilled = globalItemIdx < flatItems.length;
+              if (isFirstPage && slotIdx < currentOffset) {
+                // Peeled / Skipped Slot
+                return InkWell(
+                  onTap: () => setState(() => _startOffset = slotIdx),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: Colors.grey.shade400, width: 0.5, style: BorderStyle.solid),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '✂️ ${slotIdx + 1}',
+                        style: TextStyle(fontSize: 4.5, color: Colors.grey.shade500, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final itemOffset = isFirstPage ? (slotIdx - currentOffset) : ((_activePreviewPage - 1) * perPage - _startOffset + slotIdx);
+              final isFilled = itemOffset >= 0 && itemOffset < flatItems.length;
 
               if (isFilled) {
-                final item = flatItems[globalItemIdx];
+                final item = flatItems[itemOffset];
                 return Container(
                   padding: const EdgeInsets.all(1.5),
                   decoration: BoxDecoration(
@@ -1304,15 +1722,18 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
                   ),
                 );
               } else {
-                return Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: Colors.grey.shade300, width: 0.5),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${slotIdx + 1}',
-                      style: TextStyle(fontSize: 5, color: Colors.grey.shade400),
+                return InkWell(
+                  onTap: isFirstPage ? () => setState(() => _startOffset = slotIdx) : null,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: Colors.grey.shade300, width: 0.5),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${slotIdx + 1}',
+                        style: TextStyle(fontSize: 5, color: Colors.grey.shade400),
+                      ),
                     ),
                   ),
                 );
@@ -1347,24 +1768,48 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
         top: false,
         child: Row(
           children: [
+            // Test 1x Calibration Print
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                side: BorderSide(color: context.colorBorder),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: (_isProcessing || _queue.isEmpty) ? null : _handleTestPrint,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.speed_rounded, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 4),
+                  Text(
+                    isHindi ? 'टेस्ट' : 'Test',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+
             // Share PDF
             Expanded(
               flex: 2,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
                   side: BorderSide(color: context.colorBorder),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                icon: const Icon(Icons.share_rounded, size: 20),
+                icon: const Icon(Icons.share_rounded, size: 16),
                 label: Text(
                   isHindi ? 'PDF शेयर करें' : 'Share PDF',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: _isProcessing ? null : _handleSharePdf,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
 
             // Direct Print
             Expanded(
@@ -1373,22 +1818,24 @@ class _BarcodeSheetStudioScreenState extends State<BarcodeSheetStudioScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 2,
                 ),
                 icon: _isProcessing
                     ? const SizedBox(
-                        width: 18,
-                        height: 18,
+                        width: 16,
+                        height: 16,
                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                       )
-                    : const Icon(Icons.print_rounded, size: 20),
+                    : const Icon(Icons.print_rounded, size: 18),
                 label: Text(
                   isHindi
                       ? 'प्रिंट बारकोड शीट ($_totalStickers)'
                       : 'Print Barcode Sheet ($_totalStickers)',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: _isProcessing ? null : _handlePrint,
               ),

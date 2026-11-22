@@ -85,6 +85,60 @@ void main() {
       expect(stats24.emptySlotsOnLastPage, 23);
     });
 
+    test('calculatePacking accurately calculates startOffset for partially peeled sheets', () {
+      // A4-24 sheet with 4 peeled slots and 20 stickers (exactly fits on 1 page)
+      final statsOffset = BarcodeGeneratorService.calculatePacking(
+        totalStickers: 20,
+        format: BarcodeLabelFormat.a4Sheet24,
+        startOffset: 4,
+      );
+      expect(statsOffset.startOffset, 4);
+      expect(statsOffset.pagesNeeded, 1);
+      expect(statsOffset.emptySlotsOnLastPage, 0);
+
+      // A4-24 sheet with 10 peeled slots and 15 stickers (requires 2 pages)
+      final statsOffset2 = BarcodeGeneratorService.calculatePacking(
+        totalStickers: 15,
+        format: BarcodeLabelFormat.a4Sheet24,
+        startOffset: 10,
+      );
+      expect(statsOffset2.startOffset, 10);
+      expect(statsOffset2.pagesNeeded, 2);
+    });
+
+    test('BarcodeSymbology and new thermal formats generate valid PDF bytes', () async {
+      final p = ProductModel(
+        id: '99',
+        name: 'QR Product Sample',
+        barcode: 'https://shopsilo.in/p/99',
+        sku: 'QR-PRD-99',
+        price: 199.0,
+        stock: 50,
+        unit: 'box',
+        category: 'Electronics',
+      );
+      final itemQr = BarcodeLabelItem.fromProduct(
+        product: p,
+        symbology: BarcodeSymbology.qrCode,
+      );
+
+      // 50x50 square thermal roll with QR code
+      final qrPdf = await BarcodeGeneratorService.generatePdfBytes(
+        items: [itemQr],
+        format: BarcodeLabelFormat.thermalRoll50x50,
+      );
+      expect(qrPdf.isNotEmpty, isTrue);
+      expect(qrPdf.length, greaterThan(1000));
+
+      // 50x30 pharma thermal roll
+      final pharmaPdf = await BarcodeGeneratorService.generatePdfBytes(
+        items: [itemQr],
+        format: BarcodeLabelFormat.thermalRoll50x30,
+      );
+      expect(pharmaPdf.isNotEmpty, isTrue);
+      expect(pharmaPdf.length, greaterThan(1000));
+    });
+
     test('BarcodeLabelItem defaults to showPrice=false for retail bargaining protection', () {
       final p = ProductModel(
         id: '1',
