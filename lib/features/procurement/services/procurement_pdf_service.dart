@@ -117,15 +117,6 @@ class ProcurementPdfService {
     }
   }
 
-  static double _parseQtyNumber(String qtyStr) {
-    final clean = qtyStr.trim();
-    final match = RegExp(r'^([0-9]+(?:\.[0-9]+)?)').firstMatch(clean);
-    if (match != null) {
-      return double.tryParse(match.group(1)!) ?? 1.0;
-    }
-    return 1.0;
-  }
-
   /// Builds printable A4 PDF bytes for the given list of procurement items.
   /// Designed specifically for wholesale Mandi procurement with zero checkbox tick clutter.
   /// Strict single-language output: English mode outputs 100% English, Hindi mode outputs 100% pure Hindi.
@@ -163,12 +154,11 @@ class ProcurementPdfService {
                 ? cachedShop.whatsappNumber.trim()
                 : null));
 
-    // Calculate total procurement estimate
-    final computedTotalBudget = items.fold(0.0, (sum, it) {
-      final q = _parseQtyNumber(it.qty);
-      return sum + (it.estimatedPrice > 0 ? (q * it.estimatedPrice) : 0.0);
-    });
-    final effectiveTotal = totalBudget > 0 ? totalBudget : computedTotalBudget;
+    // Calculate total procurement estimate for items in this purchase order
+    final computedTotalBudget = items.fold(0.0, (sum, it) => sum + it.itemEstimatedCost);
+    final effectiveTotal = computedTotalBudget > 0
+        ? computedTotalBudget
+        : (totalBudget > 0 ? totalBudget : 0.0);
 
     final uniqueDealers = items
         .map((it) => it.dealerName.trim())
@@ -406,8 +396,7 @@ class ProcurementPdfService {
                   ...List.generate(items.length, (index) {
                     final item = items[index];
                     final isAlt = index % 2 == 1;
-                    final qVal = _parseQtyNumber(item.qty);
-                    final lineTotal = item.estimatedPrice > 0 ? (qVal * item.estimatedPrice) : 0.0;
+                    final lineTotal = item.itemEstimatedCost;
 
                     return pw.TableRow(
                       decoration: pw.BoxDecoration(

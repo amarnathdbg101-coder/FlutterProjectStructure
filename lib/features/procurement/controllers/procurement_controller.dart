@@ -430,12 +430,14 @@ class ProcurementController extends BaseController {
             ? cachedShop!.name.trim()
             : 'ShopSilo Partner Store');
 
+    final targetBudget = target.fold(0.0, (sum, i) => sum + i.itemEstimatedCost);
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (ctx) => MandiPdfPreviewScreen(
           shopName: effectiveShopName,
           items: target,
-          totalBudget: totalEstimatedBudget,
+          totalBudget: targetBudget,
           shopAddress: cachedShop?.address,
           shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
         ),
@@ -462,11 +464,13 @@ class ProcurementController extends BaseController {
             ? cachedShop!.name.trim()
             : 'ShopSilo Partner Store');
 
+    final targetBudget = target.fold(0.0, (sum, i) => sum + i.itemEstimatedCost);
+
     try {
       await ProcurementPdfService.shareProcurementSheet(
         shopName: effectiveShopName,
         items: target,
-        totalBudget: totalEstimatedBudget,
+        totalBudget: targetBudget,
         shopAddress: cachedShop?.address,
         shopPhone: cachedShop?.phone ?? cachedShop?.whatsappNumber,
       );

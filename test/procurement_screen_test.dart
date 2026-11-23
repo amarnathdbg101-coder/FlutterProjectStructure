@@ -95,7 +95,8 @@ void main() {
       // Verify item card appears with structured badges
       expect(find.text('Sharbati Wheat'), findsOneWidget);
       expect(find.text('10 बोरी (Bags)'), findsOneWidget);
-      expect(find.text('₹2400'), findsNWidgets(2)); // Item price & header total budget
+      expect(find.text('₹2400'), findsOneWidget); // Item unit rate
+      expect(find.text('₹24000'), findsOneWidget); // Header total budget (10 bags * ₹2400)
       expect(find.text('1 Items'), findsOneWidget);
       expect(find.text('1 Pending'), findsOneWidget);
       expect(find.text('0 Bought'), findsOneWidget);
@@ -223,6 +224,27 @@ void main() {
       expect(find.text('Change Supplier & Best Rate'), findsOneWidget);
       expect(find.text('Fortune Basmati Rice'), findsNWidgets(2)); // Card & sheet header
       expect(find.byType(ElevatedButton), findsOneWidget); // Submit button
+    });
+
+    test('ProcurementItemModel accurately calculates line total budget = qty * rate', () {
+      final item1 = ProcurementItemModel(
+        id: 'p1',
+        name: 'Mustard Oil Tin',
+        qty: '10 Tin',
+        estimatedPrice: 1500,
+      );
+      expect(item1.numericQty, 10.0);
+      expect(item1.estimatedPrice, 1500.0);
+      expect(item1.itemEstimatedCost, 15000.0); // 10 * 1500 = 15000, NOT 1500!
+
+      final item2 = ProcurementItemModel(
+        id: 'p2',
+        name: 'Sugar Bag',
+        qty: '25.5 kg',
+        estimatedPrice: 40,
+      );
+      expect(item2.numericQty, 25.5);
+      expect(item2.itemEstimatedCost, 1020.0); // 25.5 * 40 = 1020
     });
   });
 }

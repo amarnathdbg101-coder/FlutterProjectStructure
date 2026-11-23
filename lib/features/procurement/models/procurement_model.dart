@@ -27,8 +27,22 @@ class ProcurementItemModel {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  double get itemEstimatedCost => estimatedPrice;
-  double get itemActualCost => actualPrice > 0 ? actualPrice : estimatedPrice;
+  /// Extracts the numerical quantity from the freeform qty string (e.g. "10 बोरी" -> 10.0, "5.5 kg" -> 5.5)
+  double get numericQty {
+    final clean = qty.trim();
+    final match = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(clean);
+    if (match != null) {
+      final val = double.tryParse(match.group(1)!);
+      if (val != null && val > 0) return val;
+    }
+    return 1.0;
+  }
+
+  /// Line total estimated budget: Quantity * Unit Estimated Rate
+  double get itemEstimatedCost => numericQty * (estimatedPrice > 0 ? estimatedPrice : 0.0);
+
+  /// Line total actual purchase expense: Quantity * Unit Actual Rate
+  double get itemActualCost => numericQty * (actualPrice > 0 ? actualPrice : (estimatedPrice > 0 ? estimatedPrice : 0.0));
 
   factory ProcurementItemModel.fromJson(Map<String, dynamic> json) {
     final rawName = (json['name'] ??
