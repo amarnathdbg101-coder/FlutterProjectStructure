@@ -58,10 +58,56 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
     setState(() => _isLoading = true);
 
     final copilot = context.read<CopilotController>();
-    final result = await copilot.evaluateBargain(
+    BargainEvaluationModel? result = await copilot.evaluateBargain(
       productId: widget.item.product.id,
       offeredPrice: offeredPrice,
     );
+
+    // 💡 Instant Offline Fallback Resilience: If cloud is offline, compute on-device!
+    if (result == null && mounted) {
+      final product = widget.item.product;
+      final cost = product.costPrice > 0 ? product.costPrice : (product.price * 0.70);
+      final floor = cost * 1.15;
+      final isAcceptable = offeredPrice >= floor;
+      final netProfit = offeredPrice - cost;
+
+      String script;
+      String warning = '';
+      if (offeredPrice < cost) {
+        warning = context.isHindi
+            ? 'ऑफ़लाइन चेतावनी: दर ख़रीद मूल्य से कम है!'
+            : 'Offline Warning: Rate is below purchase cost!';
+        script = context.isHindi
+            ? 'भैया कम से कम ₹${floor.toStringAsFixed(0)} में तय करें, नीचे नहीं दे सकते।'
+            : 'Sir, please finalize at ₹${floor.toStringAsFixed(0)} minimum.';
+      } else if (offeredPrice < floor) {
+        script = context.isHindi
+            ? 'भैया ₹${floor.toStringAsFixed(0)} में तय करें, इससे कम संभव नहीं है।'
+            : 'Sir, ₹${floor.toStringAsFixed(0)} is our best possible rate.';
+      } else {
+        script = context.isHindi
+            ? 'ठीक है भैया, ₹${offeredPrice.toStringAsFixed(0)} में पैक कर रहे हैं।'
+            : 'Agreed, packing at ₹${offeredPrice.toStringAsFixed(0)}.';
+      }
+
+      result = BargainEvaluationModel(
+        productId: product.id,
+        productName: product.name,
+        originalPrice: product.price,
+        customerOfferedPrice: offeredPrice,
+        costPrice: cost,
+        hardFloorPrice: floor,
+        isAcceptable: isAcceptable,
+        suggestedCounterOffer: isAcceptable ? offeredPrice : floor,
+        netProfitINR: netProfit > 0 ? netProfit : 0.0,
+        inventoryAgeDays: 0,
+        abcTier: 'B',
+        xyzTier: 'Y',
+        customerRFM: 'REGULAR',
+        salesScript: script,
+        warningMessage: warning,
+      );
+    }
 
     if (mounted) {
       setState(() {
@@ -97,7 +143,7 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
       child: Container(
-        width: 420,
+        constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.all(18),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -168,14 +168,17 @@ class _SubstituteFinderSheetState extends State<SubstituteFinderSheet> {
                   onSubmitted: (_) => _performSearch(),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildCategoryChip(isHindi ? 'सभी' : 'All', ''),
-                    const SizedBox(width: 8),
-                    _buildCategoryChip(isHindi ? 'कपड़े / गारमेंट्स' : 'Clothing', 'Clothing'),
-                    const SizedBox(width: 8),
-                    _buildCategoryChip(isHindi ? 'सौंदर्य / कॉस्मेटिक्स' : 'Cosmetics', 'Cosmetics'),
-                  ],
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildCategoryChip(isHindi ? 'सभी' : 'All', ''),
+                      const SizedBox(width: 8),
+                      _buildCategoryChip(isHindi ? 'कपड़े / गारमेंट्स' : 'Clothing', 'Clothing'),
+                      const SizedBox(width: 8),
+                      _buildCategoryChip(isHindi ? 'सौंदर्य / कॉस्मेटिक्स' : 'Cosmetics', 'Cosmetics'),
+                    ],
+                  ),
                 ),
               ],
             ),
