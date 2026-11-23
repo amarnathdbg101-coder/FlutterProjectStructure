@@ -40,10 +40,14 @@ class GoogleAuthService {
   static Future<void> _ensureInitialized() async {
     if (_initialized) return;
     try {
-      if (kIsWeb || (!kIsWeb && (Platform.isAndroid || Platform.isIOS))) {
+      if (kIsWeb) {
+        await GoogleSignIn.instance.initialize(
+          clientId: serverClientId,
+        );
+      } else if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
         await GoogleSignIn.instance.initialize(
           serverClientId: serverClientId,
-          clientId: kIsWeb ? serverClientId : androidClientId,
+          clientId: androidClientId,
         );
       }
       _initialized = true;

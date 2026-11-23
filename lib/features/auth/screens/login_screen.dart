@@ -10,6 +10,7 @@ import '../../../core/services/google_auth_service.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_ui_components.dart';
 import '../../../core/widgets/google_logo_icon.dart';
+import '../../../core/widgets/google_web_button.dart';
 import '../../../core/widgets/language_selector_dialog.dart';
 import '../controllers/auth_controller.dart';
 
@@ -71,6 +72,26 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isConnectingGoogle = false);
         authController.setError('Sign in failed: ${e.toString()}');
       }
+    }
+  }
+
+  Future<void> _handleWebIdToken(String idToken) async {
+    setState(() => _isConnectingGoogle = true);
+    final authController = context.read<AuthController>();
+    authController.clearError();
+
+    final success = await authController.loginWithGoogle(
+      idToken,
+      role: 'shop',
+    );
+
+    if (mounted) {
+      setState(() => _isConnectingGoogle = false);
+    }
+
+    if (success && mounted) {
+      DataSyncService.syncOnLogin(context);
+      context.go('/merchant');
     }
   }
 
@@ -504,71 +525,18 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
 
         // 6. Prominent 1-Tap Google Sign-In Button
-        InkWell(
-          onTap: (authController.isLoading || _isConnectingGoogle) ? null : _handleGoogleSignIn,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            height: 56,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
-                width: 1.4,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: (authController.isLoading || _isConnectingGoogle)
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(
-                          context.tr('login_google_connecting'),
-                          style: TextStyle(
-                            fontSize: 14.0,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : AppColors.textPrimary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const GoogleLogoIcon(size: 24),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(
-                          context.tr('login_google_btn'),
-                          style: TextStyle(
-                            fontSize: 15.0,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.2,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
+        if (kIsWeb)
+          buildGoogleSignInWebButton(
+                onIdTokenReceived: _handleWebIdToken,
+                onError: (err) {
+                  if (mounted) {
+                    context.read<AuthController>().setError(err);
+                  }
+                },
+              ) ??
+              _buildStandardGoogleButton(context, authController, isDark)
+        else
+          _buildStandardGoogleButton(context, authController, isDark),
         const SizedBox(height: 24),
 
         // 7. Counter Staff PIN Option (Discreet at bottom)
@@ -715,6 +683,74 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStandardGoogleButton(BuildContext context, AuthController authController, bool isDark) {
+    return InkWell(
+      onTap: (authController.isLoading || _isConnectingGoogle) ? null : _handleGoogleSignIn,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: (authController.isLoading || _isConnectingGoogle)
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      context.tr('login_google_connecting'),
+                      style: TextStyle(
+                        fontSize: 14.0,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : AppColors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const GoogleLogoIcon(size: 24),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      context.tr('login_google_btn'),
+                      style: TextStyle(
+                        fontSize: 15.0,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
