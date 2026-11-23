@@ -108,16 +108,17 @@ void main() {
     expect(posCtrl.grandTotal, 56.0);
 
     // 4. Test Mobile Bottom Checkout Bar
-    expect(find.text('Checkout Bill'), findsOneWidget);
-    expect(find.text('2 Items in Bill'), findsOneWidget);
+    expect(find.text('⚡ Cash Bill'), findsOneWidget);
+    expect(find.text('📖 Khata Udhar'), findsOneWidget);
 
     // 5. Switch to Hindi and verify pure localization
     await langCtrl.setLanguage(AppLanguage.hindi);
     await tester.pumpAndSettle();
 
     expect(find.text('पीओएस बिलिंग काउंटर'), findsOneWidget);
-    expect(find.text('2 वस्तुएं बिल में'), findsOneWidget);
-    expect(find.text('बिल चेकआउट'), findsOneWidget);
+    expect(find.text('2 सामान'), findsOneWidget);
+    expect(find.text('⚡ नकद मिला'), findsOneWidget);
+    expect(find.text('📖 उधार / खाता'), findsOneWidget);
     expect(find.text('वस्तु का नाम'), findsOneWidget);
     expect(find.text('मात्रा'), findsOneWidget);
     expect(find.text('मूल्य (₹)'), findsOneWidget);

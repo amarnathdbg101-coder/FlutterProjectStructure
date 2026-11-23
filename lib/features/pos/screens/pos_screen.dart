@@ -5988,12 +5988,15 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
                   children: [
                     Icon(Icons.qr_code_2_rounded, size: 15, color: context.colorTextMuted),
                     const SizedBox(width: 4),
-                    Text(
-                      isHindi ? 'UPI QR / स्प्लिट / अन्य विकल्प ▾' : 'UPI QR / Split / All Options ▾',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: context.colorTextMuted,
+                    Flexible(
+                      child: Text(
+                        isHindi ? 'UPI QR / स्प्लिट / अन्य विकल्प ▾' : 'UPI QR / Split / All Options ▾',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: context.colorTextMuted,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

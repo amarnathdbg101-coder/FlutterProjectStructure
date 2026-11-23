@@ -24,6 +24,23 @@ class PosController extends BaseController {
   List<ProductModel> _products = [];
   List<ProductModel> get products => _products;
 
+  // ⚡ In-Memory (RAM) O(1) Fast Lookup Index for Barcodes & SKUs
+  final Map<String, ProductModel> _barcodeIndex = {};
+
+  void _rebuildBarcodeIndex() {
+    _barcodeIndex.clear();
+    for (final p in _products) {
+      final barcode = p.barcode.trim().toLowerCase();
+      if (barcode.isNotEmpty) {
+        _barcodeIndex[barcode] = p;
+      }
+      final sku = p.sku.trim().toLowerCase();
+      if (sku.isNotEmpty && !_barcodeIndex.containsKey(sku)) {
+        _barcodeIndex[sku] = p;
+      }
+    }
+  }
+
   final List<PosCartItem> _cart = [];
   List<PosCartItem> get cart => List.unmodifiable(_cart);
 
@@ -478,6 +495,7 @@ class PosController extends BaseController {
     });
     _logoutSub = AppEventBus().on(AppCacheEventType.authLogout, (_) {
       _products = [];
+      _barcodeIndex.clear();
       _serverSales = [];
       invalidateSalesMetricsCache();
       clearCart();
@@ -513,6 +531,7 @@ class PosController extends BaseController {
     final cached = LocalCacheService.getProducts();
     if (cached.isNotEmpty) {
       _products = cached;
+      _rebuildBarcodeIndex();
     }
     final cachedSales = LocalCacheService.get10DaySales();
     if (cachedSales.isNotEmpty) {
@@ -543,6 +562,7 @@ class PosController extends BaseController {
       final res = await _repo.searchProducts('');
       if (res.success && res.data != null) {
         _products = res.data!;
+        _rebuildBarcodeIndex();
         await LocalCacheService.saveProducts(_products);
         notifyListeners();
       } else if (forceRefresh || _products.isEmpty) {
@@ -1074,11 +1094,13 @@ class PosController extends BaseController {
       }
     }
 
-    // 1. Try local memory search first (0ms)
-    final localMatch = _products.firstWhere(
-      (p) => p.barcode.toLowerCase() == cleanBarcode.toLowerCase() ||
-             p.sku.toLowerCase() == cleanBarcode.toLowerCase() ||
-             p.name.toLowerCase() == cleanBarcode.toLowerCase(),
+    // 1. Try In-Memory (RAM) O(1) Hash Index first (sub-millisecond instant lookup)
+    final lowerBarcode = cleanBarcode.toLowerCase();
+    ProductModel? localMatch = _barcodeIndex[lowerBarcode];
+
+    // Fallback to in-memory linear match if item was typed by product name
+    localMatch ??= _products.firstWhere(
+      (p) => p.name.toLowerCase() == lowerBarcode,
       orElse: () => ProductModel(id: '', name: '', price: 0, stock: 0, category: ''),
     );
 
@@ -1137,6 +1159,7 @@ class PosController extends BaseController {
 
       // 1. Add to local memory catalog for instant subsequent scans
       _products.insert(0, newProduct);
+      _rebuildBarcodeIndex();
       LocalCacheService.saveProducts(_products);
 
       // 2. Add to active cart
@@ -1166,6 +1189,7 @@ class PosController extends BaseController {
             final idx = _products.indexWhere((p) => p.barcode == cleanBarcode);
             if (idx >= 0) {
               _products[idx] = res.data!;
+              _rebuildBarcodeIndex();
               LocalCacheService.saveProducts(_products);
             }
           }
