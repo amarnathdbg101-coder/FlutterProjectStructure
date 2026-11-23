@@ -20,6 +20,8 @@ class AppProductImage extends StatelessWidget {
   final double fallbackIconSize;
   final Color? backgroundColor;
   final bool expand;
+  final int? memCacheWidth;
+  final int? memCacheHeight;
 
   const AppProductImage({
     super.key,
@@ -33,6 +35,8 @@ class AppProductImage extends StatelessWidget {
     this.fallbackIconSize = 36,
     this.backgroundColor,
     this.expand = false,
+    this.memCacheWidth,
+    this.memCacheHeight,
   });
 
   Widget _buildFallback(BuildContext context, double? w, double? h) {
@@ -94,6 +98,19 @@ class AppProductImage extends StatelessWidget {
       return _buildFallback(context, effectiveWidth, effectiveHeight);
     }
 
+    final devicePixelRatio = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+
+    // Industrial Memory Guard: If dimensions are unbounded or unspecified, cap decoding to 360px
+    // to prevent 12MP/4K camera photos from ballooning to 48MB per bitmap in RAM!
+    final resolvedCacheWidth = memCacheWidth ??
+        ((effectiveWidth != null && effectiveWidth.isFinite && effectiveWidth > 0)
+            ? (effectiveWidth * devicePixelRatio).clamp(64, 800).toInt()
+            : 360);
+    final resolvedCacheHeight = memCacheHeight ??
+        ((effectiveHeight != null && effectiveHeight.isFinite && effectiveHeight > 0)
+            ? (effectiveHeight * devicePixelRatio).clamp(64, 800).toInt()
+            : 360);
+
     Widget imageWidget;
 
     // 1. Flutter Web Blob URL (e.g. blob:http://localhost:54321/...) or Data URI
@@ -102,6 +119,8 @@ class AppProductImage extends StatelessWidget {
         raw,
         width: effectiveWidth,
         height: effectiveHeight,
+        cacheWidth: resolvedCacheWidth,
+        cacheHeight: resolvedCacheHeight,
         fit: fit,
         alignment: alignment,
         filterQuality: FilterQuality.medium,
@@ -121,6 +140,8 @@ class AppProductImage extends StatelessWidget {
           formatted,
           width: effectiveWidth,
           height: effectiveHeight,
+          cacheWidth: resolvedCacheWidth,
+          cacheHeight: resolvedCacheHeight,
           fit: fit,
           alignment: alignment,
           filterQuality: FilterQuality.medium,
@@ -145,6 +166,8 @@ class AppProductImage extends StatelessWidget {
             file,
             width: effectiveWidth,
             height: effectiveHeight,
+            cacheWidth: resolvedCacheWidth,
+            cacheHeight: resolvedCacheHeight,
             fit: fit,
             alignment: alignment,
             filterQuality: FilterQuality.medium,
@@ -161,19 +184,14 @@ class AppProductImage extends StatelessWidget {
     else {
       final formatted = formatImageUrl(raw);
       if (formatted.isNotEmpty && !isLocalFilePath(raw)) {
-        final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
         imageWidget = CachedNetworkImage(
           imageUrl: formatted,
           width: effectiveWidth,
           height: effectiveHeight,
           fit: fit,
           alignment: alignment,
-          memCacheWidth: (effectiveWidth != null && effectiveWidth.isFinite && effectiveWidth > 0)
-              ? (effectiveWidth * devicePixelRatio).clamp(100, 1600).toInt()
-              : null,
-          memCacheHeight: (effectiveHeight != null && effectiveHeight.isFinite && effectiveHeight > 0)
-              ? (effectiveHeight * devicePixelRatio).clamp(100, 1600).toInt()
-              : null,
+          memCacheWidth: resolvedCacheWidth,
+          memCacheHeight: resolvedCacheHeight,
           fadeInDuration: const Duration(milliseconds: 150),
           placeholder: (ctx, url) => _buildLoading(context, effectiveWidth, effectiveHeight),
           errorWidget: (ctx, url, error) => _buildFallback(context, effectiveWidth, effectiveHeight),

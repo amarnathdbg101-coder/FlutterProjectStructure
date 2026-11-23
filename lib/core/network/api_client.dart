@@ -5,6 +5,7 @@ import '../constants/api_constants.dart';
 import '../storage/token_storage.dart';
 import 'api_response.dart';
 import 'auth_interceptor.dart';
+import 'network_status_service.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
@@ -32,6 +33,24 @@ class ApiClient {
 
     // Register Auth Interceptor for automatic Bearer token injection
     dio.interceptors.add(AuthInterceptor());
+
+    // Register Network Status Interceptor for real-time online/offline awareness
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onResponse: (response, handler) {
+          NetworkStatusService().markOnline();
+          return handler.next(response);
+        },
+        onError: (DioException err, handler) {
+          if (err.type == DioExceptionType.connectionError ||
+              err.type == DioExceptionType.connectionTimeout ||
+              err.type == DioExceptionType.receiveTimeout) {
+            NetworkStatusService().markOffline(reason: err.type.name);
+          }
+          return handler.next(err);
+        },
+      ),
+    );
   }
 
   Future<ApiResponse<dynamic>> get(

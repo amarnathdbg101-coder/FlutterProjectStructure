@@ -213,19 +213,31 @@ class KhataController extends BaseController {
   }
 
   Future<void> loadStatement(String mobile) async {
-    _isStatementLoading = true;
-    _currentCustomerStatement = [];
-    notifyListeners();
+    final cleanPhone = KhataRepository.normalizePhone(mobile);
 
+    // 1. Tier 3 Stale-While-Revalidate: Instant 0ms cached statement load
+    final cached = LocalCacheService.getCustomerStatement(cleanPhone);
+    if (cached.isNotEmpty) {
+      _currentCustomerStatement = List<KhataTransactionModel>.from(cached);
+      _isStatementLoading = false;
+      notifyListeners();
+    } else {
+      _isStatementLoading = true;
+      _currentCustomerStatement = [];
+      notifyListeners();
+    }
+
+    // 2. Revalidate over network in background
     final response = await _repo.getCustomerStatement(mobile);
     _isStatementLoading = false;
 
     if (response.success && response.data != null) {
       _currentCustomerStatement = response.data!;
+      await LocalCacheService.saveCustomerStatement(cleanPhone, response.data!);
+
       // Sync customer balance with the latest transaction's balanceAfter if available
       if (_currentCustomerStatement.isNotEmpty) {
         final latestTx = _currentCustomerStatement.first;
-        final cleanPhone = KhataRepository.normalizePhone(mobile);
         final idx = _customers.indexWhere((c) => c.mobile == cleanPhone || c.mobile == mobile);
         if (idx != -1 && latestTx.balanceAfter >= 0) {
           _customers[idx] = _customers[idx].copyWith(
@@ -235,7 +247,7 @@ class KhataController extends BaseController {
           LocalCacheService.saveKhataCustomers(_customers);
         }
       }
-    } else {
+    } else if (cached.isEmpty) {
       setError(response.error ?? (TokenStorage.getLanguage() == 'hi' ? 'पासबुक विवरण लोड नहीं हो सका' : 'Failed to load passbook statement'));
     }
     notifyListeners();
@@ -555,8 +567,11 @@ class KhataController extends BaseController {
       return;
     }
 
-    // Use passed transactions or existing loaded customer statement
-    final txs = transactions ?? (_currentCustomerStatement.isNotEmpty ? _currentCustomerStatement : null);
+    // Use passed transactions, currently loaded customer statement, or local cache for 0ms preview
+    final txs = transactions ??
+        (_currentCustomerStatement.isNotEmpty
+            ? _currentCustomerStatement
+            : LocalCacheService.getCustomerStatement(cleanPhone));
 
     // Open interactive bottom sheet / modal for transparent preview, UPI link, and 1-tap WhatsApp sharing
     await showSmartPaymentReminderSheet(context, customer, transactions: txs);

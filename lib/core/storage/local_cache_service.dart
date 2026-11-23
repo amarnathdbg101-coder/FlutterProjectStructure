@@ -298,6 +298,10 @@ class LocalCacheService {
   static const String _keyKhataCustomers = 'shopsilo_cache_khata_customers';
   static const String _keyKhataCustomersTime = 'shopsilo_cache_khata_customers_time';
   static const String _keyKhataSummary = 'shopsilo_cache_khata_summary';
+  static const String _keyCustomerStatementPrefix = 'shopsilo_cache_khata_stmt_';
+
+  // In-memory customer statement passbook cache for 0ms sub-millisecond retrieval
+  static final Map<String, List<KhataTransactionModel>> _memoryCustomerStatements = {};
 
   /// Save Khata customers list to device local storage
   static Future<void> saveKhataCustomers(List<KhataCustomerModel> customers) async {
@@ -361,6 +365,58 @@ class LocalCacheService {
       debugPrint('[LocalCacheService] Error reading khata summary: $e');
     }
     return null;
+  }
+
+  /// Save customer passbook statement to device local storage & memory cache (Tier 3 SWR)
+  static Future<void> saveCustomerStatement(String mobile, List<KhataTransactionModel> statement) async {
+    try {
+      final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+      if (clean.isEmpty) return;
+      _memoryCustomerStatements[clean] = List<KhataTransactionModel>.from(statement);
+      await init();
+      final listJson = jsonEncode(statement.map((tx) => tx.toJson()).toList());
+      await _prefs!.setString('$_keyCustomerStatementPrefix$clean', listJson);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving customer statement: $e');
+    }
+  }
+
+  /// Retrieve customer passbook statement synchronously for 0ms instant display
+  static List<KhataTransactionModel> getCustomerStatement(String mobile) {
+    final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.isEmpty) return [];
+
+    if (_memoryCustomerStatements.containsKey(clean) && _memoryCustomerStatements[clean] != null) {
+      return List<KhataTransactionModel>.from(_memoryCustomerStatements[clean]!);
+    }
+    try {
+      final raw = _prefs?.getString('$_keyCustomerStatementPrefix$clean');
+      if (raw == null || raw.trim().isEmpty) return [];
+
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded
+            .whereType<Map>()
+            .map((item) => KhataTransactionModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        if (list.isNotEmpty) {
+          _memoryCustomerStatements[clean] = List<KhataTransactionModel>.from(list);
+        }
+        return list;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading customer statement: $e');
+    }
+    return [];
+  }
+
+  /// Optimistically prepends a new transaction to the cached customer statement
+  static Future<void> appendCustomerTransaction(String mobile, KhataTransactionModel tx) async {
+    final clean = mobile.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.isEmpty) return;
+    final current = getCustomerStatement(clean);
+    current.insert(0, tx);
+    await saveCustomerStatement(clean, current);
   }
 
   // ==========================================
@@ -773,6 +829,7 @@ class LocalCacheService {
   /// Invalidate khata customers and summary cache
   static void invalidateKhata() {
     _memoryKhataCustomers = null;
+    _memoryCustomerStatements.clear();
     _prefs?.remove(_keyKhataCustomers);
     _prefs?.remove(_keyKhataCustomersTime);
     _prefs?.remove(_keyKhataSummary);
@@ -908,6 +965,7 @@ class LocalCacheService {
     _memoryManagedShops = null;
     _memorySyncQueue = null;
     _memoryCategories = null;
+    _memoryCustomerStatements.clear();
 
     // 2. Wipe all persistent storage keys from device
     await init();

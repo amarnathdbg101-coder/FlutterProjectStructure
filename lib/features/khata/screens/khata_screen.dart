@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
@@ -808,7 +809,10 @@ class _KhataScreenState extends State<KhataScreen> with AutomaticKeepAliveClient
                 Expanded(
                   flex: 3,
                   child: InkWell(
-                    onTap: () => khata.sendWhatsAppReminder(context, c),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      khata.sendWhatsAppReminder(context, c);
+                    },
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       height: 38,

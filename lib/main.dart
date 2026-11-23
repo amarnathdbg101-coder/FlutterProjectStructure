@@ -11,6 +11,7 @@ import 'core/storage/local_cache_service.dart';
 import 'core/storage/token_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
+import 'core/widgets/offline_status_banner.dart';
 import 'features/analytics/controllers/analytics_controller.dart';
 import 'features/auth/controllers/auth_controller.dart';
 import 'features/dashboard/controllers/dashboard_controller.dart';
@@ -178,7 +179,7 @@ class MyApp extends StatelessWidget {
           behavior: HitTestBehavior.translucent,
           excludeFromSemantics: true,
           onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-          child: child,
+          child: OfflineStatusOverlay(child: child),
         );
       },
     );
