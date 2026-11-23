@@ -44,7 +44,11 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
   void initState() {
     super.initState();
     _priceCtrl = TextEditingController(text: widget.item.effectivePrice.toStringAsFixed(0));
-    _evaluateOffer(double.tryParse(_priceCtrl.text) ?? widget.item.effectivePrice);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _evaluateOffer(double.tryParse(_priceCtrl.text) ?? widget.item.effectivePrice);
+      }
+    });
   }
 
   @override
@@ -140,108 +144,111 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
     }
 
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-      child: Container(
+      child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.shield_outlined, color: AppColors.primary, size: 18),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isHindi ? 'गोपनीय सौदेबाजी सलाहकार' : 'Confidential Negotiation Advisor',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        '${item.product.name} (MRP: ₹${item.product.price.toStringAsFixed(0)})',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Price Input with real-time check button
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _priceCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: isHindi ? 'ग्राहक द्वारा माँगा गया मूल्य' : 'Customer Offered Price',
-                      prefixText: '₹ ',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    onSubmitted: (val) {
-                      final p = double.tryParse(val.trim());
-                      if (p != null) _evaluateOffer(p);
-                    },
+                    child: const Icon(Icons.shield_outlined, color: AppColors.primary, size: 18),
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          final p = double.tryParse(_priceCtrl.text.trim());
-                          if (p != null) _evaluateOffer(p);
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(0, 44),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    elevation: 0,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isHindi ? 'गोपनीय सौदेबाजी सलाहकार' : 'Confidential Negotiation Advisor',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${item.product.name} (MRP: ₹${item.product.price.toStringAsFixed(0)})',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(isHindi ? 'जांचें' : 'Evaluate'),
-                ),
-              ],
-            ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Price Input with real-time check button
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _priceCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: isHindi ? 'ऑफर दर' : 'Offered Rate',
+                        prefixText: '₹ ',
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onSubmitted: (val) {
+                        final p = double.tryParse(val.trim());
+                        if (p != null) _evaluateOffer(p);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            final p = double.tryParse(_priceCtrl.text.trim());
+                            if (p != null) _evaluateOffer(p);
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : Text(isHindi ? 'जांचें' : 'Check'),
+                  ),
+                ],
+              ),
             const SizedBox(height: 14),
 
             // Evaluation Card
@@ -323,25 +330,33 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
-                        Text(
-                          isHindi ? 'अनुशंसित दर:' : 'Recommended:',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              isHindi ? 'अनुशंसित दर:' : 'Recommended:',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '₹${_evaluation!.suggestedCounterOffer.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '₹${_evaluation!.suggestedCounterOffer.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: statusColor,
-                          ),
-                        ),
-                        const Spacer(),
                         InkWell(
                           onTap: () {
                             _priceCtrl.text = _evaluation!.suggestedCounterOffer.toStringAsFixed(0);
@@ -371,10 +386,13 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
                 Expanded(
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text(isHindi ? 'रद्द करें' : 'Cancel'),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(isHindi ? 'रद्द करें' : 'Cancel'),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
@@ -388,9 +406,16 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
                       backgroundColor: statusColor,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                       elevation: 0,
                     ),
-                    child: Text(isHindi ? 'सौदा लागू करें' : 'Apply Deal'),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        isHindi ? 'सौदा लागू करें' : 'Apply Deal',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -398,6 +423,7 @@ class _NegotiationAdvisorDialogState extends State<NegotiationAdvisorDialog> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

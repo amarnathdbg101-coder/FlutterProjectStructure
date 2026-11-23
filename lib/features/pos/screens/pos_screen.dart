@@ -6099,13 +6099,17 @@ class _PosCartItemTile extends StatelessWidget {
 
                 const SizedBox(height: 3),
 
-                Row(
+                Wrap(
+
+                  spacing: 4,
+
+                  runSpacing: 4,
+
+                  crossAxisAlignment: WrapCrossAlignment.center,
 
                   children: [
 
-                    Flexible(
-
-                      child: InkWell(
+                    InkWell(
 
                         onTap: onEditPrice,
 
@@ -6247,9 +6251,7 @@ class _PosCartItemTile extends StatelessWidget {
 
                       ),
 
-                    ),
-
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 2),
 
                     InkWell(
                       onTap: onEditPrice,

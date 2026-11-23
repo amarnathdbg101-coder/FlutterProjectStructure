@@ -10,6 +10,7 @@ import 'package:flutter_project_structure/features/dashboard/controllers/dashboa
 import 'package:flutter_project_structure/features/dashboard/models/shop_model.dart';
 import 'package:flutter_project_structure/features/dashboard/screens/dashboard_screen.dart';
 import 'package:flutter_project_structure/features/reservations/controllers/reservation_controller.dart';
+import 'package:flutter_project_structure/features/copilot/controllers/copilot_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,7 @@ void main() {
     late DashboardController dashCtrl;
     late ReservationController resCtrl;
     late LanguageController langCtrl;
+    late CopilotController copilotCtrl;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
@@ -40,6 +42,7 @@ void main() {
       dashCtrl = DashboardController();
       resCtrl = ReservationController();
       langCtrl = LanguageController();
+      copilotCtrl = CopilotController();
     });
 
     testWidgets(
@@ -62,6 +65,9 @@ void main() {
                 ),
                 provider.ChangeNotifierProvider<LanguageController>.value(
                   value: langCtrl,
+                ),
+                provider.ChangeNotifierProvider<CopilotController>.value(
+                  value: copilotCtrl,
                 ),
               ],
               child: const MaterialApp(home: DashboardScreen()),
@@ -112,6 +118,9 @@ void main() {
               ),
               provider.ChangeNotifierProvider<LanguageController>.value(
                 value: langCtrl,
+              ),
+              provider.ChangeNotifierProvider<CopilotController>.value(
+                value: copilotCtrl,
               ),
             ],
             child: const MaterialApp(home: DashboardScreen()),
