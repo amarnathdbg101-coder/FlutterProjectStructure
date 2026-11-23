@@ -2860,6 +2860,41 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
             ],
 
+            const SizedBox(width: 8),
+
+            InkWell(
+              onTap: () => SubstituteFinderSheet.show(
+                context: context,
+                pos: pos,
+                initialQuery: _scanController.text.trim(),
+              ),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.swap_horiz_rounded, size: 18, color: Color(0xFF6366F1)),
+                    const SizedBox(width: 5),
+                    Text(
+                      context.isHindi ? 'विकल्प खोजें' : 'Substitutes',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF6366F1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           ],
 
         ),
@@ -6212,6 +6247,36 @@ class _PosCartItemTile extends StatelessWidget {
 
                       ),
 
+                    ),
+
+                    const SizedBox(width: 6),
+
+                    InkWell(
+                      onTap: onEditPrice,
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.shield_outlined, size: 11, color: Color(0xFF10B981)),
+                            const SizedBox(width: 3),
+                            Text(
+                              context.isHindi ? 'मोल-भाव' : 'Bargain',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF10B981),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
 
                     if (onBreakSet != null) ...[

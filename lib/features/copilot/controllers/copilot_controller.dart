@@ -173,4 +173,21 @@ class CopilotController extends BaseController {
     _substitutes = [];
     notifyListeners();
   }
+
+  /// Triggers on-demand recalculation of retail intelligence and refreshes brief
+  Future<void> recalculateIntelligence() async {
+    setLoading(true);
+    try {
+      final res = await _repo.triggerRecalculate();
+      if (res.success) {
+        await fetchDailyPrescriptions(silent: true);
+        await fetchDeadCapitalSummary(silent: true);
+      }
+    } catch (e) {
+      debugPrint('[CopilotController] Error recalculating: $e');
+    } finally {
+      setLoading(false);
+      notifyListeners();
+    }
+  }
 }
