@@ -26,6 +26,22 @@ class PosCartItem {
       'name': product.name,
     };
   }
+
+  Map<String, dynamic> toDraftJson() {
+    return {
+      'product': product.toJson(),
+      'quantity': quantity,
+      'custom_price': customPrice,
+    };
+  }
+
+  factory PosCartItem.fromDraftJson(Map<String, dynamic> json) {
+    return PosCartItem(
+      product: ProductModel.fromJson(Map<String, dynamic>.from(json['product'] as Map)),
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      customPrice: (json['custom_price'] as num?)?.toDouble(),
+    );
+  }
 }
 
 class PosSplitPayment {

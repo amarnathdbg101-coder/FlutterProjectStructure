@@ -49,14 +49,14 @@ class DashboardController extends BaseController {
         LocalCacheService.saveDashboardStats(_stats);
         notifyListeners();
       }
-      fetchDashboardData(silent: true);
+      fetchDashboardData(silent: true, forceRefresh: true);
     });
-    _prodSub = bus.on(AppCacheEventType.productsMutated, (_) => fetchDashboardData(silent: true));
-    _invSub = bus.on(AppCacheEventType.inventoryMutated, (_) => fetchDashboardData(silent: true));
-    _khataSub = bus.on(AppCacheEventType.khataMutated, (_) => fetchDashboardData(silent: true));
-    _expenseSub = bus.on(AppCacheEventType.expenseMutated, (_) => fetchDashboardData(silent: true));
-    _resSub = bus.on(AppCacheEventType.reservationMutated, (_) => fetchDashboardData(silent: true));
-    _shopProfileSub = bus.on(AppCacheEventType.shopProfileUpdated, (_) => fetchDashboardData(silent: true));
+    _prodSub = bus.on(AppCacheEventType.productsMutated, (_) => fetchDashboardData(silent: true, forceRefresh: true));
+    _invSub = bus.on(AppCacheEventType.inventoryMutated, (_) => fetchDashboardData(silent: true, forceRefresh: true));
+    _khataSub = bus.on(AppCacheEventType.khataMutated, (_) => fetchDashboardData(silent: true, forceRefresh: true));
+    _expenseSub = bus.on(AppCacheEventType.expenseMutated, (_) => fetchDashboardData(silent: true, forceRefresh: true));
+    _resSub = bus.on(AppCacheEventType.reservationMutated, (_) => fetchDashboardData(silent: true, forceRefresh: true));
+    _shopProfileSub = bus.on(AppCacheEventType.shopProfileUpdated, (_) => fetchDashboardData(silent: true, forceRefresh: true));
 
     _logoutSub = bus.on(AppCacheEventType.authLogout, (_) {
       _stats = DashboardStats();
@@ -86,7 +86,14 @@ class DashboardController extends BaseController {
     }
   }
 
-  Future<void> fetchDashboardData({bool silent = false}) async {
+  Future<void> fetchDashboardData({bool silent = false, bool forceRefresh = false}) async {
+    // Tier 2: 5-Minute TTL Cache Guard (avoid redundant API calls during rapid tab switching)
+    if (!forceRefresh &&
+        LocalCacheService.isDashboardStatsValid() &&
+        (_stats.todaySales > 0 || _stats.salesCount > 0 || _stats.catalogCount > 0)) {
+      return;
+    }
+
     // Only show full loading if we have zero cached metrics
     if (!silent && _stats.todaySales == 0 && _stats.salesCount == 0 && _stats.totalUdhar == 0) {
       setLoading(true);

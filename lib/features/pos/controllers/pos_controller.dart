@@ -538,6 +538,10 @@ class PosController extends BaseController {
       _serverSales = cachedSales;
       invalidateSalesMetricsCache();
     }
+    final draftCart = LocalCacheService.getCartDraft();
+    if (draftCart.isNotEmpty && _cart.isEmpty) {
+      _cart.addAll(draftCart);
+    }
   }
 
   /// Proactively loads catalog products for zero-lag POS search & barcode lookup
@@ -826,6 +830,7 @@ class PosController extends BaseController {
 
   void _resetCartState({required bool syncWithBackend}) {
     _cart.clear();
+    LocalCacheService.clearCartDraft();
     _discount = 0.0;
     _customerPhone = '';
     _customerName = '';
@@ -962,6 +967,9 @@ class PosController extends BaseController {
   }
 
   void scheduleAutoSync() {
+    // ⚡ Tier 1: In-Memory Draft Auto-Save (Crash & Low-Battery Protection)
+    LocalCacheService.saveCartDraft(_cart);
+
     final token = TokenStorage.getToken();
     if (token == null || token.isEmpty) return;
 

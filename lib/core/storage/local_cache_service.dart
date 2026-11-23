@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/dashboard/models/shop_model.dart';
 import '../../features/dashboard/repositories/dashboard_repository.dart';
 import '../../features/products/models/product_model.dart';
+import '../../features/products/models/category_model.dart';
 import '../../features/khata/models/khata_model.dart';
 import '../../features/procurement/models/procurement_model.dart';
 import '../../features/procurement/models/wholesaler_model.dart';
@@ -26,11 +27,15 @@ class LocalCacheService {
   static const String _keyReservationsTime = 'shopsilo_cache_reservations_time';
   static const String _keyManagedShops = 'shopsilo_cache_managed_shops';
   static const String _keySyncQueue = 'shopsilo_cache_sync_queue';
+  static const String _keyCategories = 'shopsilo_cache_categories';
+  static const String _keyCategoriesTime = 'shopsilo_cache_categories_time';
+  static const String _keyCartDraft = 'shopsilo_cache_pos_cart_draft';
 
   static SharedPreferences? _prefs;
 
   // In-memory 0ms instant cache stores for Flutter Web & Mobile
   static List<ProductModel>? _memoryProducts;
+  static List<CategoryItemModel>? _memoryCategories;
   static List<KhataCustomerModel>? _memoryKhataCustomers;
   static List<ProcurementItemModel>? _memoryProcurementItems;
   static List<WholesalerModel>? _memoryWholesalers;
@@ -179,6 +184,112 @@ class LocalCacheService {
       debugPrint('[LocalCacheService] Error reading dashboard stats: $e');
     }
     return null;
+  }
+
+  /// Returns whether cached dashboard stats are within the 5-minute TTL window (Tier 2)
+  static bool isDashboardStatsValid({Duration ttl = const Duration(minutes: 5)}) {
+    final savedTime = _prefs?.getInt(_keyDashboardStatsTime);
+    if (savedTime == null) return false;
+    final cachedDate = DateTime.fromMillisecondsSinceEpoch(savedTime);
+    return DateTime.now().difference(cachedDate) < ttl;
+  }
+
+  // ==========================================
+  // CATEGORIES PERSISTENCE (Tier 2: 24h TTL)
+  // ==========================================
+  static const Duration categoriesTtl = Duration(hours: 24);
+
+  /// Save categories list to device local storage and in-memory cache
+  static Future<void> saveCategories(List<CategoryItemModel> categories) async {
+    try {
+      _memoryCategories = List<CategoryItemModel>.from(categories);
+      await init();
+      final jsonStr = jsonEncode(categories.map((c) => c.toJson()).toList());
+      await _prefs!.setString(_keyCategories, jsonStr);
+      await _prefs!.setInt(_keyCategoriesTime, DateTime.now().millisecondsSinceEpoch);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving categories cache: $e');
+    }
+  }
+
+  /// Retrieve categories synchronously from local storage for 0ms startup
+  static List<CategoryItemModel> getCategories() {
+    if (_memoryCategories != null && _memoryCategories!.isNotEmpty) {
+      return List<CategoryItemModel>.from(_memoryCategories!);
+    }
+    try {
+      final raw = _prefs?.getString(_keyCategories);
+      if (raw == null || raw.trim().isEmpty) return [];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded
+            .whereType<Map>()
+            .map((item) => CategoryItemModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        if (list.isNotEmpty) {
+          _memoryCategories = List<CategoryItemModel>.from(list);
+        }
+        return list;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading categories cache: $e');
+    }
+    return [];
+  }
+
+  /// Returns whether categories cache is valid within the 24-hour TTL window
+  static bool isCategoriesCacheValid({Duration ttl = categoriesTtl}) {
+    final savedTime = _prefs?.getInt(_keyCategoriesTime);
+    if (savedTime == null) return false;
+    final cachedDate = DateTime.fromMillisecondsSinceEpoch(savedTime);
+    return DateTime.now().difference(cachedDate) < ttl;
+  }
+
+  // ==========================================
+  // POS ACTIVE CART DRAFT (Tier 1 Crash Protection)
+  // ==========================================
+
+  /// Auto-saves the active POS cart draft to device storage
+  static Future<void> saveCartDraft(List<PosCartItem> cart) async {
+    try {
+      await init();
+      if (cart.isEmpty) {
+        await _prefs?.remove(_keyCartDraft);
+        return;
+      }
+      final jsonStr = jsonEncode(cart.map((i) => i.toDraftJson()).toList());
+      await _prefs?.setString(_keyCartDraft, jsonStr);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving cart draft: $e');
+    }
+  }
+
+  /// Restores the active POS cart draft from device storage
+  static List<PosCartItem> getCartDraft() {
+    try {
+      final raw = _prefs?.getString(_keyCartDraft);
+      if (raw == null || raw.trim().isEmpty) return [];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((item) => PosCartItem.fromDraftJson(Map<String, dynamic>.from(item)))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading cart draft: $e');
+    }
+    return [];
+  }
+
+  /// Clears active POS cart draft upon sale completion or manual void
+  static Future<void> clearCartDraft() async {
+    try {
+      await init();
+      await _prefs?.remove(_keyCartDraft);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error clearing cart draft: $e');
+    }
   }
 
   // ==========================================
@@ -796,12 +907,16 @@ class LocalCacheService {
     _memoryReservations = null;
     _memoryManagedShops = null;
     _memorySyncQueue = null;
+    _memoryCategories = null;
 
     // 2. Wipe all persistent storage keys from device
     await init();
     if (_prefs != null) {
       await _prefs!.remove(_keyProducts);
       await _prefs!.remove(_keyProductsTime);
+      await _prefs!.remove(_keyCategories);
+      await _prefs!.remove(_keyCategoriesTime);
+      await _prefs!.remove(_keyCartDraft);
       await _prefs!.remove(_keyDashboardStats);
       await _prefs!.remove(_keyDashboardStatsTime);
       await _prefs!.remove(_keyKhataCustomers);

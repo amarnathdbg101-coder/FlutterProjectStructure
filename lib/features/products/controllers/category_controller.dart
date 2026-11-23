@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../../../core/network/base_controller.dart';
 import '../../../core/services/event_bus_service.dart';
+import '../../../core/storage/local_cache_service.dart';
 import '../../../core/widgets/custom_snackbar.dart';
 import '../models/category_model.dart';
 import '../repositories/product_repository.dart';
@@ -25,10 +26,19 @@ class CategoryController extends BaseController {
   StreamSubscription<AppCacheEvent>? _categorySub;
 
   CategoryController() {
+    _hydrateFromCache();
     loadCategories(silent: true);
     _categorySub = AppEventBus().on(AppCacheEventType.categoriesMutated, (_) {
-      loadCategories(silent: true);
+      loadCategories(silent: true, forceRefresh: true);
     });
+  }
+
+  void _hydrateFromCache() {
+    final cached = LocalCacheService.getCategories();
+    if (cached.isNotEmpty) {
+      _categories = cached;
+      notifyListeners();
+    }
   }
 
   @override
@@ -37,13 +47,19 @@ class CategoryController extends BaseController {
     super.dispose();
   }
 
-  /// Fetches global defaults and this shop's custom categories
-  Future<void> loadCategories({bool silent = false}) async {
-    if (!silent) setLoading(true);
+  /// Fetches global defaults and this shop's custom categories (Tier 2: 24h TTL)
+  Future<void> loadCategories({bool silent = false, bool forceRefresh = false}) async {
+    // If we have cached categories within the 24h TTL and forceRefresh is false, return immediately
+    if (!forceRefresh && _categories.isNotEmpty && LocalCacheService.isCategoriesCacheValid()) {
+      return;
+    }
+
+    if (!silent && _categories.isEmpty) setLoading(true);
     try {
       final res = await _repo.getShopCategories();
       if (res.success && res.data != null) {
         _categories = res.data!;
+        await LocalCacheService.saveCategories(_categories);
         clearError();
       } else if (!silent) {
         setError(res.error ?? 'Failed to load categories', showToast: false);
@@ -80,6 +96,7 @@ class CategoryController extends BaseController {
         final newCategory = res.data!;
         // Place new category at the top of custom list
         _categories = [newCategory, ..._categories.where((c) => c.id != newCategory.id)];
+        await LocalCacheService.saveCategories(_categories);
         CustomSnackbar.showSuccess(null, 'Category "${newCategory.name}" created successfully!');
         notifyListeners();
         return newCategory;
@@ -120,6 +137,7 @@ class CategoryController extends BaseController {
         final index = _categories.indexWhere((c) => c.id == id);
         if (index != -1) {
           _categories[index] = updated;
+          await LocalCacheService.saveCategories(_categories);
         }
         CustomSnackbar.showSuccess(null, 'Category updated successfully');
         notifyListeners();
@@ -143,6 +161,7 @@ class CategoryController extends BaseController {
       final res = await _repo.deleteShopCategory(id);
       if (res.success) {
         _categories.removeWhere((c) => c.id == id);
+        await LocalCacheService.saveCategories(_categories);
         CustomSnackbar.showSuccess(null, 'Category deleted successfully');
         notifyListeners();
         return true;
