@@ -14,6 +14,7 @@ import 'core/theme/theme_controller.dart';
 import 'core/widgets/offline_status_banner.dart';
 import 'features/analytics/controllers/analytics_controller.dart';
 import 'features/auth/controllers/auth_controller.dart';
+import 'features/copilot/controllers/copilot_controller.dart';
 import 'features/dashboard/controllers/dashboard_controller.dart';
 import 'features/expenses/controllers/expense_controller.dart';
 import 'features/khata/controllers/khata_controller.dart';
@@ -130,6 +131,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => AnalyticsController()),
           ChangeNotifierProvider(create: (_) => ProcurementController()),
           ChangeNotifierProvider(create: (_) => ReservationController()),
+          ChangeNotifierProvider(create: (_) => CopilotController()),
         ],
         child: const MyApp(),
       ),

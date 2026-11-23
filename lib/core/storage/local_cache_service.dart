@@ -13,6 +13,7 @@ import '../../features/expenses/models/expense_model.dart';
 import '../../features/offers/models/offer_model.dart';
 import '../../features/pos/models/pos_model.dart';
 import '../../features/reservations/models/reservation_model.dart';
+import '../../features/copilot/models/copilot_model.dart';
 import 'token_storage.dart';
 
 /// Centralized High-Performance Local Cache Engine for ShopSilo.
@@ -30,6 +31,8 @@ class LocalCacheService {
   static const String _keyCategories = 'shopsilo_cache_categories';
   static const String _keyCategoriesTime = 'shopsilo_cache_categories_time';
   static const String _keyCartDraft = 'shopsilo_cache_pos_cart_draft';
+  static const String _keyDailyPrescriptions = 'shopsilo_cache_copilot_prescriptions';
+  static const String _keyDeadCapital = 'shopsilo_cache_copilot_dead_capital';
 
   static SharedPreferences? _prefs;
 
@@ -45,6 +48,8 @@ class LocalCacheService {
   static List<ReservationModel>? _memoryReservations;
   static List<ShopModel>? _memoryManagedShops;
   static List<Map<String, dynamic>>? _memorySyncQueue;
+  static List<DailyPrescriptionModel>? _memoryDailyPrescriptions;
+  static DeadCapitalSummaryModel? _memoryDeadCapital;
 
   static Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -787,6 +792,76 @@ class LocalCacheService {
   }
 
   // ==========================================
+  // COPILOT DAILY PRESCRIPTIONS & DEAD CAPITAL
+  // ==========================================
+
+  /// Save daily prescriptions to local storage and in-memory cache
+  static Future<void> saveDailyPrescriptions(List<DailyPrescriptionModel> prescriptions) async {
+    try {
+      _memoryDailyPrescriptions = List<DailyPrescriptionModel>.from(prescriptions);
+      await init();
+      final listJson = jsonEncode(prescriptions.map((p) => p.toJson()).toList());
+      await _prefs!.setString(_keyDailyPrescriptions, listJson);
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving prescriptions: $e');
+    }
+  }
+
+  /// Retrieve cached daily prescriptions synchronously
+  static List<DailyPrescriptionModel> getDailyPrescriptions() {
+    if (_memoryDailyPrescriptions != null && _memoryDailyPrescriptions!.isNotEmpty) {
+      return List<DailyPrescriptionModel>.from(_memoryDailyPrescriptions!);
+    }
+    try {
+      final raw = _prefs?.getString(_keyDailyPrescriptions);
+      if (raw == null || raw.trim().isEmpty) return [];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded
+            .whereType<Map>()
+            .map((item) => DailyPrescriptionModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        if (list.isNotEmpty) {
+          _memoryDailyPrescriptions = List<DailyPrescriptionModel>.from(list);
+        }
+        return list;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading prescriptions: $e');
+    }
+    return [];
+  }
+
+  /// Save dead capital summary to local cache
+  static Future<void> saveDeadCapital(DeadCapitalSummaryModel summary) async {
+    try {
+      _memoryDeadCapital = summary;
+      await init();
+      await _prefs!.setString(_keyDeadCapital, jsonEncode(summary.toJson()));
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error saving dead capital: $e');
+    }
+  }
+
+  /// Retrieve cached dead capital summary
+  static DeadCapitalSummaryModel? getDeadCapital() {
+    if (_memoryDeadCapital != null) return _memoryDeadCapital;
+    try {
+      final raw = _prefs?.getString(_keyDeadCapital);
+      if (raw == null || raw.trim().isEmpty) return null;
+      final map = jsonDecode(raw);
+      if (map is Map<String, dynamic>) {
+        final res = DeadCapitalSummaryModel.fromJson(map);
+        _memoryDeadCapital = res;
+        return res;
+      }
+    } catch (e) {
+      debugPrint('[LocalCacheService] Error reading dead capital: $e');
+    }
+    return null;
+  }
+
+  // ==========================================
   // 11. CACHE FRESHNESS & TARGETED INVALIDATION
   // ==========================================
 
@@ -966,6 +1041,8 @@ class LocalCacheService {
     _memorySyncQueue = null;
     _memoryCategories = null;
     _memoryCustomerStatements.clear();
+    _memoryDailyPrescriptions = null;
+    _memoryDeadCapital = null;
 
     // 2. Wipe all persistent storage keys from device
     await init();
@@ -989,6 +1066,8 @@ class LocalCacheService {
       await _prefs!.remove(_keyReservationsTime);
       await _prefs!.remove(_keyManagedShops);
       await _prefs!.remove(_keySyncQueue);
+      await _prefs!.remove(_keyDailyPrescriptions);
+      await _prefs!.remove(_keyDeadCapital);
     }
   }
 }

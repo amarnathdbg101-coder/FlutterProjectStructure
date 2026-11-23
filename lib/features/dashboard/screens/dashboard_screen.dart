@@ -25,6 +25,7 @@ import '../../pos/models/pos_model.dart';
 import '../../reservations/controllers/reservation_controller.dart';
 import '../widgets/dashboard_price_checker_card.dart';
 import '../../app_update/widgets/app_update_dialog.dart';
+import '../../copilot/widgets/morning_action_brief_widget.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -184,6 +185,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                   const SizedBox(height: 14),
                 ],
+
+                const MorningActionBriefWidget(),
 
                 _TodaySalesHeroCard(stats: stats),
                 const SizedBox(height: 14),

@@ -227,6 +227,14 @@ class ApiConstants {
   static String shopProcurementToggle(String id) => '/shops/me/procurement/toggle/$id';
   static const String shopProcurementClearCompleted = '/shops/me/procurement/clear-completed';
 
+  // --- 16. AI Retail Merchant Co-Pilot & Autonomous Merchandising Engine ---
+  static const String copilotDailyPrescriptions = '/shops/me/copilot/daily-prescriptions';
+  static String copilotExecutePrescription(String id) => '/shops/me/copilot/prescriptions/$id/execute';
+  static const String copilotDeadCapital = '/shops/me/copilot/dead-capital';
+  static const String copilotEvaluateBargain = '/shops/me/copilot/evaluate-bargain';
+  static const String copilotSearchSubstitute = '/shops/me/copilot/search-substitute';
+  static const String copilotRecalculate = '/shops/me/copilot/recalculate';
+
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);

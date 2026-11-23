@@ -57,6 +57,10 @@ import '../widgets/pos_quick_add_modal.dart';
 
 import '../../dashboard/repositories/ai_repository.dart';
 
+import '../../copilot/widgets/negotiation_advisor_dialog.dart';
+
+import '../../copilot/widgets/substitute_finder_sheet.dart';
+
 class PosScreen extends StatefulWidget {
 
   const PosScreen({super.key});
@@ -593,85 +597,7 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
   /// Quick 1-field numeric price edit dialog for cashier speed
 
   void _showQuickPriceEditDialog(BuildContext context, PosCartItem item, PosController pos) {
-
-    final priceCtrl = TextEditingController(text: item.effectivePrice.toStringAsFixed(0));
-
-    final isHindi = context.isHindi;
-
-    showDialog(
-
-      context: context,
-
-      builder: (ctx) => AlertDialog(
-
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-
-        title: Text(
-
-          isHindi ? 'मूल्य बदलें ()' : 'Edit Price ()',
-
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-
-          maxLines: 1,
-
-          overflow: TextOverflow.ellipsis,
-
-        ),
-
-        content: TextField(
-
-          controller: priceCtrl,
-
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-
-          autofocus: true,
-
-          decoration: InputDecoration(
-
-            prefixText: '₹ ',
-
-            labelText: isHindi ? 'नया मूल्य' : 'New Price',
-
-          ),
-
-        ),
-
-        actions: [
-
-          TextButton(
-
-            onPressed: () => Navigator.pop(ctx),
-
-            child: Text(isHindi ? 'रद्द करें' : 'Cancel'),
-
-          ),
-
-          ElevatedButton(
-
-            onPressed: () {
-
-              final newP = double.tryParse(priceCtrl.text.trim());
-
-              if (newP != null && newP >= 0) {
-
-                pos.updateCartItemPrice(item, newP);
-
-              }
-
-              Navigator.pop(ctx);
-
-            },
-
-            child: Text(isHindi ? 'अपडेट' : 'Update'),
-
-          ),
-
-        ],
-
-      ),
-
-    );
-
+    NegotiationAdvisorDialog.show(context: context, item: item, pos: pos);
   }
 
   /// Smart Parchi Auto-Cart Dialog (Parse multiline WhatsApp or grocery list)
@@ -3431,6 +3357,30 @@ class _PosScreenState extends State<PosScreen> with AutomaticKeepAliveClientMixi
 
                       },
 
+                    ),
+
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6366F1),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: const Size(120, 34),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.swap_horiz_rounded, size: 15),
+                      label: Text(
+                        context.isHindi ? '🔍 स्मार्ट विकल्प खोजें' : '🔍 Find Smart Substitute',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        final query = _scanController.text.trim();
+                        SubstituteFinderSheet.show(
+                          context: context,
+                          pos: pos,
+                          initialQuery: query,
+                        );
+                      },
                     ),
 
                   ],
