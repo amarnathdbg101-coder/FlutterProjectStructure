@@ -194,8 +194,8 @@ void main() {
       expect(find.text('All'), findsOneWidget);
 
       // Verify existing items in the list
-      expect(find.text('Morning tea'), findsOneWidget);
-      expect(find.text('Delivery fare'), findsOneWidget);
+      expect(find.textContaining('Morning tea'), findsOneWidget);
+      expect(find.textContaining('Delivery fare'), findsOneWidget);
       expect(find.text('₹30'), findsOneWidget);
       expect(find.text('₹120'), findsOneWidget);
     });

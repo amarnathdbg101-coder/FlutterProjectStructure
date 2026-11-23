@@ -67,8 +67,8 @@ void main() {
     await tester.tap(find.text('Bills'));
     await tester.pumpAndSettle();
 
-    // Switch to Top Ranking tab
-    await tester.tap(find.text('Top Ranking'));
+    // Switch to Ranking tab
+    await tester.tap(find.text('Ranking'));
     await tester.pumpAndSettle();
 
     // Switch to Sold Items tab
@@ -130,8 +130,8 @@ void main() {
     await tester.tap(find.text('Bills'));
     await tester.pumpAndSettle();
 
-    // Switch to Top Ranking tab
-    await tester.tap(find.text('Top Ranking'));
+    // Switch to Ranking tab
+    await tester.tap(find.text('Ranking'));
     await tester.pumpAndSettle();
 
     // Switch to Sold Items tab

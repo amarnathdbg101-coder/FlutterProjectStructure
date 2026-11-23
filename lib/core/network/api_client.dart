@@ -425,8 +425,8 @@ class ApiClient {
         lower.contains('stacktrace') ||
         lower.contains('package:')) {
       return isHindi
-          ? 'डेटा लोड करने में अस्थायी समस्या हुई। कृपया दोबारा प्रयास करें।'
-          : 'Could not load data. Please try again.';
+          ? 'कुछ तकनीकी समस्या हुई। कृपया दोबारा प्रयास करें।'
+          : 'Something went wrong. Please try again.';
     }
 
     // Strip "Exception: " or "Error: " prefix
@@ -437,11 +437,11 @@ class ApiClient {
       cleaned = cleaned.substring('Error: '.length).trim();
     }
 
-    // 12. Final Guard: If message contains code symbols, brackets, or is excessively long
+    // 12. Final Guard: If message contains HTML/XML tags, brackets, or is excessively long
     if (cleaned.contains('{') ||
         cleaned.contains('}') ||
-        cleaned.contains('<') ||
-        cleaned.contains('>') ||
+        RegExp(r'<[a-zA-Z/]').hasMatch(cleaned) ||
+        cleaned.contains('=>') ||
         cleaned.length > 150) {
       return isHindi
           ? 'कुछ तकनीकी समस्या हुई। कृपया दोबारा प्रयास करें।'

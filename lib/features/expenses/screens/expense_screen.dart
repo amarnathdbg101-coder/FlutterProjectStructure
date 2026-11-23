@@ -325,12 +325,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                               children: [
                                 Icon(Icons.payments_rounded, size: 18, color: paymentMethod == 'cash' ? AppColors.success : sheetCtx.colorTextSecondary),
                                 const SizedBox(width: 8),
-                                Text(
-                                  sheetCtx.tr('exp_mode_cash'),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: paymentMethod == 'cash' ? AppColors.success : sheetCtx.colorTextPrimary,
+                                Flexible(
+                                  child: Text(
+                                    sheetCtx.tr('exp_mode_cash'),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: paymentMethod == 'cash' ? AppColors.success : sheetCtx.colorTextPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -359,12 +362,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                               children: [
                                 Icon(Icons.qr_code_scanner_rounded, size: 18, color: paymentMethod == 'upi' ? AppColors.primary : sheetCtx.colorTextSecondary),
                                 const SizedBox(width: 8),
-                                Text(
-                                  sheetCtx.tr('exp_mode_online'),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: paymentMethod == 'upi' ? AppColors.primary : sheetCtx.colorTextPrimary,
+                                Flexible(
+                                  child: Text(
+                                    sheetCtx.tr('exp_mode_online'),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: paymentMethod == 'upi' ? AppColors.primary : sheetCtx.colorTextPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -984,9 +990,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                       children: [
                         const Icon(Icons.bolt_rounded, size: 16, color: AppColors.primary),
                         const SizedBox(width: 4),
-                        Text(
-                          context.tr('exp_quick_entry_title'),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                        Expanded(
+                          child: Text(
+                            context.tr('exp_quick_entry_title'),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colorTextMuted),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -1200,24 +1209,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> with AutomaticKeepAliveCl
                   ],
                 ),
                 const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Text(
-                      formattedDate,
-                      style: TextStyle(fontSize: 11, color: context.colorTextMuted),
-                    ),
-                    if (exp.notes.isNotEmpty) ...[
-                      Text(' • ', style: TextStyle(fontSize: 11, color: context.colorTextMuted)),
-                      Expanded(
-                        child: Text(
-                          exp.notes,
-                          style: TextStyle(fontSize: 11.5, color: context.colorTextSecondary),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ],
+                Text(
+                  exp.notes.isNotEmpty ? '$formattedDate • ${exp.notes}' : formattedDate,
+                  style: TextStyle(fontSize: 11, color: context.colorTextMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

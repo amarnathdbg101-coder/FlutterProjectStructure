@@ -101,9 +101,12 @@ void main() {
       // 2. Verify 3-Tab Segmented Switcher
       expect(find.text('Sold Items'), findsOneWidget);
       expect(find.text('Bills'), findsOneWidget);
-      expect(find.text('Top Ranking'), findsOneWidget);
+      expect(find.text('Ranking'), findsOneWidget);
 
-      // 3. Verify Sold Items Tab lists the products
+      // 3. Switch to Sold Items Tab and verify products
+      await tester.tap(find.text('Sold Items'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Fortune Oil 1L'), findsOneWidget);
       expect(find.text('Tata Salt 1kg'), findsOneWidget);
 

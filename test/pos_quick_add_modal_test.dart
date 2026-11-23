@@ -18,6 +18,7 @@ void main() {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       await LocalCacheService.init();
+      await LocalCacheService.clearCartDraft();
       posCtrl = PosController();
       langCtrl = LanguageController();
     });

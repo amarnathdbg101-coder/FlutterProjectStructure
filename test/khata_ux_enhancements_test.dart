@@ -63,7 +63,7 @@ void main() {
       // 1. Verify Hero Card
       expect(find.text('₹850'), findsWidgets); // Market debt & customer balance
       expect(find.text('+ Give Credit'), findsWidgets);
-      expect(find.text('+ Settle Cash'), findsWidgets);
+      expect(find.text('- Receive Cash'), findsWidgets);
       expect(find.textContaining('Overdue'), findsWidgets);
 
       // 2. Verify Customer Card Details (Name, Mobile, Relative Timestamp)
@@ -146,7 +146,7 @@ void main() {
 
       // 1. Verify AppBar with Back Button, 1-Tap PDF and WhatsApp icons
       expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.more_vert_rounded), findsOneWidget);
       expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsWidgets);
 
       // 2. Verify Unified Financial Summary Card on full page
@@ -155,11 +155,11 @@ void main() {
       expect(find.textContaining('Credit Limit: ₹5000'), findsOneWidget);
 
       // 3. Verify Sticky Bottom Action Bar is visible
-      expect(find.text('Give Credit (Udhar Diya)'), findsOneWidget);
-      expect(find.text('Receive Payment (Jama Kiya)'), findsOneWidget);
+      expect(find.text('+ Give Credit'), findsWidgets);
+      expect(find.text('- Receive Cash'), findsWidgets);
 
       // 4. Tap Sticky Receive Payment Button -> Navigates to Transaction Modal
-      await tester.tap(find.text('Receive Payment (Jama Kiya)'));
+      await tester.tap(find.text('- Receive Cash').last);
       await tester.pumpAndSettle();
 
       expect(find.text('Full Settle (₹850)'), findsOneWidget);
@@ -172,7 +172,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.arrow_back_rounded));
       await tester.pumpAndSettle();
 
-      expect(find.text('Total Market Receivables'), findsOneWidget);
+      expect(find.text('Total Market Dues'), findsOneWidget);
 
       // Drain error timer from mock network in test
       await tester.pump(const Duration(seconds: 5));

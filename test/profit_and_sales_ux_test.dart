@@ -167,7 +167,7 @@ void main() {
       expect(find.text('UPI: '), findsOneWidget);
 
       // 2. Expand Profit Breakdown details
-      final pnlButton = find.text('P&L Details');
+      final pnlButton = find.textContaining('P&L details');
       expect(pnlButton, findsOneWidget);
       await tester.tap(pnlButton);
       await tester.pumpAndSettle();
@@ -198,7 +198,7 @@ void main() {
 
       // 1. Executive Net Pocket Profit card
       expect(find.text('NET POCKET PROFIT'), findsOneWidget);
-      expect(find.text('₹50'), findsNWidgets(2)); // Hero + P&L formula row
+      expect(find.textContaining('₹50'), findsNWidgets(2)); // Hero + P&L formula row
 
       // 2. Breakdown rows
       expect(find.text('FINANCIAL PROFIT BREAKDOWN'), findsOneWidget);

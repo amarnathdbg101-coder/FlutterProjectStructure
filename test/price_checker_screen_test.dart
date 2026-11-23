@@ -115,12 +115,13 @@ void main() {
       expect(find.text('MRP: ₹175'), findsOneWidget);
       expect(find.text('✓ In Stock: 30'), findsOneWidget);
 
-      // Tap Privacy Shield to toggle Wholesale Margin
-      expect(find.textContaining('Cost: ₹125'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.visibility_rounded));
+      // Initial state is Counter Privacy Mode (wholesale margin hidden)
+      expect(find.textContaining('Wholesale margin hidden'), findsOneWidget);
+      await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Wholesale margin hidden'), findsOneWidget);
+      // After toggling, Cost and Margin are visible
+      expect(find.textContaining('Cost: ₹125'), findsOneWidget);
 
       // Add to POS Cart
       await tester.tap(find.text('Add to POS Cart'));

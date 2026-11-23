@@ -535,12 +535,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        context.tr('login_google_connecting'),
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : AppColors.textPrimary,
+                      Flexible(
+                        child: Text(
+                          context.tr('login_google_connecting'),
+                          style: TextStyle(
+                            fontSize: 14.0,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : AppColors.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -549,14 +552,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const GoogleLogoIcon(size: 24),
-                      const SizedBox(width: 14),
-                      Text(
-                        context.tr('login_google_btn'),
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          context.tr('login_google_btn'),
+                          style: TextStyle(
+                            fontSize: 15.0,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
